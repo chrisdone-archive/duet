@@ -47,76 +47,76 @@ eListRet e      = eCons e eNil
 -- Definitions for the following primitive types are in Type.hs:
 --   (), Char, Int, Integer, Float, Double, [], (->), and tuples size 2 to 7
 --
--- Type assumptions for the constructors of these types are provided below:
+-- Type assumptiontions for the constructors of these types are provided below:
 
-unitCfun :: Assump
-unitCfun = "()" :>: (Forall [] ([] :=> tUnit))
+unitCfun :: Assumption
+unitCfun = Assumption "()"  (Forall [] ([] :=> tUnit))
 
-nilCfun :: Assump
-nilCfun  = "[]" :>: (Forall [Star] ([] :=> (TAp tList (TGen 0))))
-consCfun :: Assump
-consCfun = ":"  :>: (Forall [Star]
-                     ([] :=>
-                      (TGen 0 `fn`
-                       TAp tList (TGen 0) `fn`
-                       TAp tList (TGen 0))))
+nilCfun :: Assumption
+nilCfun  = Assumption "[]"  (Forall [Star] ([] :=> (TAp tList (TGen 0))))
+consCfun :: Assumption
+consCfun = Assumption ":"   (Forall [Star]
+                             ([] :=>
+                              (TGen 0 `fn`
+                               TAp tList (TGen 0) `fn`
+                               TAp tList (TGen 0))))
 
-tup2Cfun :: Assump
-tup2Cfun = "(,)" :>: (Forall [Star, Star]
-                      ([] :=>
-                       (TGen 0 `fn`
-                        TGen 1 `fn`
-                        foldl TAp tTuple2 (map TGen [0..1]))))
+tup2Cfun :: Assumption
+tup2Cfun = Assumption "(,)"  (Forall [Star, Star]
+                              ([] :=>
+                               (TGen 0 `fn`
+                                TGen 1 `fn`
+                                foldl TAp tTuple2 (map TGen [0..1]))))
 
-tup3Cfun :: Assump
-tup3Cfun = "(,,)" :>: (Forall [Star, Star, Star]
-                       ([] :=>
-                        (TGen 0 `fn`
-                         TGen 1 `fn`
-                         TGen 2 `fn`
-                         foldl TAp tTuple3 (map TGen [0..2]))))
+tup3Cfun :: Assumption
+tup3Cfun = Assumption "(,,)"  (Forall [Star, Star, Star]
+                               ([] :=>
+                                (TGen 0 `fn`
+                                 TGen 1 `fn`
+                                 TGen 2 `fn`
+                                 foldl TAp tTuple3 (map TGen [0..2]))))
 
-tup4Cfun :: Assump
-tup4Cfun = "(,,,)" :>: (Forall [Star, Star, Star, Star]
-                        ([] :=>
-                         (TGen 0 `fn`
-                          TGen 1 `fn`
-                          TGen 2 `fn`
-                          TGen 3 `fn`
-                          foldl TAp tTuple4 (map TGen [0..3]))))
+tup4Cfun :: Assumption
+tup4Cfun = Assumption "(,,,)"  (Forall [Star, Star, Star, Star]
+                                ([] :=>
+                                 (TGen 0 `fn`
+                                  TGen 1 `fn`
+                                  TGen 2 `fn`
+                                  TGen 3 `fn`
+                                  foldl TAp tTuple4 (map TGen [0..3]))))
 
-tup5Cfun :: Assump
-tup5Cfun = "(,,,,)" :>: (Forall [Star, Star, Star, Star, Star]
-                         ([] :=>
-                          (TGen 0 `fn`
-                           TGen 1 `fn`
-                           TGen 2 `fn`
-                           TGen 3 `fn`
-                           TGen 4 `fn`
-                           foldl TAp tTuple5 (map TGen [0..4]))))
+tup5Cfun :: Assumption
+tup5Cfun = Assumption "(,,,,)"  (Forall [Star, Star, Star, Star, Star]
+                                 ([] :=>
+                                  (TGen 0 `fn`
+                                   TGen 1 `fn`
+                                   TGen 2 `fn`
+                                   TGen 3 `fn`
+                                   TGen 4 `fn`
+                                   foldl TAp tTuple5 (map TGen [0..4]))))
 
-tup6Cfun :: Assump
-tup6Cfun = "(,,,,,)" :>: (Forall [Star, Star, Star, Star, Star, Star]
-                          ([] :=>
-                           (TGen 0 `fn`
-                            TGen 1 `fn`
-                            TGen 2 `fn`
-                            TGen 3 `fn`
-                            TGen 4 `fn`
-                            TGen 5 `fn`
-                            foldl TAp tTuple6 (map TGen [0..5]))))
+tup6Cfun :: Assumption
+tup6Cfun = Assumption "(,,,,,)"  (Forall [Star, Star, Star, Star, Star, Star]
+                                  ([] :=>
+                                   (TGen 0 `fn`
+                                    TGen 1 `fn`
+                                    TGen 2 `fn`
+                                    TGen 3 `fn`
+                                    TGen 4 `fn`
+                                    TGen 5 `fn`
+                                    foldl TAp tTuple6 (map TGen [0..5]))))
 
-tup7Cfun :: Assump
-tup7Cfun = "(,,,,,,)" :>: (Forall [Star, Star, Star, Star, Star, Star, Star]
-                           ([] :=>
-                            (TGen 0 `fn`
-                             TGen 1 `fn`
-                             TGen 2 `fn`
-                             TGen 3 `fn`
-                             TGen 4 `fn`
-                             TGen 5 `fn`
-                             TGen 6 `fn`
-                             foldl TAp tTuple7 (map TGen [0..6]))))
+tup7Cfun :: Assumption
+tup7Cfun = Assumption "(,,,,,,)"  (Forall [Star, Star, Star, Star, Star, Star, Star]
+                                   ([] :=>
+                                    (TGen 0 `fn`
+                                     TGen 1 `fn`
+                                     TGen 2 `fn`
+                                     TGen 3 `fn`
+                                     TGen 4 `fn`
+                                     TGen 5 `fn`
+                                     TGen 6 `fn`
+                                     foldl TAp tTuple7 (map TGen [0..6]))))
 
 -----------------------------------------------------------------------------
 -- The following types, and their associated constructors, are not defined
@@ -130,44 +130,44 @@ tShowS
  = TAp tList tChar `fn` TAp tList tChar
 
 
-falseCfun :: Assump
-falseCfun = "False" :>: (Forall [] ([] :=> tBool))
-trueCfun :: Assump
-trueCfun  = "True" :>: (Forall [] ([] :=> tBool))
+falseCfun :: Assumption
+falseCfun = Assumption "False"  (Forall [] ([] :=> tBool))
+trueCfun :: Assumption
+trueCfun  = Assumption "True"  (Forall [] ([] :=> tBool))
 
 tMaybe :: Type
 tMaybe      = TCon (Tycon "Maybe" (Kfun Star Star))
-nothingCfun :: Assump
-nothingCfun = "Nothing" :>: (Forall [Star]
-                             ([] :=> (TAp tMaybe (TGen 0))))
-justCfun :: Assump
-justCfun    = "Just" :>: (Forall [Star]
-                          ([] :=> (TGen 0 `fn` TAp tMaybe (TGen 0))))
+nothingCfun :: Assumption
+nothingCfun = Assumption "Nothing"  (Forall [Star]
+                                     ([] :=> (TAp tMaybe (TGen 0))))
+justCfun :: Assumption
+justCfun    = Assumption "Just"  (Forall [Star]
+                                  ([] :=> (TGen 0 `fn` TAp tMaybe (TGen 0))))
 
 tEither :: Type
 tEither   = TCon (Tycon "Either" (Kfun Star (Kfun Star Star)))
-leftCfun :: Assump
-leftCfun  = "Left" :>: (Forall [Star, Star]
-                        ([] :=>
-                         (TGen 0 `fn` TAp (TAp tEither (TGen 0)) (TGen 1))))
-rightCfun :: Assump
-rightCfun = "Right" :>: (Forall [Star, Star]
-                         ([] :=>
-                          (TGen 1 `fn` TAp (TAp tEither (TGen 0)) (TGen 1))))
+leftCfun :: Assumption
+leftCfun  = Assumption "Left"  (Forall [Star, Star]
+                                ([] :=>
+                                 (TGen 0 `fn` TAp (TAp tEither (TGen 0)) (TGen 1))))
+rightCfun :: Assumption
+rightCfun = Assumption "Right"  (Forall [Star, Star]
+                                 ([] :=>
+                                  (TGen 1 `fn` TAp (TAp tEither (TGen 0)) (TGen 1))))
 
 tOrdering :: Type
 tOrdering = TCon (Tycon "Ordering" Star)
-lTCfun :: Assump
-lTCfun    = "LT" :>: (Forall [] ([] :=> tOrdering))
-eQCfun :: Assump
-eQCfun    = "EQ" :>: (Forall [] ([] :=> tOrdering))
-gTCfun :: Assump
-gTCfun    = "GT" :>: (Forall [] ([] :=> tOrdering))
+lTCfun :: Assumption
+lTCfun    = Assumption "LT"  (Forall [] ([] :=> tOrdering))
+eQCfun :: Assumption
+eQCfun    = Assumption "EQ"  (Forall [] ([] :=> tOrdering))
+gTCfun :: Assumption
+gTCfun    = Assumption "GT"  (Forall [] ([] :=> tOrdering))
 
 tRatio :: Type
 tRatio    = TCon (Tycon "Ratio" (Kfun Star Star))
-consratCfun :: Assump
-consratCfun = ":%" :>: (Forall [Star]
+consratCfun :: Assumption
+consratCfun = Assumption ":%"  (Forall [Star]
               ([isIn1 cIntegral (TGen 0)] :=>
                (TGen 0 `fn` TGen 0 `fn` TAp tRatio (TGen 0))))
 
@@ -182,32 +182,32 @@ tFilePath = TAp tList tChar
 
 tIO :: Type
 tIO       = TCon (Tycon "IO" (Kfun Star Star))
-iOCfun :: Assump
-iOCfun    = "IO" :>: (Forall [Star]
-                      ([] :=>
-                       (((tIOError `fn` TAp tIOResult (TGen 0)) `fn`
-                         (TGen 0 `fn` TAp tIOResult (TGen 0)) `fn`
-                         TAp tIOResult (TGen 0)) `fn`
-                          TAp tIO (TGen 0))))
+iOCfun :: Assumption
+iOCfun    = Assumption "IO"  (Forall [Star]
+                              ([] :=>
+                               (((tIOError `fn` TAp tIOResult (TGen 0)) `fn`
+                                 (TGen 0 `fn` TAp tIOResult (TGen 0)) `fn`
+                                 TAp tIOResult (TGen 0)) `fn`
+                                  TAp tIO (TGen 0))))
 
 tIOResult :: Type
 tIOResult = TCon (Tycon "IOResult" (Kfun Star Star))
-hugs_ExitWithCfun :: Assump
+hugs_ExitWithCfun :: Assumption
 hugs_ExitWithCfun
-          = "Hugs_ExitWith" :>: (Forall [Star]
-                                 ([] :=> (tInt `fn` TAp tIOResult (TGen 0))))
-hugs_SuspendThreadCfun :: Assump
+          = Assumption "Hugs_ExitWith"  (Forall [Star]
+                                         ([] :=> (tInt `fn` TAp tIOResult (TGen 0))))
+hugs_SuspendThreadCfun :: Assumption
 hugs_SuspendThreadCfun
-          = "Hugs_SuspendThread" :>: (Forall [Star]
-                                      ([] :=> (TAp tIOResult (TGen 0))))
-hugs_ErrorCfun :: Assump
+          = Assumption "Hugs_SuspendThread"  (Forall [Star]
+                                              ([] :=> (TAp tIOResult (TGen 0))))
+hugs_ErrorCfun :: Assumption
 hugs_ErrorCfun
-          = "Hugs_Error" :>: (Forall [Star]
-                              ([] :=> (tIOError `fn` TAp tIOResult (TGen 0))))
-hugs_ReturnCfun :: Assump
+          = Assumption "Hugs_Error"  (Forall [Star]
+                                      ([] :=> (tIOError `fn` TAp tIOResult (TGen 0))))
+hugs_ReturnCfun :: Assumption
 hugs_ReturnCfun
-          = "Hugs_Return" :>: (Forall [Star]
-                               ([] :=> (TGen 0 `fn` TAp tIOResult (TGen 0))))
+          = Assumption "Hugs_Return"  (Forall [Star]
+                                       ([] :=> (TGen 0 `fn` TAp tIOResult (TGen 0))))
 
 -----------------------------------------------------------------------------
 -- Standard Classes and Member functions:
@@ -231,14 +231,14 @@ preludeClasses =   addPreludeClasses
 cEq :: [Char]
 cEq = "Eq"
 
-eqMfun :: Assump
-eqMfun  = "==" :>: (Forall [Star]
-                    ([isIn1 cEq (TGen 0)] :=>
-                     (TGen 0 `fn` TGen 0 `fn` tBool)))
-neqMfun :: Assump
-neqMfun = "/=" :>: (Forall [Star]
-                    ([isIn1 cEq (TGen 0)] :=>
-                     (TGen 0 `fn` TGen 0 `fn` tBool)))
+eqMfun :: Assumption
+eqMfun  = Assumption "=="  (Forall [Star]
+                            ([isIn1 cEq (TGen 0)] :=>
+                             (TGen 0 `fn` TGen 0 `fn` tBool)))
+neqMfun :: Assumption
+neqMfun = Assumption "/="  (Forall [Star]
+                            ([isIn1 cEq (TGen 0)] :=>
+                             (TGen 0 `fn` TGen 0 `fn` tBool)))
 
 instsEq :: [Qual Pred]
 instsEq
@@ -291,41 +291,41 @@ instsEq
 cOrd :: [Char]
 cOrd = "Ord"
 
-compareMfun :: Assump
+compareMfun :: Assumption
 compareMfun
- = "compare" :>: (Forall [Star]
-                   ([isIn1 cOrd (TGen 0)] :=>
-                    (TGen 0 `fn` TGen 0 `fn` tOrdering)))
-ltMfun :: Assump
+ = Assumption "compare"  (Forall [Star]
+                           ([isIn1 cOrd (TGen 0)] :=>
+                            (TGen 0 `fn` TGen 0 `fn` tOrdering)))
+ltMfun :: Assumption
 ltMfun
- = "<" :>: (Forall [Star]
-             ([isIn1 cOrd (TGen 0)] :=>
-              (TGen 0 `fn` TGen 0 `fn` tBool)))
-leMfun :: Assump
+ = Assumption "<"  (Forall [Star]
+                     ([isIn1 cOrd (TGen 0)] :=>
+                      (TGen 0 `fn` TGen 0 `fn` tBool)))
+leMfun :: Assumption
 leMfun
- = "<=" :>: (Forall [Star]
-              ([isIn1 cOrd (TGen 0)] :=>
-               (TGen 0 `fn` TGen 0 `fn` tBool)))
-geMfun :: Assump
+ = Assumption "<="  (Forall [Star]
+                      ([isIn1 cOrd (TGen 0)] :=>
+                       (TGen 0 `fn` TGen 0 `fn` tBool)))
+geMfun :: Assumption
 geMfun
- = ">=" :>: (Forall [Star]
-              ([isIn1 cOrd (TGen 0)] :=>
-               (TGen 0 `fn` TGen 0 `fn` tBool)))
-gtMfun :: Assump
+ = Assumption ">="  (Forall [Star]
+                      ([isIn1 cOrd (TGen 0)] :=>
+                       (TGen 0 `fn` TGen 0 `fn` tBool)))
+gtMfun :: Assumption
 gtMfun
- = ">" :>: (Forall [Star]
-             ([isIn1 cOrd (TGen 0)] :=>
-              (TGen 0 `fn` TGen 0 `fn` tBool)))
-maxMfun :: Assump
+ = Assumption ">"  (Forall [Star]
+                     ([isIn1 cOrd (TGen 0)] :=>
+                      (TGen 0 `fn` TGen 0 `fn` tBool)))
+maxMfun :: Assumption
 maxMfun
- = "max" :>: (Forall [Star]
-               ([isIn1 cOrd (TGen 0)] :=>
-                (TGen 0 `fn` TGen 0 `fn` TGen 0)))
-minMfun :: Assump
+ = Assumption "max"  (Forall [Star]
+                       ([isIn1 cOrd (TGen 0)] :=>
+                        (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+minMfun :: Assumption
 minMfun
- = "min" :>: (Forall [Star]
-               ([isIn1 cOrd (TGen 0)] :=>
-                (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+ = Assumption "min"  (Forall [Star]
+                       ([isIn1 cOrd (TGen 0)] :=>
+                        (TGen 0 `fn` TGen 0 `fn` TGen 0)))
 
 instsOrd :: [Qual Pred]
 instsOrd
@@ -378,16 +378,16 @@ instsOrd
 cBounded :: [Char]
 cBounded = "Bounded"
 
-minBoundMfun :: Assump
+minBoundMfun :: Assumption
 minBoundMfun
- = "minBound" :>: (Forall [Star]
-                    ([isIn1 cBounded (TGen 0)] :=>
-                     (TGen 0)))
-maxBoundMfun :: Assump
+ = Assumption "minBound"  (Forall [Star]
+                            ([isIn1 cBounded (TGen 0)] :=>
+                             (TGen 0)))
+maxBoundMfun :: Assumption
 maxBoundMfun
- = "maxBound" :>: (Forall [Star]
-                    ([isIn1 cBounded (TGen 0)] :=>
-                     (TGen 0)))
+ = Assumption "maxBound"  (Forall [Star]
+                            ([isIn1 cBounded (TGen 0)] :=>
+                             (TGen 0)))
 
 instsBounded :: [Qual Pred]
 instsBounded
@@ -402,46 +402,46 @@ instsBounded
 cNum :: [Char]
 cNum = "Num"
 
-plusMfun :: Assump
+plusMfun :: Assumption
 plusMfun
- = "+" :>: (Forall [Star]
-             ([isIn1 cNum (TGen 0)] :=>
-              (TGen 0 `fn` TGen 0 `fn` TGen 0)))
-minusMfun :: Assump
+ = Assumption "+"  (Forall [Star]
+                     ([isIn1 cNum (TGen 0)] :=>
+                      (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+minusMfun :: Assumption
 minusMfun
- = "-" :>: (Forall [Star]
-             ([isIn1 cNum (TGen 0)] :=>
-              (TGen 0 `fn` TGen 0 `fn` TGen 0)))
-timesMfun :: Assump
+ = Assumption "-"  (Forall [Star]
+                     ([isIn1 cNum (TGen 0)] :=>
+                      (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+timesMfun :: Assumption
 timesMfun
- = "*" :>: (Forall [Star]
-             ([isIn1 cNum (TGen 0)] :=>
-              (TGen 0 `fn` TGen 0 `fn` TGen 0)))
-negateMfun :: Assump
+ = Assumption "*"  (Forall [Star]
+                     ([isIn1 cNum (TGen 0)] :=>
+                      (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+negateMfun :: Assumption
 negateMfun
- = "negate" :>: (Forall [Star]
-                  ([isIn1 cNum (TGen 0)] :=>
-                   (TGen 0 `fn` TGen 0)))
-absMfun :: Assump
+ = Assumption "negate"  (Forall [Star]
+                          ([isIn1 cNum (TGen 0)] :=>
+                           (TGen 0 `fn` TGen 0)))
+absMfun :: Assumption
 absMfun
- = "abs" :>: (Forall [Star]
-               ([isIn1 cNum (TGen 0)] :=>
-                (TGen 0 `fn` TGen 0)))
-signumMfun :: Assump
-signumMfun
- = "signum" :>: (Forall [Star]
-                  ([isIn1 cNum (TGen 0)] :=>
-                   (TGen 0 `fn` TGen 0)))
-fromIntegerMfun :: Assump
-fromIntegerMfun
- = "fromInteger" :>: (Forall [Star]
+ = Assumption "abs"  (Forall [Star]
                        ([isIn1 cNum (TGen 0)] :=>
-                        (tInteger `fn` TGen 0)))
-fromIntMfun :: Assump
+                        (TGen 0 `fn` TGen 0)))
+signumMfun :: Assumption
+signumMfun
+ = Assumption "signum"  (Forall [Star]
+                          ([isIn1 cNum (TGen 0)] :=>
+                           (TGen 0 `fn` TGen 0)))
+fromIntegerMfun :: Assumption
+fromIntegerMfun
+ = Assumption "fromInteger"  (Forall [Star]
+                               ([isIn1 cNum (TGen 0)] :=>
+                                (tInteger `fn` TGen 0)))
+fromIntMfun :: Assumption
 fromIntMfun
- = "fromInt" :>: (Forall [Star]
-                   ([isIn1 cNum (TGen 0)] :=>
-                    (tInt `fn` TGen 0)))
+ = Assumption "fromInt"  (Forall [Star]
+                           ([isIn1 cNum (TGen 0)] :=>
+                            (tInt `fn` TGen 0)))
 
 instsNum :: [Qual Pred]
 instsNum
@@ -458,11 +458,11 @@ instsNum
 cReal :: [Char]
 cReal = "Real"
 
-toRationalMfun :: Assump
+toRationalMfun :: Assumption
 toRationalMfun
- = "toRational" :>: (Forall [Star]
-                      ([isIn1 cReal (TGen 0)] :=>
-                       (TGen 0 `fn` tRational)))
+ = Assumption "toRational"  (Forall [Star]
+                              ([isIn1 cReal (TGen 0)] :=>
+                               (TGen 0 `fn` tRational)))
 
 instsReal :: [Qual Pred]
 instsReal
@@ -479,56 +479,56 @@ instsReal
 cIntegral :: [Char]
 cIntegral = "Integral"
 
-quotMfun :: Assump
+quotMfun :: Assumption
 quotMfun
- = "quot" :>: (Forall [Star]
-                ([isIn1 cIntegral (TGen 0)] :=>
-                 (TGen 0 `fn` TGen 0 `fn` TGen 0)))
-remMfun :: Assump
+ = Assumption "quot"  (Forall [Star]
+                        ([isIn1 cIntegral (TGen 0)] :=>
+                         (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+remMfun :: Assumption
 remMfun
- = "rem" :>: (Forall [Star]
-               ([isIn1 cIntegral (TGen 0)] :=>
-                (TGen 0 `fn` TGen 0 `fn` TGen 0)))
-divMfun :: Assump
+ = Assumption "rem"  (Forall [Star]
+                       ([isIn1 cIntegral (TGen 0)] :=>
+                        (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+divMfun :: Assumption
 divMfun
- = "div" :>: (Forall [Star]
-               ([isIn1 cIntegral (TGen 0)] :=>
-                (TGen 0 `fn` TGen 0 `fn` TGen 0)))
-modMfun :: Assump
+ = Assumption "div"  (Forall [Star]
+                       ([isIn1 cIntegral (TGen 0)] :=>
+                        (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+modMfun :: Assumption
 modMfun
- = "mod" :>: (Forall [Star]
-               ([isIn1 cIntegral (TGen 0)] :=>
-                (TGen 0 `fn` TGen 0 `fn` TGen 0)))
-quotRemMfun :: Assump
+ = Assumption "mod"  (Forall [Star]
+                       ([isIn1 cIntegral (TGen 0)] :=>
+                        (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+quotRemMfun :: Assumption
 quotRemMfun
- = "quotRem" :>: (Forall [Star]
-                   ([isIn1 cIntegral (TGen 0)] :=>
-                    (TGen 0 `fn` TGen 0 `fn` TAp (TAp tTuple2 (TGen 0)) (TGen 0))))
-divModMfun :: Assump
+ = Assumption "quotRem"  (Forall [Star]
+                           ([isIn1 cIntegral (TGen 0)] :=>
+                            (TGen 0 `fn` TGen 0 `fn` TAp (TAp tTuple2 (TGen 0)) (TGen 0))))
+divModMfun :: Assumption
 divModMfun
- = "divMod" :>: (Forall [Star]
-                  ([isIn1 cIntegral (TGen 0)] :=>
-                   (TGen 0 `fn` TGen 0 `fn` TAp (TAp tTuple2 (TGen 0)) (TGen 0))))
-evenMfun :: Assump
+ = Assumption "divMod"  (Forall [Star]
+                          ([isIn1 cIntegral (TGen 0)] :=>
+                           (TGen 0 `fn` TGen 0 `fn` TAp (TAp tTuple2 (TGen 0)) (TGen 0))))
+evenMfun :: Assumption
 evenMfun
- = "even" :>: (Forall [Star]
-                ([isIn1 cIntegral (TGen 0)] :=>
-                 (TGen 0 `fn` tBool)))
-oddMfun :: Assump
+ = Assumption "even"  (Forall [Star]
+                        ([isIn1 cIntegral (TGen 0)] :=>
+                         (TGen 0 `fn` tBool)))
+oddMfun :: Assumption
 oddMfun
- = "odd" :>: (Forall [Star]
-               ([isIn1 cIntegral (TGen 0)] :=>
-                (TGen 0 `fn` tBool)))
-toIntegerMfun :: Assump
+ = Assumption "odd"  (Forall [Star]
+                       ([isIn1 cIntegral (TGen 0)] :=>
+                        (TGen 0 `fn` tBool)))
+toIntegerMfun :: Assumption
 toIntegerMfun
- = "toInteger" :>: (Forall [Star]
-                     ([isIn1 cIntegral (TGen 0)] :=>
-                      (TGen 0 `fn` tInteger)))
-toIntMfun :: Assump
+ = Assumption "toInteger"  (Forall [Star]
+                             ([isIn1 cIntegral (TGen 0)] :=>
+                              (TGen 0 `fn` tInteger)))
+toIntMfun :: Assumption
 toIntMfun
- = "toInt" :>: (Forall [Star]
-                 ([isIn1 cIntegral (TGen 0)] :=>
-                  (TGen 0 `fn` tInt)))
+ = Assumption "toInt"  (Forall [Star]
+                         ([isIn1 cIntegral (TGen 0)] :=>
+                          (TGen 0 `fn` tInt)))
 
 instsIntegral :: [Qual Pred]
 instsIntegral
@@ -540,26 +540,26 @@ instsIntegral
 cFractional :: [Char]
 cFractional = "Fractional"
 
-divideMfun :: Assump
+divideMfun :: Assumption
 divideMfun
- = "/" :>: (Forall [Star]
-             ([isIn1 cFractional (TGen 0)] :=>
-              (TGen 0 `fn` TGen 0 `fn` TGen 0)))
-recipMfun :: Assump
+ = Assumption "/"  (Forall [Star]
+                     ([isIn1 cFractional (TGen 0)] :=>
+                      (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+recipMfun :: Assumption
 recipMfun
- = "recip" :>: (Forall [Star]
-                 ([isIn1 cFractional (TGen 0)] :=>
-                  (TGen 0 `fn` TGen 0)))
-fromRationalMfun :: Assump
+ = Assumption "recip"  (Forall [Star]
+                         ([isIn1 cFractional (TGen 0)] :=>
+                          (TGen 0 `fn` TGen 0)))
+fromRationalMfun :: Assumption
 fromRationalMfun
- = "fromRational" :>: (Forall [Star]
-                        ([isIn1 cFractional (TGen 0)] :=>
-                         (tRational `fn` TGen 0)))
-fromDoubleMfun :: Assump
+ = Assumption "fromRational"  (Forall [Star]
+                                ([isIn1 cFractional (TGen 0)] :=>
+                                 (tRational `fn` TGen 0)))
+fromDoubleMfun :: Assumption
 fromDoubleMfun
- = "fromDouble" :>: (Forall [Star]
-                      ([isIn1 cFractional (TGen 0)] :=>
-                       (tDouble `fn` TGen 0)))
+ = Assumption "fromDouble"  (Forall [Star]
+                              ([isIn1 cFractional (TGen 0)] :=>
+                               (tDouble `fn` TGen 0)))
 
 instsFractional :: [Qual Pred]
 instsFractional
@@ -574,80 +574,80 @@ instsFractional
 cFloating :: [Char]
 cFloating = "Floating"
 
-piMfun :: Assump
+piMfun :: Assumption
 piMfun
- = "pi" :>: (Forall [Star]
-              ([isIn1 cFloating (TGen 0)] :=> (TGen 0)))
-expMfun :: Assump
+ = Assumption "pi"  (Forall [Star]
+                      ([isIn1 cFloating (TGen 0)] :=> (TGen 0)))
+expMfun :: Assumption
 expMfun
- = "exp" :>: (Forall [Star]
-               ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-logMfun :: Assump
+ = Assumption "exp"  (Forall [Star]
+                       ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+logMfun :: Assumption
 logMfun
- = "log" :>: (Forall [Star]
-               ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-sqrtMfun :: Assump
+ = Assumption "log"  (Forall [Star]
+                       ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+sqrtMfun :: Assumption
 sqrtMfun
- = "sqrt" :>: (Forall [Star]
-                ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-starstarMfun :: Assump
+ = Assumption "sqrt"  (Forall [Star]
+                        ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+starstarMfun :: Assumption
 starstarMfun
- = "**" :>: (Forall [Star]
-              ([isIn1 cFloating (TGen 0)] :=>
-               (TGen 0 `fn` TGen 0 `fn` TGen 0)))
-logBaseMfun :: Assump
+ = Assumption "**"  (Forall [Star]
+                      ([isIn1 cFloating (TGen 0)] :=>
+                       (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+logBaseMfun :: Assumption
 logBaseMfun
- = "logBase" :>: (Forall [Star]
-                   ([isIn1 cFloating (TGen 0)] :=>
-                    (TGen 0 `fn` TGen 0 `fn` TGen 0)))
-sinMfun :: Assump
+ = Assumption "logBase"  (Forall [Star]
+                           ([isIn1 cFloating (TGen 0)] :=>
+                            (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+sinMfun :: Assumption
 sinMfun
- = "sin" :>: (Forall [Star]
-               ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-cosMfun :: Assump
+ = Assumption "sin"  (Forall [Star]
+                       ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+cosMfun :: Assumption
 cosMfun
- = "cos" :>: (Forall [Star]
-               ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-tanMfun :: Assump
+ = Assumption "cos"  (Forall [Star]
+                       ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+tanMfun :: Assumption
 tanMfun
- = "tan" :>: (Forall [Star]
-               ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-asinMfun :: Assump
+ = Assumption "tan"  (Forall [Star]
+                       ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+asinMfun :: Assumption
 asinMfun
- = "asin" :>: (Forall [Star]
-                ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-acosMfun :: Assump
+ = Assumption "asin"  (Forall [Star]
+                        ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+acosMfun :: Assumption
 acosMfun
- = "acos" :>: (Forall [Star]
-                ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-atanMfun :: Assump
+ = Assumption "acos"  (Forall [Star]
+                        ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+atanMfun :: Assumption
 atanMfun
- = "atan" :>: (Forall [Star]
-                ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-sinhMfun :: Assump
+ = Assumption "atan"  (Forall [Star]
+                        ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+sinhMfun :: Assumption
 sinhMfun
- = "sinh" :>: (Forall [Star]
-                ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-coshMfun :: Assump
+ = Assumption "sinh"  (Forall [Star]
+                        ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+coshMfun :: Assumption
 coshMfun
- = "cosh" :>: (Forall [Star]
-                ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-tanhMfun :: Assump
+ = Assumption "cosh"  (Forall [Star]
+                        ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+tanhMfun :: Assumption
 tanhMfun
- = "tanh" :>: (Forall [Star]
-                ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-asinhMfun :: Assump
+ = Assumption "tanh"  (Forall [Star]
+                        ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+asinhMfun :: Assumption
 asinhMfun
- = "asinh" :>: (Forall [Star]
-                 ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-acoshMfun :: Assump
+ = Assumption "asinh"  (Forall [Star]
+                         ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+acoshMfun :: Assumption
 acoshMfun
- = "acosh" :>: (Forall [Star]
-                 ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-atanhMfun :: Assump
+ = Assumption "acosh"  (Forall [Star]
+                         ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+atanhMfun :: Assumption
 atanhMfun
- = "atanh" :>: (Forall [Star]
-                 ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+ = Assumption "atanh"  (Forall [Star]
+                         ([isIn1 cFloating (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
 
 instsFloating :: [Qual Pred]
 instsFloating
@@ -659,36 +659,36 @@ instsFloating
 cRealFrac :: [Char]
 cRealFrac = "RealFrac"
 
-properFractionMfun :: Assump
+properFractionMfun :: Assumption
 properFractionMfun
- = "properFraction" :>: (Forall [Star, Star]
-                          ([isIn1 cRealFrac (TGen 0),
-                            isIn1 cIntegral (TGen 1)] :=>
-                           (TGen 0 `fn` TAp (TAp tTuple2 (TGen 1)) (TGen 0))))
-truncateMfun :: Assump
+ = Assumption "properFraction"  (Forall [Star, Star]
+                                  ([isIn1 cRealFrac (TGen 0),
+                                    isIn1 cIntegral (TGen 1)] :=>
+                                   (TGen 0 `fn` TAp (TAp tTuple2 (TGen 1)) (TGen 0))))
+truncateMfun :: Assumption
 truncateMfun
- = "truncate" :>: (Forall [Star, Star]
-                    ([isIn1 cRealFrac (TGen 0),
-                      isIn1 cIntegral (TGen 1)] :=>
-                     (TGen 0 `fn` TGen 1)))
-roundMfun :: Assump
+ = Assumption "truncate"  (Forall [Star, Star]
+                            ([isIn1 cRealFrac (TGen 0),
+                              isIn1 cIntegral (TGen 1)] :=>
+                             (TGen 0 `fn` TGen 1)))
+roundMfun :: Assumption
 roundMfun
- = "round" :>: (Forall [Star, Star]
-                 ([isIn1 cRealFrac (TGen 0),
-                   isIn1 cIntegral (TGen 1)] :=>
-                  (TGen 0 `fn` TGen 1)))
-ceilingMfun :: Assump
+ = Assumption "round"  (Forall [Star, Star]
+                         ([isIn1 cRealFrac (TGen 0),
+                           isIn1 cIntegral (TGen 1)] :=>
+                          (TGen 0 `fn` TGen 1)))
+ceilingMfun :: Assumption
 ceilingMfun
- = "ceiling" :>: (Forall [Star, Star]
-                   ([isIn1 cRealFrac (TGen 0),
-                     isIn1 cIntegral (TGen 1)] :=>
-                    (TGen 0 `fn` TGen 1)))
-floorMfun :: Assump
+ = Assumption "ceiling"  (Forall [Star, Star]
+                           ([isIn1 cRealFrac (TGen 0),
+                             isIn1 cIntegral (TGen 1)] :=>
+                            (TGen 0 `fn` TGen 1)))
+floorMfun :: Assumption
 floorMfun
- = "floor" :>: (Forall [Star, Star]
-                 ([isIn1 cRealFrac (TGen 0),
-                   isIn1 cIntegral (TGen 1)] :=>
-                  (TGen 0 `fn` TGen 1)))
+ = Assumption "floor"  (Forall [Star, Star]
+                         ([isIn1 cRealFrac (TGen 0),
+                           isIn1 cIntegral (TGen 1)] :=>
+                          (TGen 0 `fn` TGen 1)))
 
 instsRealFrac :: [Qual Pred]
 instsRealFrac
@@ -702,76 +702,76 @@ instsRealFrac
 cRealFloat :: [Char]
 cRealFloat = "RealFloat"
 
-floatRadixMfun :: Assump
+floatRadixMfun :: Assumption
 floatRadixMfun
- = "floatRadix" :>: (Forall [Star]
-                      ([isIn1 cRealFloat (TGen 0)] :=>
-                       (TGen 0 `fn` tInteger)))
-floatDigitsMfun :: Assump
+ = Assumption "floatRadix"  (Forall [Star]
+                              ([isIn1 cRealFloat (TGen 0)] :=>
+                               (TGen 0 `fn` tInteger)))
+floatDigitsMfun :: Assumption
 floatDigitsMfun
- = "floatDigits" :>: (Forall [Star]
-                       ([isIn1 cRealFloat (TGen 0)] :=>
-                        (TGen 0 `fn` tInt)))
-floatRangeMfun :: Assump
+ = Assumption "floatDigits"  (Forall [Star]
+                               ([isIn1 cRealFloat (TGen 0)] :=>
+                                (TGen 0 `fn` tInt)))
+floatRangeMfun :: Assumption
 floatRangeMfun
- = "floatRange" :>: (Forall [Star]
-                      ([isIn1 cRealFloat (TGen 0)] :=>
-                       (TGen 0 `fn` TAp (TAp tTuple2 tInt) tInt)))
-decodeFloatMfun :: Assump
+ = Assumption "floatRange"  (Forall [Star]
+                              ([isIn1 cRealFloat (TGen 0)] :=>
+                               (TGen 0 `fn` TAp (TAp tTuple2 tInt) tInt)))
+decodeFloatMfun :: Assumption
 decodeFloatMfun
- = "decodeFloat" :>: (Forall [Star]
-                       ([isIn1 cRealFloat (TGen 0)] :=>
-                        (TGen 0 `fn` TAp (TAp tTuple2 tInteger) tInt)))
-encodeFloatMfun :: Assump
+ = Assumption "decodeFloat"  (Forall [Star]
+                               ([isIn1 cRealFloat (TGen 0)] :=>
+                                (TGen 0 `fn` TAp (TAp tTuple2 tInteger) tInt)))
+encodeFloatMfun :: Assumption
 encodeFloatMfun
- = "encodeFloat" :>: (Forall [Star]
-                       ([isIn1 cRealFloat (TGen 0)] :=>
-                        (tInteger `fn` tInt `fn` TGen 0)))
-exponentMfun :: Assump
+ = Assumption "encodeFloat"  (Forall [Star]
+                               ([isIn1 cRealFloat (TGen 0)] :=>
+                                (tInteger `fn` tInt `fn` TGen 0)))
+exponentMfun :: Assumption
 exponentMfun
- = "exponent" :>: (Forall [Star]
-                    ([isIn1 cRealFloat (TGen 0)] :=>
-                     (TGen 0 `fn` tInt)))
-significandMfun :: Assump
+ = Assumption "exponent"  (Forall [Star]
+                            ([isIn1 cRealFloat (TGen 0)] :=>
+                             (TGen 0 `fn` tInt)))
+significandMfun :: Assumption
 significandMfun
- = "significand" :>: (Forall [Star]
-                       ([isIn1 cRealFloat (TGen 0)] :=>
-                        (TGen 0 `fn` TGen 0)))
-scaleFloatMfun :: Assump
+ = Assumption "significand"  (Forall [Star]
+                               ([isIn1 cRealFloat (TGen 0)] :=>
+                                (TGen 0 `fn` TGen 0)))
+scaleFloatMfun :: Assumption
 scaleFloatMfun
- = "scaleFloat" :>: (Forall [Star]
-                      ([isIn1 cRealFloat (TGen 0)] :=>
-                       (tInt `fn` TGen 0 `fn` TGen 0)))
-isNaNMfun :: Assump
+ = Assumption "scaleFloat"  (Forall [Star]
+                              ([isIn1 cRealFloat (TGen 0)] :=>
+                               (tInt `fn` TGen 0 `fn` TGen 0)))
+isNaNMfun :: Assumption
 isNaNMfun
- = "isNaN" :>: (Forall [Star]
-                 ([isIn1 cRealFloat (TGen 0)] :=>
-                  (TGen 0 `fn` tBool)))
-isInfiniteMfun :: Assump
+ = Assumption "isNaN"  (Forall [Star]
+                         ([isIn1 cRealFloat (TGen 0)] :=>
+                          (TGen 0 `fn` tBool)))
+isInfiniteMfun :: Assumption
 isInfiniteMfun
- = "isInfinite" :>: (Forall [Star]
-                      ([isIn1 cRealFloat (TGen 0)] :=>
-                       (TGen 0 `fn` tBool)))
-isDenormalizedMfun :: Assump
+ = Assumption "isInfinite"  (Forall [Star]
+                              ([isIn1 cRealFloat (TGen 0)] :=>
+                               (TGen 0 `fn` tBool)))
+isDenormalizedMfun :: Assumption
 isDenormalizedMfun
- = "isDenormalized" :>: (Forall [Star]
-                          ([isIn1 cRealFloat (TGen 0)] :=>
-                           (TGen 0 `fn` tBool)))
-isNegativeZeroMfun :: Assump
+ = Assumption "isDenormalized"  (Forall [Star]
+                                  ([isIn1 cRealFloat (TGen 0)] :=>
+                                   (TGen 0 `fn` tBool)))
+isNegativeZeroMfun :: Assumption
 isNegativeZeroMfun
- = "isNegativeZero" :>: (Forall [Star]
+ = Assumption "isNegativeZero"  (Forall [Star]
+                                  ([isIn1 cRealFloat (TGen 0)] :=>
+                                   (TGen 0 `fn` tBool)))
+isIEEEMfun :: Assumption
+isIEEEMfun
+ = Assumption "isIEEE"  (Forall [Star]
                           ([isIn1 cRealFloat (TGen 0)] :=>
                            (TGen 0 `fn` tBool)))
-isIEEEMfun :: Assump
-isIEEEMfun
- = "isIEEE" :>: (Forall [Star]
-                  ([isIn1 cRealFloat (TGen 0)] :=>
-                   (TGen 0 `fn` tBool)))
-atan2Mfun :: Assump
+atan2Mfun :: Assumption
 atan2Mfun
- = "atan2" :>: (Forall [Star]
-                 ([isIn1 cRealFloat (TGen 0)] :=>
-                  (TGen 0 `fn` TGen 0 `fn` TGen 0)))
+ = Assumption "atan2"  (Forall [Star]
+                         ([isIn1 cRealFloat (TGen 0)] :=>
+                          (TGen 0 `fn` TGen 0 `fn` TGen 0)))
 
 instsRealFloat :: [Qual Pred]
 instsRealFloat
@@ -783,42 +783,42 @@ instsRealFloat
 cEnum :: [Char]
 cEnum = "Enum"
 
-succMfun :: Assump
+succMfun :: Assumption
 succMfun
- = "succ" :>: (Forall [Star]
-                ([isIn1 cEnum (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-predMfun :: Assump
+ = Assumption "succ"  (Forall [Star]
+                        ([isIn1 cEnum (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+predMfun :: Assumption
 predMfun
- = "pred" :>: (Forall [Star]
-                ([isIn1 cEnum (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
-toEnumMfun :: Assump
+ = Assumption "pred"  (Forall [Star]
+                        ([isIn1 cEnum (TGen 0)] :=> (TGen 0 `fn` TGen 0)))
+toEnumMfun :: Assumption
 toEnumMfun
- = "toEnum" :>: (Forall [Star]
-                  ([isIn1 cEnum (TGen 0)] :=> (tInt `fn` TGen 0)))
-fromEnumMfun :: Assump
+ = Assumption "toEnum"  (Forall [Star]
+                          ([isIn1 cEnum (TGen 0)] :=> (tInt `fn` TGen 0)))
+fromEnumMfun :: Assumption
 fromEnumMfun
- = "fromEnum" :>: (Forall [Star]
-                    ([isIn1 cEnum (TGen 0)] :=> (TGen 0 `fn` tInt)))
-enumFromMfun :: Assump
+ = Assumption "fromEnum"  (Forall [Star]
+                            ([isIn1 cEnum (TGen 0)] :=> (TGen 0 `fn` tInt)))
+enumFromMfun :: Assumption
 enumFromMfun
- = "enumFrom" :>: (Forall [Star]
-                    ([isIn1 cEnum (TGen 0)] :=>
-                     (TGen 0 `fn` TAp tList (TGen 0))))
-enumFromThenMfun :: Assump
+ = Assumption "enumFrom"  (Forall [Star]
+                            ([isIn1 cEnum (TGen 0)] :=>
+                             (TGen 0 `fn` TAp tList (TGen 0))))
+enumFromThenMfun :: Assumption
 enumFromThenMfun
- = "enumFromThen" :>: (Forall [Star]
-                        ([isIn1 cEnum (TGen 0)] :=>
-                         (TGen 0 `fn` TGen 0 `fn` TAp tList (TGen 0))))
-enumFromToMfun :: Assump
+ = Assumption "enumFromThen"  (Forall [Star]
+                                ([isIn1 cEnum (TGen 0)] :=>
+                                 (TGen 0 `fn` TGen 0 `fn` TAp tList (TGen 0))))
+enumFromToMfun :: Assumption
 enumFromToMfun
- = "enumFromTo" :>: (Forall [Star]
-                      ([isIn1 cEnum (TGen 0)] :=>
-                       (TGen 0 `fn` TGen 0 `fn` TAp tList (TGen 0))))
-enumFromThenToMfun :: Assump
+ = Assumption "enumFromTo"  (Forall [Star]
+                              ([isIn1 cEnum (TGen 0)] :=>
+                               (TGen 0 `fn` TGen 0 `fn` TAp tList (TGen 0))))
+enumFromThenToMfun :: Assumption
 enumFromThenToMfun
- = "enumFromThenTo" :>: (Forall [Star]
-                          ([isIn1 cEnum (TGen 0)] :=>
-                           (TGen 0 `fn` TGen 0 `fn` TGen 0 `fn` TAp tList (TGen 0))))
+ = Assumption "enumFromThenTo"  (Forall [Star]
+                                  ([isIn1 cEnum (TGen 0)] :=>
+                                   (TGen 0 `fn` TGen 0 `fn` TGen 0 `fn` TAp tList (TGen 0))))
 
 instsEnum :: [Qual Pred]
 instsEnum
@@ -839,14 +839,14 @@ instsEnum
 cRead :: [Char]
 cRead = "Read"
 
-readsPrecMfun :: Assump
+readsPrecMfun :: Assumption
 readsPrecMfun
- = "readsPrec" :>: (Forall [Star]
-                     ([isIn1 cRead (TGen 0)] :=> (tInt `fn` tReadS (TGen 0))))
-readListMfun :: Assump
+ = Assumption "readsPrec"  (Forall [Star]
+                             ([isIn1 cRead (TGen 0)] :=> (tInt `fn` tReadS (TGen 0))))
+readListMfun :: Assumption
 readListMfun
- = "readList" :>: (Forall [Star]
-                    ([isIn1 cRead (TGen 0)] :=> tReadS (TAp tList (TGen 0))))
+ = Assumption "readList"  (Forall [Star]
+                            ([isIn1 cRead (TGen 0)] :=> tReadS (TAp tList (TGen 0))))
 
 instsRead :: [Qual Pred]
 instsRead
@@ -897,21 +897,21 @@ instsRead
 cShow :: [Char]
 cShow = "Show"
 
-showMfun :: Assump
+showMfun :: Assumption
 showMfun
- = "show" :>: (Forall [Star]
-                ([isIn1 cShow (TGen 0)] :=>
-                 (TGen 0 `fn` tString)))
-showsPrecMfun :: Assump
+ = Assumption "show"  (Forall [Star]
+                        ([isIn1 cShow (TGen 0)] :=>
+                         (TGen 0 `fn` tString)))
+showsPrecMfun :: Assumption
 showsPrecMfun
- = "showsPrec" :>: (Forall [Star]
-                     ([isIn1 cShow (TGen 0)] :=>
-                      (tInt `fn` TGen 0 `fn` tShowS)))
-showListMfun :: Assump
+ = Assumption "showsPrec"  (Forall [Star]
+                             ([isIn1 cShow (TGen 0)] :=>
+                              (tInt `fn` TGen 0 `fn` tShowS)))
+showListMfun :: Assumption
 showListMfun
- = "showList" :>: (Forall [Star]
-                    ([isIn1 cShow (TGen 0)] :=>
-                     (TAp tList (TGen 0) `fn` tShowS)))
+ = Assumption "showList"  (Forall [Star]
+                            ([isIn1 cShow (TGen 0)] :=>
+                             (TAp tList (TGen 0) `fn` tShowS)))
 
 instsShow :: [Qual Pred]
 instsShow
@@ -966,29 +966,29 @@ instsShow
 cIx :: [Char]
 cIx = "Ix"
 
-rangeMfun :: Assump
+rangeMfun :: Assumption
 rangeMfun
- = "range" :>: (Forall [Star]
-                ([isIn1 cIx (TGen 0)] :=>
-                 (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn`
-                  TAp tList (TGen 0))))
-indexMfun :: Assump
+ = Assumption "range"  (Forall [Star]
+                        ([isIn1 cIx (TGen 0)] :=>
+                         (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn`
+                          TAp tList (TGen 0))))
+indexMfun :: Assumption
 indexMfun
- = "index" :>: (Forall [Star]
-                ([isIn1 cIx (TGen 0)] :=>
-                 (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn`
-                  TGen 0 `fn` tInt)))
-inRangeMfun :: Assump
+ = Assumption "index"  (Forall [Star]
+                        ([isIn1 cIx (TGen 0)] :=>
+                         (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn`
+                          TGen 0 `fn` tInt)))
+inRangeMfun :: Assumption
 inRangeMfun
- = "inRange" :>: (Forall [Star]
-                  ([isIn1 cIx (TGen 0)] :=>
-                   (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn`
-                    TGen 0 `fn` tBool)))
-rangeSizeMfun :: Assump
+ = Assumption "inRange"  (Forall [Star]
+                          ([isIn1 cIx (TGen 0)] :=>
+                           (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn`
+                            TGen 0 `fn` tBool)))
+rangeSizeMfun :: Assumption
 rangeSizeMfun
- = "rangeSize" :>: (Forall [Star]
-                    ([isIn1 cIx (TGen 0)] :=>
-                     (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn` tInt)))
+ = Assumption "rangeSize"  (Forall [Star]
+                            ([isIn1 cIx (TGen 0)] :=>
+                             (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn` tInt)))
 
 instsIx :: [Qual Pred]
 instsIx
@@ -1026,13 +1026,13 @@ instsIx
 cFunctor :: [Char]
 cFunctor = "Functor"
 
-fmapMfun :: Assump
+fmapMfun :: Assumption
 fmapMfun
- = "fmap" :>: (Forall [Kfun Star Star, Star, Star]
-                ([isIn1 cFunctor (TGen 0)] :=>
-                 ((TGen 1 `fn` TGen 2) `fn`
-                  TAp (TGen 0) (TGen 1) `fn`
-                  TAp (TGen 0) (TGen 2))))
+ = Assumption "fmap"  (Forall [Kfun Star Star, Star, Star]
+                        ([isIn1 cFunctor (TGen 0)] :=>
+                         ((TGen 1 `fn` TGen 2) `fn`
+                          TAp (TGen 0) (TGen 1) `fn`
+                          TAp (TGen 0) (TGen 2))))
 
 instsFunctor :: [Qual Pred]
 instsFunctor
@@ -1045,26 +1045,26 @@ instsFunctor
 cMonad :: [Char]
 cMonad = "Monad"
 
-returnMfun :: Assump
+returnMfun :: Assumption
 returnMfun
- = "return" :>: (Forall [Kfun Star Star, Star]
-                  ([isIn1 cMonad (TGen 0)] :=>
-                   (TGen 1 `fn` TAp (TGen 0) (TGen 1))))
-mbindMfun :: Assump
+ = Assumption "return"  (Forall [Kfun Star Star, Star]
+                          ([isIn1 cMonad (TGen 0)] :=>
+                           (TGen 1 `fn` TAp (TGen 0) (TGen 1))))
+mbindMfun :: Assumption
 mbindMfun
- = ">>=" :>: (Forall [Kfun Star Star, Star, Star]
-               ([isIn1 cMonad (TGen 0)] :=>
-                (TAp (TGen 0) (TGen 1) `fn` (TGen 1 `fn` TAp (TGen 0) (TGen 2)) `fn` TAp (TGen 0) (TGen 2))))
-mthenMfun :: Assump
+ = Assumption ">>="  (Forall [Kfun Star Star, Star, Star]
+                       ([isIn1 cMonad (TGen 0)] :=>
+                        (TAp (TGen 0) (TGen 1) `fn` (TGen 1 `fn` TAp (TGen 0) (TGen 2)) `fn` TAp (TGen 0) (TGen 2))))
+mthenMfun :: Assumption
 mthenMfun
- = ">>" :>: (Forall [Kfun Star Star, Star, Star]
-              ([isIn1 cMonad (TGen 0)] :=>
-               (TAp (TGen 0) (TGen 1) `fn` TAp (TGen 0) (TGen 2) `fn` TAp (TGen 0) (TGen 2))))
-failMfun :: Assump
+ = Assumption ">>"  (Forall [Kfun Star Star, Star, Star]
+                      ([isIn1 cMonad (TGen 0)] :=>
+                       (TAp (TGen 0) (TGen 1) `fn` TAp (TGen 0) (TGen 2) `fn` TAp (TGen 0) (TGen 2))))
+failMfun :: Assumption
 failMfun
- = "fail" :>: (Forall [Kfun Star Star, Star]
-                ([isIn1 cMonad (TGen 0)] :=>
-                 (tString `fn` TAp (TGen 0) (TGen 1))))
+ = Assumption "fail"  (Forall [Kfun Star Star, Star]
+                        ([isIn1 cMonad (TGen 0)] :=>
+                         (tString `fn` TAp (TGen 0) (TGen 1))))
 
 instsMonad :: [Qual Pred]
 instsMonad

@@ -6,9 +6,13 @@ import Data.List hiding (find)
 import Debug.Trace
 import Text.PrettyPrint.HughesPJ
 
-data Assump =
-   Id :>:
-      Scheme
+-- | Assumptions about the type of a variable are represented by
+-- values of the Assump datatype, each of which pairs a variable name
+-- with a type scheme.
+data Assumption = Assumption
+  { assumptionId :: Id
+  , assumptionScheme :: Scheme
+  }
 
 type Program = [BindGroup]
 type BindGroup = ([Expl], [[Impl]])
@@ -20,7 +24,7 @@ type Subst = [(Tyvar, Type)]
 type EnvTransformer = ClassEnv -> Maybe ClassEnv
 type Inst = Qual Pred
 type Class = ([Tyvar], [Pred], [Inst])
-type Infer e t = ClassEnv -> [Assump] -> e -> TI ([Pred], t)
+type Infer e t = ClassEnv -> [Assumption] -> e -> TI ([Pred], t)
 type Id = String
 
 data Tycon =
@@ -39,7 +43,7 @@ data Type
 data Expr
   = Var Id
   | Lit Literal
-  | Const Assump
+  | Const Assumption
   | Ap Expr Expr
   | Let BindGroup Expr
   | Lam Alt
@@ -65,7 +69,7 @@ data Pat
   | PAs Id Pat
   | PLit Literal
   | PNpk Id Integer
-  | PCon Assump [Pat]
+  | PCon Assumption [Pat]
   | PLazy Pat
 data Literal
   = LitInt Integer
@@ -104,12 +108,12 @@ class Match t where
     :: Monad m
     => t -> t -> m Subst
 
-instance PPrint Assump where
-  pprint (i :>: s) = (text (show i) <+> text ":>:") $$ nest 2 (pprint s)
+instance PPrint Assumption where
+  pprint (Assumption i  s) = (text (show i) <+> text ":>:") $$ nest 2 (pprint s)
 
-instance Types Assump where
-  apply s (i :>: sc) = i :>: (apply s sc)
-  tv (_ :>: sc) = tv sc
+instance Types Assumption where
+  apply s (Assumption i  sc) = Assumption i  (apply s sc)
+  tv (Assumption _  sc) = tv sc
 
 instance PPrint Kind where
   pprint = ppkind 0
@@ -282,9 +286,9 @@ instance Match t =>
 
 find
   :: Monad m
-  => Id -> [Assump] -> m Scheme
+  => Id -> [Assumption] -> m Scheme
 find i [] = fail ("unbound identifier: " ++ i)
-find i ((i' :>: sc):as) =
+find i ((Assumption i'  sc):as) =
   if i == i'
     then return sc
     else find i as
@@ -323,23 +327,23 @@ ppParen t x =
     then parens x
     else x
 
-tiPat :: Pat -> TI ([Pred], [Assump], Type)
+tiPat :: Pat -> TI ([Pred], [Assumption], Type)
 tiPat (PVar i) = do
   v <- newTVar Star
-  return ([], [i :>: toScheme v], v)
+  return ([], [Assumption i (toScheme v)], v)
 tiPat PWildcard = do
   v <- newTVar Star
   return ([], [], v)
 tiPat (PAs i pat) = do
   (ps, as, t) <- tiPat pat
-  return (ps, (i :>: toScheme t) : as, t)
+  return (ps, (Assumption i (toScheme t)) : as, t)
 tiPat (PLit l) = do
   (ps, t) <- tiLit l
   return (ps, [], t)
 tiPat (PNpk i _) = do
   t <- newTVar Star
-  return ([IsIn "Integral" [t]], [i :>: toScheme t], t)
-tiPat (PCon (_ :>: sc) pats) = do
+  return ([IsIn "Integral" [t]], [Assumption i (toScheme t)], t)
+tiPat (PCon (Assumption _  sc) pats) = do
   (ps, as, ts) <- tiPats pats
   t' <- newTVar Star
   (qs :=> t) <- freshInst sc
@@ -347,7 +351,7 @@ tiPat (PCon (_ :>: sc) pats) = do
   return (ps ++ qs, as, t')
 tiPat (PLazy pat) = tiPat pat
 
-tiPats :: [Pat] -> TI ([Pred], [Assump], [Type])
+tiPats :: [Pat] -> TI ([Pred], [Assumption], [Type])
 tiPats pats = do
   psasts <- mapM tiPat pats
   let ps = concat [ps' | (ps', _, _) <- psasts]
@@ -575,7 +579,7 @@ evar v = (Var v)
 elit :: Literal -> Expr
 elit l = (Lit l)
 
-econst :: Assump -> Expr
+econst :: Assumption -> Expr
 econst c = (Const c)
 
 elet :: [[(Id, Maybe Scheme, [Alt])]] -> Expr -> Expr
@@ -599,7 +603,7 @@ elambda :: Alt -> Expr
 elambda alt = elet [[("_lambda", Nothing, [alt])]] (evar "_lambda")
 
 efail :: Expr
-efail = Const ("FAIL" :>: Forall [Star] ([] :=> TGen 0))
+efail = Const (Assumption "FAIL" (Forall [Star] ([] :=> TGen 0)))
 
 esign :: Expr -> Scheme -> Expr
 esign e t = elet [[("_val", Just t, [([], e)])]] (evar "_val")
@@ -615,7 +619,7 @@ tiExpr _ as (Var i) = do
   sc <- find i as
   (ps :=> t) <- freshInst sc
   return (ps, t)
-tiExpr _ _ (Const (_ :>: sc)) = do
+tiExpr _ _ (Const (Assumption _  sc)) = do
   (ps :=> t) <- freshInst sc
   return (ps, t)
 tiExpr _ _ (Lit l) = do
@@ -657,7 +661,7 @@ tiAlt ce as (pats, e) = do
   (qs, t) <- tiExpr ce (as' ++ as) e
   return (ps ++ qs, foldr fn t ts)
 
-tiAlts :: ClassEnv -> [Assump] -> [Alt] -> Type -> TI [Pred]
+tiAlts :: ClassEnv -> [Assumption] -> [Alt] -> Type -> TI [Pred]
 tiAlts ce as alts t = do
   psts <- mapM (tiAlt ce as) alts
   mapM_ (unify t) (map snd psts)
@@ -726,7 +730,7 @@ defaultSubst
   => ClassEnv -> [Tyvar] -> [Pred] -> m Subst
 defaultSubst = withDefaults (\vps ts -> zip (map fst vps) ts)
 
-tiExpl :: ClassEnv -> [Assump] -> Expl -> TI [Pred]
+tiExpl :: ClassEnv -> [Assumption] -> Expl -> TI [Pred]
 tiExpl ce as (_, sc, alts) = do
   (qs :=> t) <- freshInst sc
   ps <- tiAlts ce as alts t
@@ -749,12 +753,12 @@ restricted bs = any simple bs
   where
     simple (_, alts) = any (null . fst) alts
 
-tiImpls :: Infer [Impl] [Assump]
+tiImpls :: Infer [Impl] [Assumption]
 tiImpls ce as bs = do
   ts <- mapM (\_ -> newTVar Star) bs
   let is = map fst bs
       scs = map toScheme ts
-      as' = zipWith (:>:) is scs ++ as
+      as' = zipWith Assumption is scs ++ as
       altss = map snd bs
   pss <- sequence (zipWith (tiAlts ce as') altss ts)
   s <- getSubst
@@ -767,18 +771,18 @@ tiImpls ce as bs = do
   if restricted bs
     then let gs' = gs \\ tv rs
              scs' = map (quantify gs' . ([] :=>)) ts'
-         in return (ds ++ rs, zipWith (:>:) is scs')
+         in return (ds ++ rs, zipWith Assumption is scs')
     else let scs' = map (quantify gs . (rs :=>)) ts'
-         in return (ds, zipWith (:>:) is scs')
+         in return (ds, zipWith Assumption is scs')
 
-tiBindGroup :: Infer BindGroup [Assump]
+tiBindGroup :: Infer BindGroup [Assumption]
 tiBindGroup ce as (es, iss) = do
-  let as' = [v :>: sc | (v, sc, _alts) <- es]
+  let as' = [Assumption v  sc | (v, sc, _alts) <- es]
   (ps, as'') <- tiSeq tiImpls ce (as' ++ as) iss
   qss <- mapM (tiExpl ce (as'' ++ as' ++ as)) es
   return (ps ++ concat qss, as'' ++ as')
 
-tiSeq :: Infer bg [Assump] -> Infer [bg] [Assump]
+tiSeq :: Infer bg [Assumption] -> Infer [bg] [Assumption]
 tiSeq _ _ _ [] = return ([], [])
 tiSeq ti ce as (bs:bss) = do
   (ps, as') <- ti ce as bs
@@ -825,7 +829,7 @@ freshInst (Forall ks qt) = do
   ts <- mapM newTVar ks
   return (inst ts qt)
 
-tiProgram :: ClassEnv -> [Assump] -> Program -> [Assump]
+tiProgram :: ClassEnv -> [Assumption] -> Program -> [Assumption]
 tiProgram ce as bgs =
   runTI $ do
     (ps, as') <- tiSeq tiBindGroup ce as bgs
@@ -834,13 +838,13 @@ tiProgram ce as bgs =
     s' <- defaultSubst ce [] rs
     return (apply (s' @@ s) as')
 
-tiBindGroup' :: ClassEnv -> [Assump] -> BindGroup -> TI ([Pred], [Assump])
+tiBindGroup' :: ClassEnv -> [Assumption] -> BindGroup -> TI ([Pred], [Assumption])
 tiBindGroup' ce as bs = do
   (ps, as') <- tiBindGroup ce as bs
   trim (tv (as' ++ as))
   return (ps, as')
 
-tiProgram' :: ClassEnv -> [Assump] -> Program -> [Assump]
+tiProgram' :: ClassEnv -> [Assumption] -> Program -> [Assumption]
 tiProgram' ce as bgs =
   runTI $ do
     (ps, as') <- tiSeq tiBindGroup' ce as bgs

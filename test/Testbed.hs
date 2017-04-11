@@ -17,11 +17,11 @@ module Testbed(module THIH,
 import THIH
 import Text.PrettyPrint.HughesPJ
 
-test          :: ClassEnv -> [Assump] -> [BindGroup] -> IO ()
+test          :: ClassEnv -> [Assumption] -> [BindGroup] -> IO ()
 test ce as bgs = putStr $ render $ vcat $ map pprint $ reverse $
                  tiProgram' ce as bgs
 
-save          :: String -> ClassEnv -> [Assump] -> [BindGroup] -> IO ()
+save          :: String -> ClassEnv -> [Assumption] -> [BindGroup] -> IO ()
 save f ce as bgs
                = writeFile ("Haskell" ++ f ++".hs")
                  ("-- Automatically generated typing assumptions for " ++ f ++

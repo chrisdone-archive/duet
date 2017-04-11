@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------
--- HaskellPrims:   Typing assumptions for primitives in the Hugs prelude
+-- HaskellPrims:   Typing assumptiontions for primitives in the Hugs prelude
 --
 -- Part of `Typing Haskell in Haskell', version of November 23, 2000
 -- Copyright (c) Mark P Jones and the Oregon Graduate Institute
@@ -16,437 +16,437 @@ module HaskellPrims where
 import Testbed
 import StaticPrelude
 
-defnsHaskellPrims :: [Assump]
+defnsHaskellPrims :: [Assumption]
 defnsHaskellPrims
- = [ "_concmp" :>:
+ = [ Assumption "_concmp"
        (Forall [Star]
          ([] :=>
           (TGen 0 `fn` TGen 0 `fn` tOrdering))),
-     "_range" :>:
+     Assumption "_range"
        (Forall [Star]
          ([] :=>
           (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn` TAp tList (TGen 0)))),
-     "_index" :>:
+     Assumption "_index"
        (Forall [Star]
          ([] :=>
           (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn` TGen 0 `fn` tInt))),
-     "_inRange" :>:
+     Assumption "_inRange"
        (Forall [Star]
          ([] :=>
           (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn` TGen 0 `fn` tBool))),
-     "_ToEnum" :>:
+     Assumption "_ToEnum"
        (Forall [Star]
          ([] :=>
           (TGen 0 `fn` tInt `fn` TGen 0))),
-     "_FrEnum" :>:
+     Assumption "_FrEnum"
        (Forall [Star]
          ([] :=>
           (TGen 0 `fn` tInt))),
-     "_From" :>:
+     Assumption "_From"
        (Forall [Star]
          ([] :=>
           (TGen 0 `fn` TAp tList (TGen 0)))),
-     "_FromTo" :>:
+     Assumption "_FromTo"
        (Forall [Star]
          ([] :=>
           (TGen 0 `fn` TGen 0 `fn` TAp tList (TGen 0)))),
-     "_FromThen" :>:
+     Assumption "_FromThen"
        (Forall [Star]
          ([] :=>
           (TGen 0 `fn` TGen 0 `fn` TAp tList (TGen 0)))),
-     "error" :>:
+     Assumption "error"
        (Forall [Star]
          ([] :=>
           (tString `fn` TGen 0))),
-     "primIntToFloat" :>:
+     Assumption "primIntToFloat"
        (Forall []
          ([] :=>
           (tInt `fn` tFloat))),
-     "primIntToInteger" :>:
+     Assumption "primIntToInteger"
        (Forall []
          ([] :=>
           (tInt `fn` tInteger))),
-     "ioeGetErrorString" :>:
+     Assumption "ioeGetErrorString"
        (Forall []
          ([] :=>
           (tIOError `fn` tString))),
-     "readFile" :>:
+     Assumption "readFile"
        (Forall []
          ([] :=>
           (tFilePath `fn` TAp tIO tString))),
-     "appendFile" :>:
+     Assumption "appendFile"
        (Forall []
          ([] :=>
           (tFilePath `fn` tString `fn` TAp tIO tUnit))),
-     "writeFile" :>:
+     Assumption "writeFile"
        (Forall []
          ([] :=>
           (tFilePath `fn` tString `fn` TAp tIO tUnit))),
-     "getContents" :>:
+     Assumption "getContents"
        (Forall []
          ([] :=>
           (TAp tIO tString))),
-     "userError" :>:
+     Assumption "userError"
        (Forall []
          ([] :=>
           (tString `fn` tIOError))),
-     "getChar" :>:
+     Assumption "getChar"
        (Forall []
          ([] :=>
           (TAp tIO tChar))),
-     "putStr" :>:
+     Assumption "putStr"
        (Forall []
          ([] :=>
           (tString `fn` TAp tIO tUnit))),
-     "putChar" :>:
+     Assumption "putChar"
        (Forall []
          ([] :=>
           (tChar `fn` TAp tIO tUnit))),
-     "ioError" :>:
+     Assumption "ioError"
        (Forall [Star]
          ([] :=>
           (tIOError `fn` TAp tIO (TGen 0)))),
-     "catch" :>:
+     Assumption "catch"
        (Forall [Star]
          ([] :=>
           (TAp tIO (TGen 0) `fn` (tIOError `fn` TAp tIO (TGen 0)) `fn` TAp tIO (TGen 0)))),
-     "primretIO" :>:
+     Assumption "primretIO"
        (Forall [Star]
          ([] :=>
           (TGen 0 `fn` TAp tIO (TGen 0)))),
-     "primbindIO" :>:
+     Assumption "primbindIO"
        (Forall [Star, Star]
          ([] :=>
           (TAp tIO (TGen 0) `fn` (TGen 0 `fn` TAp tIO (TGen 1)) `fn` TAp tIO (TGen 1)))),
-     "primShowsDouble" :>:
+     Assumption "primShowsDouble"
        (Forall []
          ([] :=>
           (tInt `fn` tDouble `fn` tShowS))),
-     "primShowsFloat" :>:
+     Assumption "primShowsFloat"
        (Forall []
          ([] :=>
           (tInt `fn` tFloat `fn` tShowS))),
-     "primDoubleDecode" :>:
+     Assumption "primDoubleDecode"
        (Forall []
          ([] :=>
           (tDouble `fn` TAp (TAp tTuple2 tInteger) tInt))),
-     "primDoubleEncode" :>:
+     Assumption "primDoubleEncode"
        (Forall []
          ([] :=>
           (tInteger `fn` tInt `fn` tDouble))),
-     "primDoubleMaxExp" :>:
+     Assumption "primDoubleMaxExp"
        (Forall []
          ([] :=>
           tInt)),
-     "primDoubleMinExp" :>:
+     Assumption "primDoubleMinExp"
        (Forall []
          ([] :=>
           tInt)),
-     "primDoubleDigits" :>:
+     Assumption "primDoubleDigits"
        (Forall []
          ([] :=>
           tInt)),
-     "primDoubleRadix" :>:
+     Assumption "primDoubleRadix"
        (Forall []
          ([] :=>
           tInteger)),
-     "primFloatDecode" :>:
+     Assumption "primFloatDecode"
        (Forall []
          ([] :=>
           (tFloat `fn` TAp (TAp tTuple2 tInteger) tInt))),
-     "primFloatEncode" :>:
+     Assumption "primFloatEncode"
        (Forall []
          ([] :=>
           (tInteger `fn` tInt `fn` tFloat))),
-     "primFloatMaxExp" :>:
+     Assumption "primFloatMaxExp"
        (Forall []
          ([] :=>
           tInt)),
-     "primFloatMinExp" :>:
+     Assumption "primFloatMinExp"
        (Forall []
          ([] :=>
           tInt)),
-     "primFloatDigits" :>:
+     Assumption "primFloatDigits"
        (Forall []
          ([] :=>
           tInt)),
-     "primFloatRadix" :>:
+     Assumption "primFloatRadix"
        (Forall []
          ([] :=>
           tInteger)),
-     "primSqrtDouble" :>:
+     Assumption "primSqrtDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble))),
-     "primExpDouble" :>:
+     Assumption "primExpDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble))),
-     "primLogDouble" :>:
+     Assumption "primLogDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble))),
-     "primAtanDouble" :>:
+     Assumption "primAtanDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble))),
-     "primTanDouble" :>:
+     Assumption "primTanDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble))),
-     "primAcosDouble" :>:
+     Assumption "primAcosDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble))),
-     "primCosDouble" :>:
+     Assumption "primCosDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble))),
-     "primAsinDouble" :>:
+     Assumption "primAsinDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble))),
-     "primSinDouble" :>:
+     Assumption "primSinDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble))),
-     "primSqrtFloat" :>:
+     Assumption "primSqrtFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat))),
-     "primExpFloat" :>:
+     Assumption "primExpFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat))),
-     "primLogFloat" :>:
+     Assumption "primLogFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat))),
-     "primAtanFloat" :>:
+     Assumption "primAtanFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat))),
-     "primTanFloat" :>:
+     Assumption "primTanFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat))),
-     "primAcosFloat" :>:
+     Assumption "primAcosFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat))),
-     "primCosFloat" :>:
+     Assumption "primCosFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat))),
-     "primAsinFloat" :>:
+     Assumption "primAsinFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat))),
-     "primSinFloat" :>:
+     Assumption "primSinFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat))),
-     "primRationalToDouble" :>:
+     Assumption "primRationalToDouble"
        (Forall []
          ([] :=>
           (tRational `fn` tDouble))),
-     "primRationalToFloat" :>:
+     Assumption "primRationalToFloat"
        (Forall []
          ([] :=>
           (tRational `fn` tFloat))),
-     "primDivDouble" :>:
+     Assumption "primDivDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble `fn` tDouble))),
-     "doubleToFloat" :>:
+     Assumption "doubleToFloat"
        (Forall []
          ([] :=>
           (tDouble `fn` tFloat))),
-     "primDivFloat" :>:
+     Assumption "primDivFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat `fn` tFloat))),
-     "primIntegerToDouble" :>:
+     Assumption "primIntegerToDouble"
        (Forall []
          ([] :=>
           (tInteger `fn` tDouble))),
-     "primIntToDouble" :>:
+     Assumption "primIntToDouble"
        (Forall []
          ([] :=>
           (tInt `fn` tDouble))),
-     "primNegDouble" :>:
+     Assumption "primNegDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble))),
-     "primMulDouble" :>:
+     Assumption "primMulDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble `fn` tDouble))),
-     "primMinusDouble" :>:
+     Assumption "primMinusDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble `fn` tDouble))),
-     "primPlusDouble" :>:
+     Assumption "primPlusDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble `fn` tDouble))),
-     "primIntegerToFloat" :>:
+     Assumption "primIntegerToFloat"
        (Forall []
          ([] :=>
           (tInteger `fn` tFloat))),
-     "primNegFloat" :>:
+     Assumption "primNegFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat))),
-     "primMulFloat" :>:
+     Assumption "primMulFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat `fn` tFloat))),
-     "primMinusFloat" :>:
+     Assumption "primMinusFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat `fn` tFloat))),
-     "primPlusFloat" :>:
+     Assumption "primPlusFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat `fn` tFloat))),
-     "primCmpDouble" :>:
+     Assumption "primCmpDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble `fn` tOrdering))),
-     "primEqDouble" :>:
+     Assumption "primEqDouble"
        (Forall []
          ([] :=>
           (tDouble `fn` tDouble `fn` tBool))),
-     "primCmpFloat" :>:
+     Assumption "primCmpFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat `fn` tOrdering))),
-     "primEqFloat" :>:
+     Assumption "primEqFloat"
        (Forall []
          ([] :=>
           (tFloat `fn` tFloat `fn` tBool))),
-     "primShowsInteger" :>:
+     Assumption "primShowsInteger"
        (Forall []
          ([] :=>
           (tInt `fn` tInteger `fn` tShowS))),
-     "primShowsInt" :>:
+     Assumption "primShowsInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt `fn` tShowS))),
-     "primEvenInteger" :>:
+     Assumption "primEvenInteger"
        (Forall []
          ([] :=>
           (tInteger `fn` tBool))),
-     "primQrmInteger" :>:
+     Assumption "primQrmInteger"
        (Forall []
          ([] :=>
           (tInteger `fn` tInteger `fn` TAp (TAp tTuple2 tInteger) tInteger))),
-     "primEvenInt" :>:
+     Assumption "primEvenInt"
        (Forall []
          ([] :=>
           (tInt `fn` tBool))),
-     "primQrmInt" :>:
+     Assumption "primQrmInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt `fn` TAp (TAp tTuple2 tInt) tInt))),
-     "primModInt" :>:
+     Assumption "primModInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primRemInt" :>:
+     Assumption "primRemInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primQuotInt" :>:
+     Assumption "primQuotInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primDivInt" :>:
+     Assumption "primDivInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primNegInteger" :>:
+     Assumption "primNegInteger"
        (Forall []
          ([] :=>
           (tInteger `fn` tInteger))),
-     "primMulInteger" :>:
+     Assumption "primMulInteger"
        (Forall []
          ([] :=>
           (tInteger `fn` tInteger `fn` tInteger))),
-     "primMinusInteger" :>:
+     Assumption "primMinusInteger"
        (Forall []
          ([] :=>
           (tInteger `fn` tInteger `fn` tInteger))),
-     "primPlusInteger" :>:
+     Assumption "primPlusInteger"
        (Forall []
          ([] :=>
           (tInteger `fn` tInteger `fn` tInteger))),
-     "primMaxInt" :>:
+     Assumption "primMaxInt"
        (Forall []
          ([] :=>
           tInt)),
-     "primMinInt" :>:
+     Assumption "primMinInt"
        (Forall []
          ([] :=>
           tInt)),
-     "primIntegerToInt" :>:
+     Assumption "primIntegerToInt"
        (Forall []
          ([] :=>
           (tInteger `fn` tInt))),
-     "primNegInt" :>:
+     Assumption "primNegInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt))),
-     "primMulInt" :>:
+     Assumption "primMulInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primMinusInt" :>:
+     Assumption "primMinusInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primPlusInt" :>:
+     Assumption "primPlusInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primCmpInteger" :>:
+     Assumption "primCmpInteger"
        (Forall []
          ([] :=>
           (tInteger `fn` tInteger `fn` tOrdering))),
-     "primEqInteger" :>:
+     Assumption "primEqInteger"
        (Forall []
          ([] :=>
           (tInteger `fn` tInteger `fn` tBool))),
-     "primCmpInt" :>:
+     Assumption "primCmpInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt `fn` tOrdering))),
-     "primEqInt" :>:
+     Assumption "primEqInt"
        (Forall []
          ([] :=>
           (tInt `fn` tInt `fn` tBool))),
-     "primIntToChar" :>:
+     Assumption "primIntToChar"
        (Forall []
          ([] :=>
           (tInt `fn` tChar))),
-     "primCharToInt" :>:
+     Assumption "primCharToInt"
        (Forall []
          ([] :=>
           (tChar `fn` tInt))),
-     "primCmpChar" :>:
+     Assumption "primCmpChar"
        (Forall []
          ([] :=>
           (tChar `fn` tChar `fn` tOrdering))),
-     "primEqChar" :>:
+     Assumption "primEqChar"
        (Forall []
          ([] :=>
           (tChar `fn` tChar `fn` tBool))),
-     "$!" :>:
+     Assumption "$!"
        (Forall [Star, Star]
          ([] :=>
           ((TGen 0 `fn` TGen 1) `fn` TGen 0 `fn` TGen 1))),
-     "seq" :>:
+     Assumption "seq"
        (Forall [Star, Star]
          ([] :=>
           (TGen 0 `fn` TGen 1 `fn` TGen 1))) ]
