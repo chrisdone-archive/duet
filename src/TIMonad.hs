@@ -1,15 +1,15 @@
 -----------------------------------------------------------------------------
--- TIMonad:	Type inference monad
--- 
+-- TIMonad:     Type inference monad
+--
 -- Part of `Typing Haskell in Haskell', version of November 23, 2000
 -- Copyright (c) Mark P Jones and the Oregon Graduate Institute
 -- of Science and Technology, 1999-2000
--- 
+--
 -- This program is distributed as Free Software under the terms
 -- in the file "License" that is included in the distribution
 -- of this software, copies of which may be obtained from:
 --             http://www.cse.ogi.edu/~mpj/thih/
--- 
+--
 -----------------------------------------------------------------------------
 
 module TIMonad where
@@ -33,7 +33,7 @@ instance Monad TI where
                                         in  gx s' m)
 
 runTI       :: TI a -> a
-runTI (TI f) = x where (s,n,x) = f nullSubst 0
+runTI (TI f) = x where (_,_,x) = f nullSubst 0
 
 getSubst   :: TI Subst
 getSubst    = TI (\s n -> (s,n,s))
@@ -65,7 +65,7 @@ class Instantiate t where
 instance Instantiate Type where
   inst ts (TAp l r) = TAp (inst ts l) (inst ts r)
   inst ts (TGen n)  = ts !! n
-  inst ts t         = t
+  inst _  t         = t
 instance Instantiate a => Instantiate [a] where
   inst ts = map (inst ts)
 instance Instantiate t => Instantiate (Qual t) where

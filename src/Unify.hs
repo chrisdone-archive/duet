@@ -16,7 +16,6 @@ module Unify where
 
 import Control.Monad (foldM)
 
-import Kind
 import Type
 import Subst
 
@@ -33,7 +32,7 @@ instance Unify Type where
   mgu t (TVar u)        = varBind u t
   mgu (TCon tc1) (TCon tc2)
              | tc1==tc2 = return nullSubst
-  mgu t1 t2             = fail "types do not unify"
+  mgu _ _             = fail "types do not unify"
 
 instance (Unify t, Types t) => Unify [t] where
   mgu (x:xs) (y:ys) = do s1 <- mgu x y
@@ -57,7 +56,7 @@ instance Match Type where
   match (TVar u)   t | kind u == kind t = return (u +-> t)
   match (TCon tc1) (TCon tc2)
            | tc1==tc2         = return nullSubst
-  match t1 t2                 = fail "types do not match"
+  match _ _                 = fail "types do not match"
 
 instance Match t => Match [t] where
    match ts ts' = do ss <- sequence (zipWith match ts ts')

@@ -1,6 +1,6 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 -----------------------------------------------------------------------------
--- TIMain:	Type Inference Algorithm
+-- TIMain:      Type Inference Algorithm
 --
 -- Part of `Typing Haskell in Haskell', version of November 23, 2000
 -- Copyright (c) Mark P Jones and the Oregon Graduate Institute
@@ -47,20 +47,29 @@ data Expr = Var   Id
 -- definitions of the following combinators to match, and do not need to
 -- rewrite all the test code.
 
+ap :: Foldable t => t Expr -> Expr
 ap              = foldl1 Ap
+evar :: Id -> Expr
 evar v          = (Var v)
+elit :: Literal -> Expr
 elit l          = (Lit l)
+econst :: Assump -> Expr
 econst c        = (Const c)
+elet :: [[(Id, Maybe Scheme, [Alt])]] -> Expr -> Expr
 elet e f        = foldr Let f (map toBg e)
 
 toBg           :: [(Id, Maybe Scheme, [Alt])] -> BindGroup
 toBg g          = ([(v, t, alts) | (v, Just t, alts) <- g ],
                    filter (not . null) [[(v,alts) | (v,Nothing,alts) <- g]])
 
+pNil :: Pat
 pNil            = PCon nilCfun []
+pCons :: Pat -> Pat -> Pat
 pCons x y       = PCon consCfun [x,y]
 
+eNil :: Expr
 eNil            = econst nilCfun
+eCons :: Expr -> Expr -> Expr
 eCons x y       = ap [ econst consCfun, x, y ]
 
 {-
@@ -69,33 +78,43 @@ elambda         = Lam
 eif             = If
 -}
 
+ecase :: Expr -> [(Pat, Expr)] -> Expr
 ecase d as      = elet [[ ("_case",
                            Nothing,
                            [([p],e) | (p,e) <- as]) ]]
                        (ap [evar "_case", d])
+eif :: Expr -> Expr -> Expr -> Expr
 eif c t f       = ecase c [(PCon trueCfun [], t),(PCon falseCfun [], f)]
+elambda :: Alt -> Expr
 elambda alt     = elet [[ ("_lambda",
                            Nothing,
                            [alt]) ]]
                              (evar "_lambda")
+eguarded :: Foldable t => t (Expr, Expr) -> Expr
 eguarded        = foldr (\(c,t) e -> eif c t e) efail
+efail :: Expr
 efail           = Const ("FAIL" :>: Forall [Star] ([] :=> TGen 0))
+esign :: Expr -> Scheme -> Expr
 esign e t       = elet [[ ("_val", Just t, [([],e)]) ]] (evar "_val")
 
+eCompFrom :: Pat -> Expr -> Expr -> Expr
 eCompFrom p e c = ap [ econst mbindMfun, e, elambda ([p],c) ]
+eCompGuard :: Expr -> Expr -> Expr
 eCompGuard e c  = eif e c eNil
+eCompLet :: [[(Id, Maybe Scheme, [Alt])]] -> Expr -> Expr
 eCompLet bgs c  = elet bgs c
+eListRet :: Expr -> Expr
 eListRet e      = eCons e eNil
 
 -----------------------------------------------------------------------------
 
 tiExpr                       :: Infer Expr Type
-tiExpr ce as (Var i)          = do sc         <- find i as
+tiExpr _  as (Var i)          = do sc         <- find i as
                                    (ps :=> t) <- freshInst sc
                                    return (ps, t)
-tiExpr ce as (Const (i:>:sc)) = do (ps :=> t) <- freshInst sc
+tiExpr _  _  (Const (_:>:sc)) = do (ps :=> t) <- freshInst sc
                                    return (ps, t)
-tiExpr ce as (Lit l)          = do (ps,t) <- tiLit l
+tiExpr _  _  (Lit l)          = do (ps,t) <- tiLit l
                                    return (ps, t)
 tiExpr ce as (Ap e f)         = do (ps,te) <- tiExpr ce as e
                                    (qs,tf) <- tiExpr ce as f
@@ -116,7 +135,7 @@ tiExpr ce as (If e e1 e2)
        unify t1 t2
        return (ps++ps1++ps2, t1)
 tiExpr ce as (Case e branches)
-  = do (ps, t) <- tiExpr ce as e
+  = do (ps0, t) <- tiExpr ce as e
        v       <- newTVar Star
        let tiBr (pat, f)
             = do (ps, as',t') <- tiPat pat
@@ -125,7 +144,7 @@ tiExpr ce as (Case e branches)
                  unify v t''
                  return (ps++qs)
        pss <- mapM tiBr branches
-       return (ps++concat pss, v)
+       return (ps0++concat pss, v)
 
 -----------------------------------------------------------------------------
 
@@ -138,7 +157,7 @@ tiAlt ce as (pats, e) = do (ps, as', ts) <- tiPats pats
 
 tiAlts             :: ClassEnv -> [Assump] -> [Alt] -> Type -> TI [Pred]
 tiAlts ce as alts t = do psts <- mapM (tiAlt ce as) alts
-                         mapM (unify t) (map snd psts)
+                         mapM_ (unify t) (map snd psts)
                          return (concat (map fst psts))
 
 -----------------------------------------------------------------------------
@@ -153,7 +172,7 @@ split ce fs gs ps = do let ps' = reduce ce ps
 type Ambiguity       = (Tyvar, [Pred])
 
 ambiguities         :: ClassEnv -> [Tyvar] -> [Pred] -> [Ambiguity]
-ambiguities ce vs ps = [ (v, filter (elem v . tv) ps) | v <- tv ps \\ vs ]
+ambiguities _  vs ps = [ (v, filter (elem v . tv) ps) | v <- tv ps \\ vs ]
 
 numClasses :: [Id]
 numClasses  = ["Num", "Integral", "Floating", "Fractional",
@@ -164,8 +183,8 @@ stdClasses  = ["Eq", "Ord", "Show", "Read", "Bounded", "Enum", "Ix",
                "Functor", "Monad", "MonadPlus"] ++ numClasses
 
 candidates           :: ClassEnv -> Ambiguity -> [Type]
-candidates ce (v, qs) = [ t' | let is = [ i | IsIn i t <- qs ]
-                                   ts = [ t | IsIn i t <- qs ],
+candidates ce (v, qs) = [ t' | let is = [ i | IsIn i _ <- qs ]
+                                   ts = [ t | IsIn _ t <- qs ],
                                all ([TVar v]==) ts,
                                any (`elem` numClasses) is,
                                all (`elem` stdClasses) is,
@@ -181,7 +200,7 @@ withDefaults f ce vs ps
             tss = map (candidates ce) vps
 
 defaultedPreds :: Monad m => ClassEnv -> [Tyvar] -> [Pred] -> m [Pred]
-defaultedPreds  = withDefaults (\vps ts -> concat (map snd vps))
+defaultedPreds  = withDefaults (\vps _ -> concat (map snd vps))
 
 defaultSubst   :: Monad m => ClassEnv -> [Tyvar] -> [Pred] -> m Subst
 defaultSubst    = withDefaults (\vps ts -> zip (map fst vps) ts)
@@ -191,7 +210,7 @@ defaultSubst    = withDefaults (\vps ts -> zip (map fst vps) ts)
 type Expl = (Id, Scheme, [Alt])
 
 tiExpl :: ClassEnv -> [Assump] -> Expl -> TI [Pred]
-tiExpl ce as (i, sc, alts)
+tiExpl ce as (_, sc, alts)
         = do (qs :=> t) <- freshInst sc
              ps         <- tiAlts ce as alts t
              s          <- getSubst
@@ -215,7 +234,7 @@ type Impl   = (Id, [Alt])
 
 restricted   :: [Impl] -> Bool
 restricted bs = any simple bs
- where simple (i,alts) = any (null . fst) alts
+ where simple (_,alts) = any (null . fst) alts
 
 tiImpls         :: Infer [Impl] [Assump]
 tiImpls ce as bs = do ts <- mapM (\_ -> newTVar Star) bs
@@ -245,13 +264,13 @@ type BindGroup  = ([Expl], [[Impl]])
 
 tiBindGroup :: Infer BindGroup [Assump]
 tiBindGroup ce as (es,iss) =
-  do let as' = [ v:>:sc | (v,sc,alts) <- es ]
+  do let as' = [ v:>:sc | (v,sc,_alts) <- es ]
      (ps, as'') <- tiSeq tiImpls ce (as'++as) iss
      qss        <- mapM (tiExpl ce (as''++as'++as)) es
      return (ps++concat qss, as''++as')
 
 tiSeq                  :: Infer bg [Assump] -> Infer [bg] [Assump]
-tiSeq ti ce as []       = return ([],[])
+tiSeq _  _  _  []       = return ([],[])
 tiSeq ti ce as (bs:bss) = do (ps,as')  <- ti ce as bs
                              (qs,as'') <- tiSeq ti ce (as'++as) bss
                              return (ps++qs, as''++as')

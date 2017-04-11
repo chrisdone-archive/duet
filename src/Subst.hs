@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------
--- Subst:	Substitutions
+-- Subst:       Substitutions
 --
 -- Part of `Typing Haskell in Haskell', version of November 23, 2000
 -- Copyright (c) Mark P Jones and the Oregon Graduate Institute
@@ -35,11 +35,11 @@ instance Types Type where
                        Just t  -> t
                        Nothing -> TVar u
   apply s (TAp l r) = TAp (apply s l) (apply s r)
-  apply s t         = t
+  apply _ t         = t
 
   tv (TVar u)  = [u]
   tv (TAp l r) = tv l `union` tv r
-  tv t         = []
+  tv _         = []
 
 instance Types a => Types [a] where
   apply s = map (apply s)

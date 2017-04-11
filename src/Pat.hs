@@ -1,15 +1,15 @@
 -----------------------------------------------------------------------------
--- Pat:		Patterns
--- 
+-- Pat:         Patterns
+--
 -- Part of `Typing Haskell in Haskell', version of November 23, 2000
 -- Copyright (c) Mark P Jones and the Oregon Graduate Institute
 -- of Science and Technology, 1999-2000
--- 
+--
 -- This program is distributed as Free Software under the terms
 -- in the file "License" that is included in the distribution
 -- of this software, copies of which may be obtained from:
 --             http://www.cse.ogi.edu/~mpj/thih/
--- 
+--
 -----------------------------------------------------------------------------
 
 module Pat where
@@ -20,7 +20,6 @@ import Pred
 import Scheme
 import Assump
 import TIMonad
-import Infer
 import Lit
 
 data Pat        = PVar Id
@@ -46,10 +45,10 @@ tiPat (PAs i pat) = do (ps, as, t) <- tiPat pat
 tiPat (PLit l) = do (ps, t) <- tiLit l
                     return (ps, [], t)
 
-tiPat (PNpk i k)  = do t <- newTVar Star
+tiPat (PNpk i _)  = do t <- newTVar Star
                        return ([IsIn "Integral" [t]], [i:>:toScheme t], t)
 
-tiPat (PCon (i:>:sc) pats) = do (ps,as,ts) <- tiPats pats
+tiPat (PCon (_:>:sc) pats) = do (ps,as,ts) <- tiPats pats
                                 t'         <- newTVar Star
                                 (qs :=> t) <- freshInst sc
                                 unify t (foldr fn t' ts)

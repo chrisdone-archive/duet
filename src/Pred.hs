@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------
--- Pred:		Predicates
+-- Pred:                Predicates
 --
 -- Part of `Typing Haskell in Haskell', version of November 23, 2000
 -- Copyright (c) Mark P Jones and the Oregon Graduate Institute
@@ -14,7 +14,7 @@
 
 module Pred where
 
-import Data.List (union,(\\))
+import Data.List (union)
 import Control.Monad (msum)
 
 import Id
@@ -34,7 +34,7 @@ data Pred   = IsIn Id [Type]
               deriving Eq
 
 predHead            :: Pred -> Id
-predHead (IsIn i ts) = i
+predHead (IsIn i _) = i
 
 instance PPrint Pred where
   pprint (IsIn i [t]) = text "isIn1" <+> text ("c" ++ i) <+> parPprint t
@@ -46,7 +46,7 @@ instance Types t => Types (Qual t) where
 
 instance Types Pred where
   apply s (IsIn i ts) = IsIn i (apply s ts)
-  tv (IsIn i ts)      = tv ts
+  tv (IsIn _i ts)      = tv ts
 
 instance Unify Pred where
    mgu = lift mgu
@@ -54,6 +54,7 @@ instance Unify Pred where
 instance Match Pred where
    match = lift match
 
+lift :: Monad m => ([Type] -> [Type] -> m a) -> Pred -> Pred -> m a
 lift m (IsIn i ts) (IsIn i' ts')
          | i == i'   = m ts ts'
          | otherwise = fail "classes differ"
@@ -67,16 +68,16 @@ data ClassEnv = ClassEnv { classes  :: Id -> Maybe Class,
                            defaults :: [Type] }
 
 sig       :: ClassEnv -> Id -> [Tyvar]
-sig ce i   = case classes ce i of Just (vs, is, its) -> vs
+sig ce i   = case classes ce i of Just (vs, _, _) -> vs
 
 super     :: ClassEnv -> Id -> [Pred]
-super ce i = case classes ce i of Just (vs, is, its) -> is
+super ce i = case classes ce i of Just (_, is, _) -> is
 
 insts     :: ClassEnv -> Id -> [Inst]
-insts ce i = case classes ce i of Just (vs, is, its) -> its
+insts ce i = case classes ce i of Just (_, _, its) -> its
 
 defined :: Maybe a -> Bool
-defined (Just x) = True
+defined (Just _) = True
 defined Nothing  = False
 
 modify       :: ClassEnv -> Id -> Class -> ClassEnv
@@ -84,7 +85,7 @@ modify ce i c = ce{classes = \j -> if i==j then Just c
                                            else classes ce j}
 
 initialEnv :: ClassEnv
-initialEnv  = ClassEnv { classes  = \i -> fail "class not defined",
+initialEnv  = ClassEnv { classes  = \_ -> fail "class not defined",
                          defaults = [tInteger, tDouble] }
 
 type EnvTransformer = ClassEnv -> Maybe ClassEnv
@@ -103,12 +104,18 @@ addClass i vs ps ce
 addPreludeClasses :: EnvTransformer
 addPreludeClasses  = addCoreClasses <:> addNumClasses
 
+atyvar :: Tyvar
 atyvar = Tyvar "a" Star
+atype :: Type
 atype  = TVar atyvar
+asig :: [Tyvar]
 asig   = [atyvar]
 
+mtyvar :: Tyvar
 mtyvar = Tyvar "m" (Kfun Star Star)
+mtype :: Type
 mtype  = TVar mtyvar
+msig :: [Tyvar]
 msig   = [mtyvar]
 
 addCoreClasses ::   EnvTransformer
@@ -166,7 +173,7 @@ bySuper ce p@(IsIn i ts)
          s      = zip (sig ce i) ts
 
 byInst                   :: ClassEnv -> Pred -> Maybe [Pred]
-byInst ce p@(IsIn i t)    = msum [ tryInst it | it <- insts ce i ]
+byInst ce p@(IsIn i _)    = msum [ tryInst it | it <- insts ce i ]
  where tryInst (ps :=> h) = do u <- match h p
                                Just (map (apply u) ps)
 

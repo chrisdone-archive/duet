@@ -24,6 +24,7 @@ savePrelude   = save "Prelude"
                      defnsHaskellPrims
                      preludeDefns
 
+static :: ClassEnv
 Just static   = preludeClasses initialEnv
 
 -----------------------------------------------------------------------------

@@ -1,453 +1,454 @@
 -----------------------------------------------------------------------------
 -- HaskellPrims:   Typing assumptions for primitives in the Hugs prelude
--- 
+--
 -- Part of `Typing Haskell in Haskell', version of November 23, 2000
 -- Copyright (c) Mark P Jones and the Oregon Graduate Institute
 -- of Science and Technology, 1999-2000
--- 
+--
 -- This program is distributed as Free Software under the terms
 -- in the file "License" that is included in the distribution
 -- of this software, copies of which may be obtained from:
 --             http://www.cse.ogi.edu/~mpj/thih/
--- 
+--
 -----------------------------------------------------------------------------
 
 module HaskellPrims where
 import Testbed
 import StaticPrelude
 
+defnsHaskellPrims :: [Assump]
 defnsHaskellPrims
- = [ "_concmp" :>: 
+ = [ "_concmp" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (TGen 0 `fn` TGen 0 `fn` tOrdering))),
-     "_range" :>: 
+     "_range" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn` TAp tList (TGen 0)))),
-     "_index" :>: 
+     "_index" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn` TGen 0 `fn` tInt))),
-     "_inRange" :>: 
+     "_inRange" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (TAp (TAp tTuple2 (TGen 0)) (TGen 0) `fn` TGen 0 `fn` tBool))),
-     "_ToEnum" :>: 
+     "_ToEnum" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (TGen 0 `fn` tInt `fn` TGen 0))),
-     "_FrEnum" :>: 
+     "_FrEnum" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (TGen 0 `fn` tInt))),
-     "_From" :>: 
+     "_From" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (TGen 0 `fn` TAp tList (TGen 0)))),
-     "_FromTo" :>: 
+     "_FromTo" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (TGen 0 `fn` TGen 0 `fn` TAp tList (TGen 0)))),
-     "_FromThen" :>: 
+     "_FromThen" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (TGen 0 `fn` TGen 0 `fn` TAp tList (TGen 0)))),
-     "error" :>: 
+     "error" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (tString `fn` TGen 0))),
-     "primIntToFloat" :>: 
+     "primIntToFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tFloat))),
-     "primIntToInteger" :>: 
+     "primIntToInteger" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInteger))),
-     "ioeGetErrorString" :>: 
+     "ioeGetErrorString" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tIOError `fn` tString))),
-     "readFile" :>: 
+     "readFile" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFilePath `fn` TAp tIO tString))),
-     "appendFile" :>: 
+     "appendFile" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFilePath `fn` tString `fn` TAp tIO tUnit))),
-     "writeFile" :>: 
+     "writeFile" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFilePath `fn` tString `fn` TAp tIO tUnit))),
-     "getContents" :>: 
+     "getContents" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (TAp tIO tString))),
-     "userError" :>: 
+     "userError" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tString `fn` tIOError))),
-     "getChar" :>: 
+     "getChar" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (TAp tIO tChar))),
-     "putStr" :>: 
+     "putStr" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tString `fn` TAp tIO tUnit))),
-     "putChar" :>: 
+     "putChar" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tChar `fn` TAp tIO tUnit))),
-     "ioError" :>: 
+     "ioError" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (tIOError `fn` TAp tIO (TGen 0)))),
-     "catch" :>: 
+     "catch" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (TAp tIO (TGen 0) `fn` (tIOError `fn` TAp tIO (TGen 0)) `fn` TAp tIO (TGen 0)))),
-     "primretIO" :>: 
+     "primretIO" :>:
        (Forall [Star]
-         ([] :=> 
+         ([] :=>
           (TGen 0 `fn` TAp tIO (TGen 0)))),
-     "primbindIO" :>: 
+     "primbindIO" :>:
        (Forall [Star, Star]
-         ([] :=> 
+         ([] :=>
           (TAp tIO (TGen 0) `fn` (TGen 0 `fn` TAp tIO (TGen 1)) `fn` TAp tIO (TGen 1)))),
-     "primShowsDouble" :>: 
+     "primShowsDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tDouble `fn` tShowS))),
-     "primShowsFloat" :>: 
+     "primShowsFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tFloat `fn` tShowS))),
-     "primDoubleDecode" :>: 
+     "primDoubleDecode" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` TAp (TAp tTuple2 tInteger) tInt))),
-     "primDoubleEncode" :>: 
+     "primDoubleEncode" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tInt `fn` tDouble))),
-     "primDoubleMaxExp" :>: 
+     "primDoubleMaxExp" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           tInt)),
-     "primDoubleMinExp" :>: 
+     "primDoubleMinExp" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           tInt)),
-     "primDoubleDigits" :>: 
+     "primDoubleDigits" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           tInt)),
-     "primDoubleRadix" :>: 
+     "primDoubleRadix" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           tInteger)),
-     "primFloatDecode" :>: 
+     "primFloatDecode" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` TAp (TAp tTuple2 tInteger) tInt))),
-     "primFloatEncode" :>: 
+     "primFloatEncode" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tInt `fn` tFloat))),
-     "primFloatMaxExp" :>: 
+     "primFloatMaxExp" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           tInt)),
-     "primFloatMinExp" :>: 
+     "primFloatMinExp" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           tInt)),
-     "primFloatDigits" :>: 
+     "primFloatDigits" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           tInt)),
-     "primFloatRadix" :>: 
+     "primFloatRadix" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           tInteger)),
-     "primSqrtDouble" :>: 
+     "primSqrtDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble))),
-     "primExpDouble" :>: 
+     "primExpDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble))),
-     "primLogDouble" :>: 
+     "primLogDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble))),
-     "primAtanDouble" :>: 
+     "primAtanDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble))),
-     "primTanDouble" :>: 
+     "primTanDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble))),
-     "primAcosDouble" :>: 
+     "primAcosDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble))),
-     "primCosDouble" :>: 
+     "primCosDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble))),
-     "primAsinDouble" :>: 
+     "primAsinDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble))),
-     "primSinDouble" :>: 
+     "primSinDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble))),
-     "primSqrtFloat" :>: 
+     "primSqrtFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat))),
-     "primExpFloat" :>: 
+     "primExpFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat))),
-     "primLogFloat" :>: 
+     "primLogFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat))),
-     "primAtanFloat" :>: 
+     "primAtanFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat))),
-     "primTanFloat" :>: 
+     "primTanFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat))),
-     "primAcosFloat" :>: 
+     "primAcosFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat))),
-     "primCosFloat" :>: 
+     "primCosFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat))),
-     "primAsinFloat" :>: 
+     "primAsinFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat))),
-     "primSinFloat" :>: 
+     "primSinFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat))),
-     "primRationalToDouble" :>: 
+     "primRationalToDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tRational `fn` tDouble))),
-     "primRationalToFloat" :>: 
+     "primRationalToFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tRational `fn` tFloat))),
-     "primDivDouble" :>: 
+     "primDivDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble `fn` tDouble))),
-     "doubleToFloat" :>: 
+     "doubleToFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tFloat))),
-     "primDivFloat" :>: 
+     "primDivFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat `fn` tFloat))),
-     "primIntegerToDouble" :>: 
+     "primIntegerToDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tDouble))),
-     "primIntToDouble" :>: 
+     "primIntToDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tDouble))),
-     "primNegDouble" :>: 
+     "primNegDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble))),
-     "primMulDouble" :>: 
+     "primMulDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble `fn` tDouble))),
-     "primMinusDouble" :>: 
+     "primMinusDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble `fn` tDouble))),
-     "primPlusDouble" :>: 
+     "primPlusDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble `fn` tDouble))),
-     "primIntegerToFloat" :>: 
+     "primIntegerToFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tFloat))),
-     "primNegFloat" :>: 
+     "primNegFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat))),
-     "primMulFloat" :>: 
+     "primMulFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat `fn` tFloat))),
-     "primMinusFloat" :>: 
+     "primMinusFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat `fn` tFloat))),
-     "primPlusFloat" :>: 
+     "primPlusFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat `fn` tFloat))),
-     "primCmpDouble" :>: 
+     "primCmpDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble `fn` tOrdering))),
-     "primEqDouble" :>: 
+     "primEqDouble" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tDouble `fn` tDouble `fn` tBool))),
-     "primCmpFloat" :>: 
+     "primCmpFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat `fn` tOrdering))),
-     "primEqFloat" :>: 
+     "primEqFloat" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tFloat `fn` tFloat `fn` tBool))),
-     "primShowsInteger" :>: 
+     "primShowsInteger" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInteger `fn` tShowS))),
-     "primShowsInt" :>: 
+     "primShowsInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt `fn` tShowS))),
-     "primEvenInteger" :>: 
+     "primEvenInteger" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tBool))),
-     "primQrmInteger" :>: 
+     "primQrmInteger" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tInteger `fn` TAp (TAp tTuple2 tInteger) tInteger))),
-     "primEvenInt" :>: 
+     "primEvenInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tBool))),
-     "primQrmInt" :>: 
+     "primQrmInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt `fn` TAp (TAp tTuple2 tInt) tInt))),
-     "primModInt" :>: 
+     "primModInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primRemInt" :>: 
+     "primRemInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primQuotInt" :>: 
+     "primQuotInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primDivInt" :>: 
+     "primDivInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primNegInteger" :>: 
+     "primNegInteger" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tInteger))),
-     "primMulInteger" :>: 
+     "primMulInteger" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tInteger `fn` tInteger))),
-     "primMinusInteger" :>: 
+     "primMinusInteger" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tInteger `fn` tInteger))),
-     "primPlusInteger" :>: 
+     "primPlusInteger" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tInteger `fn` tInteger))),
-     "primMaxInt" :>: 
+     "primMaxInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           tInt)),
-     "primMinInt" :>: 
+     "primMinInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           tInt)),
-     "primIntegerToInt" :>: 
+     "primIntegerToInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tInt))),
-     "primNegInt" :>: 
+     "primNegInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt))),
-     "primMulInt" :>: 
+     "primMulInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primMinusInt" :>: 
+     "primMinusInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primPlusInt" :>: 
+     "primPlusInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt `fn` tInt))),
-     "primCmpInteger" :>: 
+     "primCmpInteger" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tInteger `fn` tOrdering))),
-     "primEqInteger" :>: 
+     "primEqInteger" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInteger `fn` tInteger `fn` tBool))),
-     "primCmpInt" :>: 
+     "primCmpInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt `fn` tOrdering))),
-     "primEqInt" :>: 
+     "primEqInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tInt `fn` tBool))),
-     "primIntToChar" :>: 
+     "primIntToChar" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tInt `fn` tChar))),
-     "primCharToInt" :>: 
+     "primCharToInt" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tChar `fn` tInt))),
-     "primCmpChar" :>: 
+     "primCmpChar" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tChar `fn` tChar `fn` tOrdering))),
-     "primEqChar" :>: 
+     "primEqChar" :>:
        (Forall []
-         ([] :=> 
+         ([] :=>
           (tChar `fn` tChar `fn` tBool))),
-     "$!" :>: 
+     "$!" :>:
        (Forall [Star, Star]
-         ([] :=> 
+         ([] :=>
           ((TGen 0 `fn` TGen 1) `fn` TGen 0 `fn` TGen 1))),
-     "seq" :>: 
+     "seq" :>:
        (Forall [Star, Star]
-         ([] :=> 
+         ([] :=>
           (TGen 0 `fn` TGen 1 `fn` TGen 1))) ]
 
 -----------------------------------------------------------------------------

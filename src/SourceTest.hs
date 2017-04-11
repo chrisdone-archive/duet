@@ -1,15 +1,15 @@
 -----------------------------------------------------------------------------
--- SourceTest:		Haskell encoding of a Test file source code
--- 
+-- SourceTest:          Haskell encoding of a Test file source code
+--
 -- Part of `Typing Haskell in Haskell', version of November 23, 2000
 -- Copyright (c) Mark P Jones and the Oregon Graduate Institute
 -- of Science and Technology, 1999-2000
--- 
+--
 -- This program is distributed as Free Software under the terms
 -- in the file "License" that is included in the distribution
 -- of this software, copies of which may be obtained from:
 --             http://www.cse.ogi.edu/~mpj/thih/
--- 
+--
 -----------------------------------------------------------------------------
 
 module SourceTest where
@@ -26,6 +26,7 @@ main        = test static imports testDefns
 saveTest   :: IO ()
 saveTest    = save "Test" static imports testDefns
 
+static :: ClassEnv
 Just static = (preludeClasses <:> testClasses) initialEnv
 
 imports    :: [Assump]
@@ -36,7 +37,7 @@ imports     = defnsHaskellPrelude
 
 testDefns :: [BindGroup]
 testDefns
- = map toBg 
+ = map toBg
    [
 --  test x         = x==x
 
@@ -70,7 +71,7 @@ testDefns
 
     [("aFloat",
       Just (Forall []
-             ([] :=> 
+             ([] :=>
               tFloat)),
       [([],
         elit (LitInt 23))])],
@@ -136,14 +137,14 @@ testDefns
 
     [("egg",
       Just (Forall [Star]
-             ([isIn1 cOrd (TGen 0)] :=> 
+             ([isIn1 cOrd (TGen 0)] :=>
               (TGen 0 `fn` tBool))),
       [([PVar "x"],
         ap [evar "||", ap [econst leMfun, evar "x", evar "x"],
                        ap [evar "egg", econst trueCfun]])])],
     [("egf",
       Just (Forall [Star]
-             ([isIn1 cEq (TGen 0)] :=> 
+             ([isIn1 cEq (TGen 0)] :=>
               (TGen 0 `fn` tBool))),
       [([PVar "x"],
         ap [evar "||", ap [econst eqMfun, evar "x", evar "x"],
@@ -155,7 +156,7 @@ testDefns
 
     [("egf'",
       Just (Forall [Star]
-             ([isIn1 cEq (TGen 0)] :=> 
+             ([isIn1 cEq (TGen 0)] :=>
               (TGen 0 `fn` tBool))),
       [([PVar "x"],
         ap [evar "||", ap [econst eqMfun, evar "x", evar "x"],
@@ -221,7 +222,7 @@ testDefns
 
     [("eqNull",
       Just (Forall [Star]
-             ([isIn1 cEq (TGen 0)] :=> 
+             ([isIn1 cEq (TGen 0)] :=>
               (TAp tList (TGen 0) `fn` tBool))),
       [([PVar "xs"],
         ap [econst eqMfun, evar "xs", econst nilCfun])])],
