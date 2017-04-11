@@ -1,0 +1,48 @@
+name:          thih
+version:       1.0
+license:       BSD3
+license-file:  LICENSE
+author:        Mark P Jones <mpj@cse.ogi.edu>
+-- maintainer:
+stability:     Stable
+category:      Language
+synopsis:      Typing Haskell In Haskell
+description:   Haskell benefits from a sophisticated type system, but implementors,
+               programmers, and researchers suffer because it has no formal description.
+               To remedy this shortcoming, we present a Haskell program that implements
+               a Haskell typechecker, thus providing a mathematically rigorous specification
+               in a notation that is familiar to Haskell users. We expect this program to fill
+               a serious gap in current descriptions of Haskell, both as a starting point
+               for discussions about existing features of the type system, and as a platform
+               from which to explore new proposals.
+               .
+               This package is derived from the Haskell '98 + Multiparameter Type Classes package of THIH.
+homepage:      http://web.cecs.pdx.edu/~mpj/thih/
+
+
+build-type:    Simple
+Cabal-Version: >= 1.2
+data-files:    README
+tested-with:   GHC==6.8.2
+
+Library
+        exposed-modules: HaskellMaybe, SourcePrelude, Debug, StaticPrelude,
+                         TIMonad, SourceTest, StaticTest, StaticMonad,
+                         Unify, HaskellTest, HaskellList, StaticThih,
+                         PPrint, HaskellPrims, StaticList, Id,
+                         Testbed, HaskellPrelude, StaticMaybe, HaskellMonad,
+                         Assump, HaskellThih, Static, TIProg,
+                         SourceMaybe, Pred, Lit, Kind,
+                         TIMain, Subst, SourceList, SourceMonad,
+                         Type, Scheme, Infer, Pat, SourceThih
+
+       hs-source-dirs: src
+
+       build-depends: base, pretty
+
+       ghc-options:      -Wall
+       ghc-prof-options: -prof -auto-all
+
+executable             thih
+       main-is:        Main.hs
+       hs-source-dirs: src
