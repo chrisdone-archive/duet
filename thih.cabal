@@ -21,7 +21,7 @@ homepage:      http://web.cecs.pdx.edu/~mpj/thih/
 
 
 build-type:    Simple
-Cabal-Version: >= 1.2
+cabal-version: >= 1.8
 data-files:    README
 tested-with:   GHC==6.8.2
 
@@ -40,9 +40,9 @@ Library
 
        build-depends: base, pretty
 
-       ghc-options:      -Wall
-       ghc-prof-options: -prof -auto-all
+       ghc-options:   -Wall
 
 executable             thih
        main-is:        Main.hs
-       hs-source-dirs: src
+       build-depends:  base, thih
+       hs-source-dirs: app
