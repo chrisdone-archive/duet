@@ -1,3 +1,4 @@
+{-# LANGUAGE NoMonomorphismRestriction #-}
 -----------------------------------------------------------------------------
 -- TIMain:	Type Inference Algorithm
 --

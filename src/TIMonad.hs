@@ -13,6 +13,7 @@
 -----------------------------------------------------------------------------
 
 module TIMonad where
+import Control.Monad
 import Id
 import Kind
 import Type
@@ -23,6 +24,8 @@ import Scheme
 
 newtype TI a = TI (Subst -> Int -> (Subst, Int, a))
 
+instance Functor TI where fmap = liftM
+instance Applicative TI where (<*>) = ap; pure = return
 instance Monad TI where
   return x   = TI (\s n -> (s,n,x))
   TI f >>= g = TI (\s n -> case f s n of
