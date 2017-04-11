@@ -1,85 +1,282 @@
-{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
+-- | A clear-to-read, well-documented, implementation of a Haskell 98
+-- type checker adapted from Typing Haskell In Haskell, by Mark
+-- P. Jones.
+
 module THIH where
+
 import qualified Control.Monad
-import Control.Monad hiding (ap)
-import Data.List hiding (find)
-import Debug.Trace
-import Text.PrettyPrint.HughesPJ
+import           Control.Monad hiding (ap)
+import           Data.List
+import           Data.String
+import           Debug.Trace
+import           Text.PrettyPrint.HughesPJ
+
+--------------------------------------------------------------------------------
+-- Types
 
 -- | Assumptions about the type of a variable are represented by
 -- values of the Assump datatype, each of which pairs a variable name
 -- with a type scheme.
 data Assumption = Assumption
-  { assumptionId :: Id
+  { assumptionId :: Identifier
   , assumptionScheme :: Scheme
   }
 
-type Program = [BindGroup]
-type BindGroup = ([Expl], [[Impl]])
-type Impl = (Id, [Alt])
-type Expl = (Id, Scheme, [Alt])
-type Ambiguity = (Tyvar, [Pred])
-type Alt = ([Pat], Expr)
-type Subst = [(Tyvar, Type)]
-type EnvTransformer = ClassEnv -> Maybe ClassEnv
-type Inst = Qual Pred
-type Class = ([Tyvar], [Pred], [Inst])
-type Infer e t = ClassEnv -> [Assumption] -> e -> TI ([Pred], t)
-type Id = String
-
-data Tycon =
-  Tycon Id Kind
-  deriving (Eq)
-data Tyvar =
-  Tyvar Id
-        Kind
-  deriving (Eq)
-data Type
-  = TVar Tyvar
-  | TCon Tycon
-  | TAp Type Type
-  | TGen Int
-  deriving (Eq)
-data Expr
-  = Var Id
-  | Lit Literal
-  | Const Assumption
-  | Ap Expr Expr
-  | Let BindGroup Expr
-  | Lam Alt
-  | If Expr Expr Expr
-  | Case Expr [(Pat, Expr)]
-data Scheme =
-  Forall [Kind] (Qual Type)
-  deriving (Eq)
-data ClassEnv = ClassEnv
-  { classes :: Id -> Maybe Class
-  , defaults :: [Type]
+-- | The first component in each such pair lists any explicitly typed
+-- bindings in the group. The second component provides an opportunity
+-- to break down the list of any implicitly typed bindings into
+-- several smaller lists, arranged in dependency order. In other
+-- words, if a binding group is represented by a pair
+-- (es,[is_1,...,is_n]), then the implicitly typed bindings in each
+-- is_i should depend only on the bindings in es, is_1, ..., is_i, and
+-- not on any bindings in is_j when j>i. (Bindings in es could depend
+-- on any of the bindings in the group, but will presumably depend on
+-- at least those in is_n, or else the group would not be
+-- minimal. Note also that if es is empty, then n must be 1.) In
+-- choosing this representation, we have assumed that dependency
+-- analysis has been carried out prior to type checking, and that the
+-- bindings in each group have been organized into values of type
+-- BindGroup as appropriate. In particular, by separating out
+-- implicitly typed bindings as much as possible, we can potentially
+-- increase the degree of polymorphism in inferred types. For a
+-- correct implementation of the semantics specified in the Haskell
+-- report, a simpler but less flexible approach is required: all
+-- implicitly typed bindings must be placed in a single list, even if
+-- a more refined decomposition would be possible. In addition, if the
+-- group is restricted, then we must also ensure that none of the
+-- explicitly typed bindings in the same BindGroup have any predicates
+-- in their type, even though this is not strictly necessary. With
+-- hindsight, these are restrictions that we might prefer to avoid in
+-- any future revision of Haskell.
+data BindGroup = BindGroup
+  { bindGroupExplicitlyTypedBindings :: ![ExplicitlyTypedBinding]
+  , bindGroupImplicitlyTypedBindings :: ![[ImplicitlyTypedBinding]]
   }
-data Pred =
-  IsIn Id [Type]
+
+-- | A single implicitly typed binding is described by a pair
+-- containing the name of the variable and a list of alternatives.
+-- The monomorphism restriction is invoked when one or more of the
+-- entries in a list of implicitly typed bindings is simple, meaning
+-- that it has an alternative with no left-hand side patterns.
+data ImplicitlyTypedBinding = ImplicitlyTypedBinding
+  { implicitlyTypedBindingId :: !Identifier
+  , implicitlyTypedBindingAlternatives :: ![Alternative]
+  }
+
+-- | The simplest case is for explicitly typed bindings, each of which
+-- is described by the name of the function that is being defined, the
+-- declared type scheme, and the list of alternatives in its
+-- definition.
+--
+-- Haskell requires that each Alt in the definition of a given
+-- identifier has the same number of left-hand side arguments, but we
+-- do not need to enforce that here.
+data ExplicitlyTypedBinding = ExplicitlyTypedBinding
+  { explicitlyTypedBindingId :: !Identifier
+  , explicitlyTypedBindingScheme :: !Scheme
+  , explicitlyTypedBindingAlternatives :: ![Alternative]
+  }
+
+-- | Suppose, for example, that we are about to qualify a type with a
+-- list of predicates ps and that vs lists all known variables, both
+-- fixed and generic. An ambiguity occurs precisely if there is a type
+-- variable that appears in ps but not in vs (i.e., in tv ps \\
+-- vs). The goal of defaulting is to bind each ambiguous type variable
+-- v to a monotype t. The type t must be chosen so that all of the
+-- predicates in ps that involve v will be satisfied once t has been
+-- substituted for v.
+data Ambiguity = Ambiguity
+  { ambiguityTypeVariable :: !TypeVariable
+  , ambiguityPredicates :: ![Predicate]
+  }
+
+-- | An Alt specifies the left and right hand sides of a function
+-- definition. With a more complete syntax for Expr, values of type
+-- Alt might also be used in the representation of lambda and case
+-- expressions.
+data Alternative = Alternative
+  { alternativePatterns :: ![Pattern]
+  , alternativeExpression :: !Expression
+  }
+
+-- | Substitutions-finite functions, mapping type variables to
+-- types-play a major role in type inference.
+data Substitution = Substitution
+  { substitutionTypeVariable :: !TypeVariable
+  , substitutionType :: !Type
+  }
+
+-- | A type variable.
+data TypeVariable = TypeVariable
+  { typeVariableIdentifier :: !Identifier
+  , typeVariableKind :: !Kind
+  } deriving (Eq)
+
+-- | An identifier used for variables.
+newtype Identifier = Identifier
+  { identifierString :: String
+  } deriving (Eq, IsString)
+
+-- | Haskell types can be qualified by adding a (possibly empty) list
+-- of predicates, or class constraints, to restrict the ways in which
+-- type variables are instantiated.
+data Qualified typ = Qualified
+  { qualifiedPredicates :: ![Predicate]
+  , qualifiedType :: !typ
+  } deriving (Eq)
+
+-- | One of potentially many predicates.
+data Predicate =
+  IsIn Identifier [Type]
   deriving (Eq)
-data Qual t =
-   [Pred]:=>
-      t
+
+-- | A simple Haskell type.
+data Type
+  = VariableType TypeVariable
+  | ConstructorType TypeConstructor
+  | ApplicationType Type Type
+  | GenericType Int
   deriving (Eq)
-data Pat
-  = PVar Id
-  | PWildcard
-  | PAs Id Pat
-  | PLit Literal
-  | PNpk Id Integer
-  | PCon Assumption [Pat]
-  | PLazy Pat
-data Literal
-  = LitInt Integer
-  | LitChar Char
-  | LitRat Rational
-  | LitStr String
+
+-- | Kind of a type.
 data Kind
-  = Star
-  | Kfun Kind Kind
+  = StarKind
+  | FunctionKind Kind Kind
   deriving (Eq)
+
+-- | A Haskell expression.
+data Expression
+  = VariableExpression Identifier
+  | LiteralExpression Literal
+  | ConstantExpression Assumption
+  | ApplicationExpression Expression Expression
+  | LetExpression BindGroup Expression
+  | LambdaExpression Alternative
+  | IfExpression Expression Expression Expression
+  | CaseExpression Expression [(Pattern, Expression)]
+
+-- | A pattern match.
+data Pattern
+  = VariablePattern Identifier
+  | WildcardPattern
+  | AsPattern Identifier Pattern
+  | LiteralPattern Literal
+  | ConstructorPattern Assumption [Pattern]
+  | LazyPattern Pattern
+
+data Literal
+  = IntegerLiteral Integer
+  | CharacterLiteral Char
+  | RationalLiteral Rational
+  | StringLiteral String
+
+-- | A class environment.
+data ClassEnvironment = ClassEnvironment
+  { classEnvironmentClasses :: !(Identifier -> Maybe Class)
+  , classEnvironmentDefaults :: ![Type]
+  }
+
+-- | A class.
+data Class = Class
+  { classTypeVariables :: ![TypeVariable]
+  , classPredicates :: ![Predicate]
+  , classQualifiedPredicates :: ![Qualified Predicate]
+  }
+
+-- | A type constructor.
+data TypeConstructor = TypeConstructor
+  { typeConstructorIdentifier :: !Identifier
+  , typeConstructorKind :: !Kind
+  } deriving (Eq)
+
+-- | A type scheme.
+data Scheme =
+  Forall [Kind] (Qualified Type)
+  deriving (Eq)
+
+--------------------------------------------------------------------------------
+-- Functions (to be split up later)
+
+-- | The monomorphism restriction is invoked when one or more of the
+-- entries in a list of implicitly typed bindings is simple, meaning
+-- that it has an alternative with no left-hand side patterns. The
+-- following function provides a way to test for this:
+restrictImplicitlyTypedBindings :: [ImplicitlyTypedBinding] -> Bool
+restrictImplicitlyTypedBindings = any simple
+  where
+    simple =
+      any (null . alternativePatterns) . implicitlyTypedBindingAlternatives
+
+-- | The following function calculates the list of ambiguous variables
+-- and pairs each one with the list of predicates that must be
+-- satisfied by any choice of a default:
+ambiguities :: [TypeVariable] -> [Predicate] -> [Ambiguity]
+ambiguities vs ps = [Ambiguity v (filter (elem v . tv) ps) | v <- tv ps \\ vs]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+type Infer e t = ClassEnvironment -> [Assumption] -> e -> TI ([Predicate], t)
+
+
+
+
+
+
 
 class PPrint a where
   pprint :: a -> Doc
@@ -89,8 +286,8 @@ class PPrint a where
   pplist xs = brackets (fsep (punctuate comma (map pprint xs)))
 
 class Types t where
-  apply :: Subst -> t -> t
-  tv :: t -> [Tyvar]
+  apply :: [Substitution] -> t -> t
+  tv :: t -> [TypeVariable]
 
 class Instantiate t where
   inst :: [Type] -> t -> t
@@ -101,15 +298,15 @@ class HasKind t where
 class Unify t where
   mgu
     :: Monad m
-    => t -> t -> m Subst
+    => t -> t -> m [Substitution]
 
 class Match t where
   match
     :: Monad m
-    => t -> t -> m Subst
+    => t -> t -> m [Substitution]
 
 instance PPrint Assumption where
-  pprint (Assumption i  s) = (text (show i) <+> text ":>:") $$ nest 2 (pprint s)
+  pprint (Assumption i  s) = (text (show (identifierString i)) <+> text ":>:") $$ nest 2 (pprint s)
 
 instance Types Assumption where
   apply s (Assumption i  sc) = Assumption i  (apply s sc)
@@ -149,26 +346,26 @@ instance (PPrint a, PPrint b, PPrint c) =>
     parens (sep [pprint x <> comma, pprint y <> comma, pprint z])
 
 instance PPrint t =>
-         PPrint (Qual t) where
-  pprint (ps :=> t) = (pprint ps <+> text ":=>") $$ nest 2 (parPprint t)
+         PPrint (Qualified t) where
+  pprint (Qualified ps t) = (pprint ps <+> text ":=>") $$ nest 2 (parPprint t)
 
-instance PPrint Pred where
-  pprint (IsIn i [t]) = text "isIn1" <+> text ("c" ++ i) <+> parPprint t
-  pprint (IsIn i ts) = text "isIn" <+> text ("c" ++ i) <+> pplist ts
+instance PPrint Predicate where
+  pprint (IsIn i [t]) = text "isIn1" <+> text ("c" ++ identifierString i) <+> parPprint t
+  pprint (IsIn i ts) = text "isIn" <+> text ("c" ++ identifierString i) <+> pplist ts
 
 instance Types t =>
-         Types (Qual t) where
-  apply s (ps :=> t) = apply s ps :=> apply s t
-  tv (ps :=> t) = tv ps `union` tv t
+         Types (Qualified t) where
+  apply s (Qualified ps t) = Qualified (apply s ps) (apply s t)
+  tv (Qualified ps t) = tv ps `union` tv t
 
-instance Types Pred where
+instance Types Predicate where
   apply s (IsIn i ts) = IsIn i (apply s ts)
   tv (IsIn _i ts) = tv ts
 
-instance Unify Pred where
+instance Unify Predicate where
   mgu = lift mgu
 
-instance Match Pred where
+instance Match Predicate where
   match = lift match
 
 instance PPrint Scheme where
@@ -179,14 +376,14 @@ instance Types Scheme where
   tv (Forall _ qt) = tv qt
 
 instance Types Type where
-  apply s (TVar u) =
-    case lookup u s of
-      Just t -> t
-      Nothing -> TVar u
-  apply s (TAp l r) = TAp (apply s l) (apply s r)
+  apply substitutions (VariableType typeVariable) =
+    case find ((== typeVariable) . substitutionTypeVariable) substitutions of
+      Just substitution -> substitutionType substitution
+      Nothing -> VariableType typeVariable
+  apply s (ApplicationType l r) = ApplicationType (apply s l) (apply s r)
   apply _ t = t
-  tv (TVar u) = [u]
-  tv (TAp l r) = tv l `union` tv r
+  tv (VariableType u) = [u]
+  tv (ApplicationType l r) = tv l `union` tv r
   tv _ = []
 
 instance Types a =>
@@ -212,8 +409,8 @@ instance Monad TI where
              in gx s' m)
 
 instance Instantiate Type where
-  inst ts (TAp l r) = TAp (inst ts l) (inst ts r)
-  inst ts (TGen n) = ts !! n
+  inst ts (ApplicationType l r) = ApplicationType (inst ts l) (inst ts r)
+  inst ts (GenericType n) = ts !! n
   inst _ t = t
 
 instance Instantiate a =>
@@ -221,40 +418,40 @@ instance Instantiate a =>
   inst ts = map (inst ts)
 
 instance Instantiate t =>
-         Instantiate (Qual t) where
-  inst ts (ps :=> t) = inst ts ps :=> inst ts t
+         Instantiate (Qualified t) where
+  inst ts (Qualified ps t) = Qualified (inst ts ps) (inst ts t)
 
-instance Instantiate Pred where
+instance Instantiate Predicate where
   inst ts (IsIn c t) = IsIn c (inst ts t)
 
 instance PPrint Type where
   pprint = pptype (0 :: Integer)
   parPprint = pptype (10 :: Integer)
 
-instance PPrint Tyvar where
-  pprint (Tyvar v _) = text v
+instance PPrint TypeVariable where
+  pprint (TypeVariable v _) = text (identifierString v)
 
-instance HasKind Tyvar where
-  kind (Tyvar _ k) = k
+instance HasKind TypeVariable where
+  kind (TypeVariable _ k) = k
 
-instance HasKind Tycon where
-  kind (Tycon _ k) = k
+instance HasKind TypeConstructor where
+  kind (TypeConstructor _ k) = k
 
 instance HasKind Type where
-  kind (TCon tc) = kind tc
-  kind (TVar u) = kind u
-  kind (TAp t _) =
+  kind (ConstructorType tc) = kind tc
+  kind (VariableType u) = kind u
+  kind (ApplicationType t _) =
     case (kind t) of
-      (Kfun _ k) -> k
+      (FunctionKind _ k) -> k
 
 instance Unify Type where
-  mgu (TAp l r) (TAp l' r') = do
+  mgu (ApplicationType l r) (ApplicationType l' r') = do
     s1 <- mgu l l'
     s2 <- mgu (apply s1 r) (apply s1 r')
     return (s2 @@ s1)
-  mgu (TVar u) t = varBind u t
-  mgu t (TVar u) = varBind u t
-  mgu (TCon tc1) (TCon tc2)
+  mgu (VariableType u) t = varBind u t
+  mgu t (VariableType u) = varBind u t
+  mgu (ConstructorType tc1) (ConstructorType tc2)
     | tc1 == tc2 = return nullSubst
   mgu _ _ = fail "types do not unify"
 
@@ -268,13 +465,13 @@ instance (Unify t, Types t) =>
   mgu _ _ = fail "lists do not unify"
 
 instance Match Type where
-  match (TAp l r) (TAp l' r') = do
+  match (ApplicationType l r) (ApplicationType l' r') = do
     sl <- match l l'
     sr <- match r r'
     merge sl sr
-  match (TVar u) t
-    | kind u == kind t = return (u +-> t)
-  match (TCon tc1) (TCon tc2)
+  match (VariableType u) t
+    | kind u == kind t = return [Substitution u t]
+  match (ConstructorType tc1) (ConstructorType tc2)
     | tc1 == tc2 = return nullSubst
   match _ _ = fail "types do not match"
 
@@ -284,36 +481,36 @@ instance Match t =>
     ss <- sequence (zipWith match ts ts')
     foldM merge nullSubst ss
 
-find
+findId
   :: Monad m
-  => Id -> [Assumption] -> m Scheme
-find i [] = fail ("unbound identifier: " ++ i)
-find i ((Assumption i'  sc):as) =
+  => Identifier -> [Assumption] -> m Scheme
+findId i [] = fail ("unbound identifier: " ++ identifierString i)
+findId i ((Assumption i'  sc):as) =
   if i == i'
     then return sc
-    else find i as
+    else findId i as
 
 debug
   :: PPrint a
   => String -> a -> b -> b
 debug msg val res = trace (msg ++ " = " ++ pretty val ++ "\n") res
 
-enumId :: Int -> Id
-enumId n = "v" ++ show n
+enumId :: Int -> Identifier
+enumId n = Identifier ("v" ++ show n)
 
 ppkind :: Int -> Kind -> Doc
-ppkind _ Star = text "Star"
-ppkind d (Kfun l r) =
-  ppParen (d >= 10) (text "Kfun" <+> ppkind 10 l <+> ppkind 0 r)
+ppkind _ StarKind = text "Star"
+ppkind d (FunctionKind l r) =
+  ppParen (d >= 10) (text "FunctionKind" <+> ppkind 10 l <+> ppkind 0 r)
 
-tiLit :: Literal -> TI ([Pred], Type)
-tiLit (LitChar _) = return ([], tChar)
-tiLit (LitInt _) = do
-  v <- newTVar Star
+tiLit :: Literal -> TI ([Predicate], Type)
+tiLit (CharacterLiteral _) = return ([], tChar)
+tiLit (IntegerLiteral _) = do
+  v <- newVariableType StarKind
   return ([IsIn "Num" [v]], v)
-tiLit (LitStr _) = return ([], tString)
-tiLit (LitRat _) = do
-  v <- newTVar Star
+tiLit (StringLiteral _) = return ([], tString)
+tiLit (RationalLiteral _) = do
+  v <- newVariableType StarKind
   return ([IsIn "Fractional" [v]], v)
 
 pretty
@@ -327,31 +524,28 @@ ppParen t x =
     then parens x
     else x
 
-tiPat :: Pat -> TI ([Pred], [Assumption], Type)
-tiPat (PVar i) = do
-  v <- newTVar Star
+tiPat :: Pattern -> TI ([Predicate], [Assumption], Type)
+tiPat (VariablePattern i) = do
+  v <- newVariableType StarKind
   return ([], [Assumption i (toScheme v)], v)
-tiPat PWildcard = do
-  v <- newTVar Star
+tiPat WildcardPattern = do
+  v <- newVariableType StarKind
   return ([], [], v)
-tiPat (PAs i pat) = do
+tiPat (AsPattern i pat) = do
   (ps, as, t) <- tiPat pat
   return (ps, (Assumption i (toScheme t)) : as, t)
-tiPat (PLit l) = do
+tiPat (LiteralPattern l) = do
   (ps, t) <- tiLit l
   return (ps, [], t)
-tiPat (PNpk i _) = do
-  t <- newTVar Star
-  return ([IsIn "Integral" [t]], [Assumption i (toScheme t)], t)
-tiPat (PCon (Assumption _  sc) pats) = do
+tiPat (ConstructorPattern (Assumption _  sc) pats) = do
   (ps, as, ts) <- tiPats pats
-  t' <- newTVar Star
-  (qs :=> t) <- freshInst sc
+  t' <- newVariableType StarKind
+  (Qualified qs t) <- freshInst sc
   unify t (foldr fn t' ts)
   return (ps ++ qs, as, t')
-tiPat (PLazy pat) = tiPat pat
+tiPat (LazyPattern pat) = tiPat pat
 
-tiPats :: [Pat] -> TI ([Pred], [Assumption], [Type])
+tiPats :: [Pattern] -> TI ([Predicate], [Assumption], [Type])
 tiPats pats = do
   psasts <- mapM tiPat pats
   let ps = concat [ps' | (ps', _, _) <- psasts]
@@ -359,149 +553,144 @@ tiPats pats = do
       ts = [t | (_, _, t) <- psasts]
   return (ps, as, ts)
 
-predHead :: Pred -> Id
+predHead :: Predicate -> Identifier
 predHead (IsIn i _) = i
 
 lift
   :: Monad m
-  => ([Type] -> [Type] -> m a) -> Pred -> Pred -> m a
+  => ([Type] -> [Type] -> m a) -> Predicate -> Predicate -> m a
 lift m (IsIn i ts) (IsIn i' ts')
   | i == i' = m ts ts'
   | otherwise = fail "classes differ"
 
-sig :: ClassEnv -> Id -> [Tyvar]
+sig :: ClassEnvironment -> Identifier -> [TypeVariable]
 sig ce i =
-  case classes ce i of
-    Just (vs, _, _) -> vs
+  case classEnvironmentClasses ce i of
+    Just (Class vs _ _) -> vs
 
-super :: ClassEnv -> Id -> [Pred]
+super :: ClassEnvironment -> Identifier -> [Predicate]
 super ce i =
-  case classes ce i of
-    Just (_, is, _) -> is
+  case classEnvironmentClasses ce i of
+    Just (Class _ is _) -> is
 
-insts :: ClassEnv -> Id -> [Inst]
+insts :: ClassEnvironment -> Identifier -> [Qualified Predicate]
 insts ce i =
-  case classes ce i of
-    Just (_, _, its) -> its
+  case classEnvironmentClasses ce i of
+    Just (Class _ _ its) -> its
 
 defined :: Maybe a -> Bool
 defined (Just _) = True
 defined Nothing = False
 
-modify :: ClassEnv -> Id -> Class -> ClassEnv
+modify :: ClassEnvironment -> Identifier -> Class -> ClassEnvironment
 modify ce i c =
   ce
-  { classes =
+  { classEnvironmentClasses =
       \j ->
         if i == j
           then Just c
-          else classes ce j
+          else classEnvironmentClasses ce j
   }
 
-initialEnv :: ClassEnv
+initialEnv :: ClassEnvironment
 initialEnv =
-  ClassEnv
-  {classes = \_ -> fail "class not defined", defaults = [tInteger, tDouble]}
+  ClassEnvironment
+  { classEnvironmentClasses = \_ -> fail "class not defined"
+  , classEnvironmentDefaults = [tInteger, tDouble]
+  }
 
-infixr 5 <:>
-
-(<:>) :: EnvTransformer -> EnvTransformer -> EnvTransformer
-(f <:> g) ce = do
-  ce' <- f ce
-  g ce'
-
-addClass :: Id -> [Tyvar] -> [Pred] -> EnvTransformer
+addClass :: Identifier -> [TypeVariable] -> [Predicate] -> (ClassEnvironment -> Maybe ClassEnvironment)
 addClass i vs ps ce
-  | defined (classes ce i) = fail "class already defined"
-  | any (not . defined . classes ce . predHead) ps =
+  | defined (classEnvironmentClasses ce i) = fail "class already defined"
+  | any (not . defined . classEnvironmentClasses ce . predHead) ps =
     fail "superclass not defined"
-  | otherwise = return (modify ce i (vs, ps, []))
+  | otherwise = return (modify ce i (Class vs ps []))
 
-addPreludeClasses :: EnvTransformer
-addPreludeClasses = addCoreClasses <:> addNumClasses
+addPreludeClasses :: (ClassEnvironment -> Maybe ClassEnvironment)
+addPreludeClasses = addCoreClasses >=> addNumClasses
 
-atyvar :: Tyvar
-atyvar = Tyvar "a" Star
+atyvar :: TypeVariable
+atyvar = TypeVariable "a" StarKind
 
 atype :: Type
-atype = TVar atyvar
+atype = VariableType atyvar
 
-asig :: [Tyvar]
+asig :: [TypeVariable]
 asig = [atyvar]
 
-mtyvar :: Tyvar
-mtyvar = Tyvar "m" (Kfun Star Star)
+mtyvar :: TypeVariable
+mtyvar = TypeVariable "m" (FunctionKind StarKind StarKind)
 
 mtype :: Type
-mtype = TVar mtyvar
+mtype = VariableType mtyvar
 
-msig :: [Tyvar]
+msig :: [TypeVariable]
 msig = [mtyvar]
 
-addCoreClasses :: EnvTransformer
+addCoreClasses :: (ClassEnvironment -> Maybe ClassEnvironment)
 addCoreClasses =
-  addClass "Eq" asig [] <:>
-  addClass "Ord" asig [IsIn "Eq" [atype]] <:>
-  addClass "Show" asig [] <:>
-  addClass "Read" asig [] <:>
-  addClass "Bounded" asig [] <:>
-  addClass "Enum" asig [] <:>
-  addClass "Functor" msig [] <:> addClass "Monad" msig []
+  addClass "Eq" asig [] >=>
+  addClass "Ord" asig [IsIn "Eq" [atype]] >=>
+  addClass "Show" asig [] >=>
+  addClass "Read" asig [] >=>
+  addClass "Bounded" asig [] >=>
+  addClass "Enum" asig [] >=>
+  addClass "Functor" msig [] >=> addClass "Monad" msig []
 
-addNumClasses :: EnvTransformer
+addNumClasses :: (ClassEnvironment -> Maybe ClassEnvironment)
 addNumClasses =
-  addClass "Num" asig [IsIn "Eq" [atype], IsIn "Show" [atype]] <:>
-  addClass "Real" asig [IsIn "Num" [atype], IsIn "Ord" [atype]] <:>
-  addClass "Fractional" asig [IsIn "Num" [atype]] <:>
-  addClass "Integral" asig [IsIn "Real" [atype], IsIn "Enum" [atype]] <:>
-  addClass "RealFrac" asig [IsIn "Real" [atype], IsIn "Fractional" [atype]] <:>
-  addClass "Floating" asig [IsIn "Fractional" [atype]] <:>
+  addClass "Num" asig [IsIn "Eq" [atype], IsIn "Show" [atype]] >=>
+  addClass "Real" asig [IsIn "Num" [atype], IsIn "Ord" [atype]] >=>
+  addClass "Fractional" asig [IsIn "Num" [atype]] >=>
+  addClass "Integral" asig [IsIn "Real" [atype], IsIn "Enum" [atype]] >=>
+  addClass "RealFrac" asig [IsIn "Real" [atype], IsIn "Fractional" [atype]] >=>
+  addClass "Floating" asig [IsIn "Fractional" [atype]] >=>
   addClass "RealFloat" asig [IsIn "RealFrac" [atype], IsIn "Floating" [atype]]
 
-addInst :: [Pred] -> Pred -> EnvTransformer
+addInst :: [Predicate] -> Predicate -> (ClassEnvironment -> Maybe ClassEnvironment)
 addInst ps p@(IsIn i _) ce
-  | not (defined (classes ce i)) = fail "no class for instance"
+  | not (defined (classEnvironmentClasses ce i)) = fail "no class for instance"
   | any (overlap p) qs = fail "overlapping instance"
   | otherwise = return (modify ce i c)
   where
     its = insts ce i
-    qs = [q | (_ :=> q) <- its]
-    c = (sig ce i, super ce i, (ps :=> p) : its)
+    qs = [q | (Qualified _ q) <- its]
+    c = (Class (sig ce i) (super ce i) (Qualified ps p : its))
 
-overlap :: Pred -> Pred -> Bool
+overlap :: Predicate -> Predicate -> Bool
 overlap p q = defined (mgu p q)
 
-exampleInsts :: EnvTransformer
+exampleInsts :: (ClassEnvironment -> Maybe ClassEnvironment)
 exampleInsts =
-  addPreludeClasses <:>
-  addInst [] (IsIn "Ord" [tUnit]) <:>
-  addInst [] (IsIn "Ord" [tChar]) <:>
-  addInst [] (IsIn "Ord" [tInt]) <:>
+  addPreludeClasses >=>
+  addInst [] (IsIn "Ord" [tUnit]) >=>
+  addInst [] (IsIn "Ord" [tChar]) >=>
+  addInst [] (IsIn "Ord" [tInt]) >=>
   addInst
-    [IsIn "Ord" [TVar (Tyvar "a" Star)], IsIn "Ord" [TVar (Tyvar "b" Star)]]
-    (IsIn "Ord" [pair (TVar (Tyvar "a" Star)) (TVar (Tyvar "b" Star))])
+    [IsIn "Ord" [VariableType (TypeVariable "a" StarKind)], IsIn "Ord" [VariableType (TypeVariable "b" StarKind)]]
+    (IsIn "Ord" [pair (VariableType (TypeVariable "a" StarKind)) (VariableType (TypeVariable "b" StarKind))])
 
-bySuper :: ClassEnv -> Pred -> [Pred]
+bySuper :: ClassEnvironment -> Predicate -> [Predicate]
 bySuper ce p@(IsIn i ts) = p : concat (map (bySuper ce) supers)
   where
-    supers = apply s (super ce i)
-    s = zip (sig ce i) ts
+    supers = apply substitutions (super ce i)
+    substitutions = zipWith Substitution (sig ce i) ts
 
-byInst :: ClassEnv -> Pred -> Maybe [Pred]
+byInst :: ClassEnvironment -> Predicate -> Maybe [Predicate]
 byInst ce p@(IsIn i _) = msum [tryInst it | it <- insts ce i]
   where
-    tryInst (ps :=> h) = do
+    tryInst (Qualified ps h) = do
       u <- match h p
       Just (map (apply u) ps)
 
-entail :: ClassEnv -> [Pred] -> Pred -> Bool
+entail :: ClassEnvironment -> [Predicate] -> Predicate -> Bool
 entail ce ps p =
   any (p `elem`) (map (bySuper ce) ps) ||
   case byInst ce p of
     Nothing -> False
     Just qs -> all (entail ce ps) qs
 
-simplify :: ([Pred] -> Pred -> Bool) -> [Pred] -> [Pred]
+simplify :: ([Predicate] -> Predicate -> Bool) -> [Predicate] -> [Predicate]
 simplify ent = loop []
   where
     loop rs [] = rs
@@ -509,26 +698,26 @@ simplify ent = loop []
       | ent (rs ++ ps) p = loop rs ps
       | otherwise = loop (p : rs) ps
 
-reduce :: ClassEnv -> [Pred] -> [Pred]
+reduce :: ClassEnvironment -> [Predicate] -> [Predicate]
 reduce ce = simplify (scEntail ce) . elimTauts ce
 
-elimTauts :: ClassEnv -> [Pred] -> [Pred]
+elimTauts :: ClassEnvironment -> [Predicate] -> [Predicate]
 elimTauts ce ps = [p | p <- ps, not (entail ce [] p)]
 
-scEntail :: ClassEnv -> [Pred] -> Pred -> Bool
+scEntail :: ClassEnvironment -> [Predicate] -> Predicate -> Bool
 scEntail ce ps p = any (p `elem`) (map (bySuper ce) ps)
 
-quantify :: [Tyvar] -> Qual Type -> Scheme
+quantify :: [TypeVariable] -> Qualified Type -> Scheme
 quantify vs qt = Forall ks (apply s qt)
   where
     vs' = [v | v <- tv qt, v `elem` vs]
     ks = map kind vs'
-    s = zip vs' (map TGen [0 ..])
+    s = zipWith Substitution vs' (map GenericType [0 ..])
 
 toScheme :: Type -> Scheme
-toScheme t = Forall [] ([] :=> t)
+toScheme t = Forall [] (Qualified [] t)
 
-isIn1 :: Id -> Type -> Pred
+isIn1 :: Identifier -> Type -> Predicate
 isIn1 i t = IsIn i [t]
 
 mkInst
@@ -536,28 +725,25 @@ mkInst
   => [Kind] -> a -> a
 mkInst ks = inst ts
   where
-    ts = zipWith (\v k -> TVar (Tyvar v k)) vars ks
+    ts = zipWith (\v k -> VariableType (TypeVariable v k)) vars ks
     vars =
-      [[c] | c <- ['a' .. 'z']] ++
-      [c : show n | n <- [0 :: Int ..], c <- ['a' .. 'z']]
+      map Identifier ([[c] | c <- ['a' .. 'z']] ++
+                      [c : show n | n <- [0 :: Int ..], c <- ['a' .. 'z']])
 
-instances :: [Inst] -> EnvTransformer
-instances = foldr1 (<:>) . map (\(ps :=> p) -> addInst ps p)
+instances :: [Qualified Predicate] -> (ClassEnvironment -> Maybe ClassEnvironment)
+instances = foldr1 (>=>) . map (\(Qualified ps p) -> addInst ps p)
 
-nullSubst :: Subst
+nullSubst :: [Substitution]
 nullSubst = []
-
-(+->) :: Tyvar -> Type -> Subst
-u +-> t = [(u, t)]
 
 infixr 4 @@
 
-(@@) :: Subst -> Subst -> Subst
-s1 @@ s2 = [(u, apply s1 t) | (u, t) <- s2] ++ s1
+(@@) :: [Substitution] -> [Substitution] -> [Substitution]
+s1 @@ s2 = [Substitution u (apply s1 t) | (Substitution u t) <- s2] ++ s1
 
 merge
   :: Monad m
-  => Subst -> Subst -> m Subst
+  => [Substitution] -> [Substitution] -> m [Substitution]
 merge s1 s2 =
   if agree
     then return (s1 ++ s2)
@@ -565,103 +751,105 @@ merge s1 s2 =
   where
     agree =
       all
-        (\v -> apply s1 (TVar v) == apply s2 (TVar v))
-        (map fst s1 `intersect` map fst s2)
+        (\v -> apply s1 (VariableType v) == apply s2 (VariableType v))
+        (map substitutionTypeVariable s1 `intersect`
+         map substitutionTypeVariable s2)
 
 ap
   :: Foldable t
-  => t Expr -> Expr
-ap = foldl1 Ap
+  => t Expression -> Expression
+ap = foldl1 ApplicationExpression
 
-evar :: Id -> Expr
-evar v = (Var v)
+evar :: Identifier -> Expression
+evar v = (VariableExpression v)
 
-elit :: Literal -> Expr
-elit l = (Lit l)
+elit :: Literal -> Expression
+elit l = (LiteralExpression l)
 
-econst :: Assumption -> Expr
-econst c = (Const c)
+econst :: Assumption -> Expression
+econst c = (ConstantExpression c)
 
-elet :: [[(Id, Maybe Scheme, [Alt])]] -> Expr -> Expr
-elet e f = foldr Let f (map toBg e)
+elet :: [[(Identifier, Maybe Scheme, [Alternative])]] -> Expression -> Expression
+elet e f = foldr LetExpression f (map toBg e)
 
-toBg :: [(Id, Maybe Scheme, [Alt])] -> BindGroup
+toBg :: [(Identifier, Maybe Scheme, [Alternative])] -> BindGroup
 toBg g =
-  ( [(v, t, alts) | (v, Just t, alts) <- g]
-  , filter (not . null) [[(v, alts) | (v, Nothing, alts) <- g]])
+  BindGroup
+  { bindGroupExplicitlyTypedBindings =
+      [ExplicitlyTypedBinding v t alts | (v, Just t, alts) <- g]
+  , bindGroupImplicitlyTypedBindings =
+      filter
+        (not . null)
+        [[ImplicitlyTypedBinding v alts | (v, Nothing, alts) <- g]]
+  }
 
-{-
-ecase           = Case
-elambda         = Lam
-eif             = If
--}
-ecase :: Expr -> [(Pat, Expr)] -> Expr
+ecase :: Expression -> [(Pattern, Expression)] -> Expression
 ecase d as =
-  elet [[("_case", Nothing, [([p], e) | (p, e) <- as])]] (ap [evar "_case", d])
+  elet [[("_case", Nothing, [Alternative [p] e | (p, e) <- as])]] (ap [evar "_case", d])
 
-elambda :: Alt -> Expr
+elambda :: Alternative -> Expression
 elambda alt = elet [[("_lambda", Nothing, [alt])]] (evar "_lambda")
 
-efail :: Expr
-efail = Const (Assumption "FAIL" (Forall [Star] ([] :=> TGen 0)))
+efail :: Expression
+efail = ConstantExpression (Assumption "FAIL" (Forall [StarKind] (Qualified [] (GenericType 0))))
 
-esign :: Expr -> Scheme -> Expr
-esign e t = elet [[("_val", Just t, [([], e)])]] (evar "_val")
+esign :: Expression -> Scheme -> Expression
+esign e t = elet [[("_val", Just t, [(Alternative [] e)])]] (evar "_val")
 
-eCompLet :: [[(Id, Maybe Scheme, [Alt])]] -> Expr -> Expr
+eCompLet :: [[(Identifier, Maybe Scheme, [Alternative])]] -> Expression -> Expression
 eCompLet bgs c = elet bgs c
 
 tBool :: Type
-tBool = TCon (Tycon "Bool" Star)
+tBool = ConstructorType (TypeConstructor "Bool" StarKind)
 
-tiExpr :: Infer Expr Type
-tiExpr _ as (Var i) = do
-  sc <- find i as
-  (ps :=> t) <- freshInst sc
+tiExpression :: Infer Expression Type
+tiExpression _ as (VariableExpression i) = do
+  sc <- findId i as
+  (Qualified ps t) <- freshInst sc
   return (ps, t)
-tiExpr _ _ (Const (Assumption _  sc)) = do
-  (ps :=> t) <- freshInst sc
+tiExpression _ _ (ConstantExpression (Assumption _  sc)) = do
+  (Qualified ps t) <- freshInst sc
   return (ps, t)
-tiExpr _ _ (Lit l) = do
+tiExpression _ _ (LiteralExpression l) = do
   (ps, t) <- tiLit l
   return (ps, t)
-tiExpr ce as (Ap e f) = do
-  (ps, te) <- tiExpr ce as e
-  (qs, tf) <- tiExpr ce as f
-  t <- newTVar Star
+tiExpression ce as (ApplicationExpression e f) = do
+  (ps, te) <- tiExpression ce as e
+  (qs, tf) <- tiExpression ce as f
+  t <- newVariableType StarKind
   unify (tf `fn` t) te
   return (ps ++ qs, t)
-tiExpr ce as (Let bg e) = do
+tiExpression ce as (LetExpression bg e) = do
   (ps, as') <- tiBindGroup ce as bg
-  (qs, t) <- tiExpr ce (as' ++ as) e
+  (qs, t) <- tiExpression ce (as' ++ as) e
   return (ps ++ qs, t)
-tiExpr ce as (Lam alt) = tiAlt ce as alt
-tiExpr ce as (If e e1 e2) = do
-  (ps, t) <- tiExpr ce as e
+tiExpression ce as (LambdaExpression alt) = tiAlt ce as alt
+tiExpression ce as (IfExpression e e1 e2) = do
+  (ps, t) <- tiExpression ce as e
   unify t tBool
-  (ps1, t1) <- tiExpr ce as e1
-  (ps2, t2) <- tiExpr ce as e2
+  (ps1, t1) <- tiExpression ce as e1
+  (ps2, t2) <- tiExpression ce as e2
   unify t1 t2
   return (ps ++ ps1 ++ ps2, t1)
-tiExpr ce as (Case e branches) = do
-  (ps0, t) <- tiExpr ce as e
-  v <- newTVar Star
+tiExpression ce as (CaseExpression e branches) = do
+  (ps0, t) <- tiExpression ce as e
+  v <- newVariableType StarKind
   let tiBr (pat, f) = do
         (ps, as', t') <- tiPat pat
         unify t t'
-        (qs, t'') <- tiExpr ce (as' ++ as) f
+        (qs, t'') <- tiExpression ce (as' ++ as) f
         unify v t''
         return (ps ++ qs)
   pss <- mapM tiBr branches
   return (ps0 ++ concat pss, v)
 
-tiAlt :: Infer Alt Type
-tiAlt ce as (pats, e) = do
+tiAlt :: Infer Alternative Type
+tiAlt ce as (Alternative pats e) = do
   (ps, as', ts) <- tiPats pats
-  (qs, t) <- tiExpr ce (as' ++ as) e
+  (qs, t) <- tiExpression ce (as' ++ as) e
   return (ps ++ qs, foldr fn t ts)
 
-tiAlts :: ClassEnv -> [Assumption] -> [Alt] -> Type -> TI [Pred]
+tiAlts :: ClassEnvironment -> [Assumption] -> [Alternative] -> Type -> TI [Predicate]
 tiAlts ce as alts t = do
   psts <- mapM (tiAlt ce as) alts
   mapM_ (unify t) (map snd psts)
@@ -669,21 +857,18 @@ tiAlts ce as alts t = do
 
 split
   :: Monad m
-  => ClassEnv -> [Tyvar] -> [Tyvar] -> [Pred] -> m ([Pred], [Pred])
+  => ClassEnvironment -> [TypeVariable] -> [TypeVariable] -> [Predicate] -> m ([Predicate], [Predicate])
 split ce fs gs ps = do
   let ps' = reduce ce ps
       (ds, rs) = partition (all (`elem` fs) . tv) ps'
-  rs' <- defaultedPreds ce (fs ++ gs) rs
+  rs' <- defaultedPredicates ce (fs ++ gs) rs
   return (ds, rs \\ rs')
 
-ambiguities :: ClassEnv -> [Tyvar] -> [Pred] -> [Ambiguity]
-ambiguities _ vs ps = [(v, filter (elem v . tv) ps) | v <- tv ps \\ vs]
-
-numClasses :: [Id]
+numClasses :: [Identifier]
 numClasses =
   ["Num", "Integral", "Floating", "Fractional", "Real", "RealFloat", "RealFrac"]
 
-stdClasses :: [Id]
+stdClasses :: [Identifier]
 stdClasses =
   [ "Eq"
   , "Ord"
@@ -698,48 +883,48 @@ stdClasses =
   ] ++
   numClasses
 
-candidates :: ClassEnv -> Ambiguity -> [Type]
-candidates ce (v, qs) =
+candidates :: ClassEnvironment -> Ambiguity -> [Type]
+candidates ce (Ambiguity v qs) =
   [ t'
   | let is = [i | IsIn i _ <- qs]
         ts = [t | IsIn _ t <- qs]
-  , all ([TVar v] ==) ts
+  , all ([VariableType v] ==) ts
   , any (`elem` numClasses) is
   , all (`elem` stdClasses) is
-  , t' <- defaults ce
+  , t' <- classEnvironmentDefaults ce
   , all (entail ce []) [IsIn i [t'] | i <- is]
   ]
 
 withDefaults
   :: Monad m
-  => ([Ambiguity] -> [Type] -> a) -> ClassEnv -> [Tyvar] -> [Pred] -> m a
+  => ([Ambiguity] -> [Type] -> a) -> ClassEnvironment -> [TypeVariable] -> [Predicate] -> m a
 withDefaults f ce vs ps
   | any null tss = fail "cannot resolve ambiguity"
   | otherwise = return (f vps (map head tss))
   where
-    vps = ambiguities ce vs ps
+    vps = ambiguities vs ps
     tss = map (candidates ce) vps
 
-defaultedPreds
+defaultedPredicates
   :: Monad m
-  => ClassEnv -> [Tyvar] -> [Pred] -> m [Pred]
-defaultedPreds = withDefaults (\vps _ -> concat (map snd vps))
+  => ClassEnvironment -> [TypeVariable] -> [Predicate] -> m [Predicate]
+defaultedPredicates = withDefaults (\vps _ -> concat (map ambiguityPredicates vps))
 
 defaultSubst
   :: Monad m
-  => ClassEnv -> [Tyvar] -> [Pred] -> m Subst
-defaultSubst = withDefaults (\vps ts -> zip (map fst vps) ts)
+  => ClassEnvironment -> [TypeVariable] -> [Predicate] -> m [Substitution]
+defaultSubst = withDefaults (\vps ts -> zipWith Substitution (map ambiguityTypeVariable vps) ts)
 
-tiExpl :: ClassEnv -> [Assumption] -> Expl -> TI [Pred]
-tiExpl ce as (_, sc, alts) = do
-  (qs :=> t) <- freshInst sc
+tiExpl :: ClassEnvironment -> [Assumption] -> ExplicitlyTypedBinding -> TI [Predicate]
+tiExpl ce as (ExplicitlyTypedBinding _ sc alts) = do
+  (Qualified qs t) <- freshInst sc
   ps <- tiAlts ce as alts t
   s <- getSubst
   let qs' = apply s qs
       t' = apply s t
       fs = tv (apply s as)
       gs = tv t' \\ fs
-      sc' = quantify gs (qs' :=> t')
+      sc' = quantify gs (Qualified qs' t')
       ps' = filter (not . entail ce qs') (apply s ps)
   (ds, rs) <- split ce fs gs ps'
   if sc /= sc'
@@ -748,18 +933,13 @@ tiExpl ce as (_, sc, alts) = do
            then fail "context too weak"
            else return ds
 
-restricted :: [Impl] -> Bool
-restricted bs = any simple bs
-  where
-    simple (_, alts) = any (null . fst) alts
-
-tiImpls :: Infer [Impl] [Assumption]
+tiImpls :: Infer [ImplicitlyTypedBinding] [Assumption]
 tiImpls ce as bs = do
-  ts <- mapM (\_ -> newTVar Star) bs
-  let is = map fst bs
+  ts <- mapM (\_ -> newVariableType StarKind) bs
+  let is = map implicitlyTypedBindingId bs
       scs = map toScheme ts
       as' = zipWith Assumption is scs ++ as
-      altss = map snd bs
+      altss = map implicitlyTypedBindingAlternatives bs
   pss <- sequence (zipWith (tiAlts ce as') altss ts)
   s <- getSubst
   let ps' = apply s (concat pss)
@@ -768,16 +948,16 @@ tiImpls ce as bs = do
       vss = map tv ts'
       gs = foldr1 union vss \\ fs
   (ds, rs) <- split ce fs (foldr1 intersect vss) ps'
-  if restricted bs
+  if restrictImplicitlyTypedBindings bs
     then let gs' = gs \\ tv rs
-             scs' = map (quantify gs' . ([] :=>)) ts'
+             scs' = map (quantify gs' . (Qualified [])) ts'
          in return (ds ++ rs, zipWith Assumption is scs')
-    else let scs' = map (quantify gs . (rs :=>)) ts'
+    else let scs' = map (quantify gs . (Qualified rs)) ts'
          in return (ds, zipWith Assumption is scs')
 
 tiBindGroup :: Infer BindGroup [Assumption]
-tiBindGroup ce as (es, iss) = do
-  let as' = [Assumption v  sc | (v, sc, _alts) <- es]
+tiBindGroup ce as (BindGroup es iss) = do
+  let as' = [Assumption v  sc | ExplicitlyTypedBinding v sc _alts <- es]
   (ps, as'') <- tiSeq tiImpls ce (as' ++ as) iss
   qss <- mapM (tiExpl ce (as'' ++ as' ++ as)) es
   return (ps ++ concat qss, as'' ++ as')
@@ -790,14 +970,14 @@ tiSeq ti ce as (bs:bss) = do
   return (ps ++ qs, as'' ++ as')
 
 newtype TI a =
-  TI (Subst -> Int -> (Subst, Int, a))
+  TI ([Substitution] -> Int -> ([Substitution], Int, a))
 
 runTI :: TI a -> a
 runTI (TI f) = x
   where
     (_, _, x) = f nullSubst 0
 
-getSubst :: TI Subst
+getSubst :: TI [Substitution]
 getSubst = TI (\s n -> (s, n, s))
 
 unify :: Type -> Type -> TI ()
@@ -806,30 +986,30 @@ unify t1 t2 = do
   u <- mgu (apply s t1) (apply s t2)
   extSubst u
 
-trim :: [Tyvar] -> TI ()
+trim :: [TypeVariable] -> TI ()
 trim vs =
   TI
     (\s n ->
-       let s' = [(v, t) | (v, t) <- s, v `elem` vs]
-           force = length (tv (map snd s'))
+       let s' = [(Substitution v t) | (Substitution v t) <- s, v `elem` vs]
+           force = length (tv (map substitutionType s'))
        in force `seq` (s', n, ()))
 
-extSubst :: Subst -> TI ()
+extSubst :: [Substitution] -> TI ()
 extSubst s' = TI (\s n -> (s' @@ s, n, ()))
 
-newTVar :: Kind -> TI Type
-newTVar k =
+newVariableType :: Kind -> TI Type
+newVariableType k =
   TI
     (\s n ->
-       let v = Tyvar (enumId n) k
-       in (s, n + 1, TVar v))
+       let v = TypeVariable (enumId n) k
+       in (s, n + 1, VariableType v))
 
-freshInst :: Scheme -> TI (Qual Type)
+freshInst :: Scheme -> TI (Qualified Type)
 freshInst (Forall ks qt) = do
-  ts <- mapM newTVar ks
+  ts <- mapM newVariableType ks
   return (inst ts qt)
 
-tiProgram :: ClassEnv -> [Assumption] -> Program -> [Assumption]
+tiProgram :: ClassEnvironment -> [Assumption] -> [BindGroup] -> [Assumption]
 tiProgram ce as bgs =
   runTI $ do
     (ps, as') <- tiSeq tiBindGroup ce as bgs
@@ -838,13 +1018,13 @@ tiProgram ce as bgs =
     s' <- defaultSubst ce [] rs
     return (apply (s' @@ s) as')
 
-tiBindGroup' :: ClassEnv -> [Assumption] -> BindGroup -> TI ([Pred], [Assumption])
+tiBindGroup' :: ClassEnvironment -> [Assumption] -> BindGroup -> TI ([Predicate], [Assumption])
 tiBindGroup' ce as bs = do
   (ps, as') <- tiBindGroup ce as bs
   trim (tv (as' ++ as))
   return (ps, as')
 
-tiProgram' :: ClassEnv -> [Assumption] -> Program -> [Assumption]
+tiProgram' :: ClassEnvironment -> [Assumption] -> [BindGroup] -> [Assumption]
 tiProgram' ce as bgs =
   runTI $ do
     (ps, as') <- tiSeq tiBindGroup' ce as bgs
@@ -856,16 +1036,16 @@ tiProgram' ce as bgs =
 pptype
   :: (Num t, Ord t)
   => t -> Type -> Doc
-pptype d (TAp (TAp a x) y)
+pptype d (ApplicationType (ApplicationType a x) y)
   | a == tArrow =
     ppParen
       (d >= 5)
       (pptype (5 :: Integer) x <+> text "`fn`" <+> pptype (0 :: Integer) y)
-pptype d (TAp l r) =
+pptype d (ApplicationType l r) =
   ppParen
     (d >= 10)
-    (text "TAp" <+> pptype (10 :: Integer) l <+> pptype (10 :: Integer) r)
-pptype d (TGen n) = ppParen (d >= 10) (text "TGen" <+> int n)
+    (text "ApplicationType" <+> pptype (10 :: Integer) l <+> pptype (10 :: Integer) r)
+pptype d (GenericType n) = ppParen (d >= 10) (text "GenericType" <+> int n)
 pptype _ t
   | t == tList = text "tList"
   | t == tArrow = text "tArrow"
@@ -876,69 +1056,70 @@ pptype _ t
   | t == tTuple5 = text "tTuple5"
   | t == tTuple6 = text "tTuple6"
   | t == tTuple7 = text "tTuple7"
-pptype _ (TCon (Tycon i _)) = text ('t' : i)
-pptype _ (TVar v) = pprint v
+pptype _ (ConstructorType (TypeConstructor i _)) =
+  text ('t' : identifierString i)
+pptype _ (VariableType v) = pprint v
 
 tUnit :: Type
-tUnit = TCon (Tycon "()" Star)
+tUnit = ConstructorType (TypeConstructor "()" StarKind)
 
 tChar :: Type
-tChar = TCon (Tycon "Char" Star)
+tChar = ConstructorType (TypeConstructor "Char" StarKind)
 
 tInt :: Type
-tInt = TCon (Tycon "Int" Star)
+tInt = ConstructorType (TypeConstructor "Int" StarKind)
 
 tInteger :: Type
-tInteger = TCon (Tycon "Integer" Star)
+tInteger = ConstructorType (TypeConstructor "Integer" StarKind)
 
 tFloat :: Type
-tFloat = TCon (Tycon "Float" Star)
+tFloat = ConstructorType (TypeConstructor "Float" StarKind)
 
 tDouble :: Type
-tDouble = TCon (Tycon "Double" Star)
+tDouble = ConstructorType (TypeConstructor "Double" StarKind)
 
 tList :: Type
-tList = TCon (Tycon "[]" (Kfun Star Star))
+tList = ConstructorType (TypeConstructor "[]" (FunctionKind StarKind StarKind))
 
 tArrow :: Type
-tArrow = TCon (Tycon "(->)" (Kfun Star (Kfun Star Star)))
+tArrow = ConstructorType (TypeConstructor "(->)" (FunctionKind StarKind (FunctionKind StarKind StarKind)))
 
 tTuple2 :: Type
-tTuple2 = TCon (Tycon "(,)" (Kfun Star (Kfun Star Star)))
+tTuple2 = ConstructorType (TypeConstructor "(,)" (FunctionKind StarKind (FunctionKind StarKind StarKind)))
 
 tTuple3 :: Type
-tTuple3 = TCon (Tycon "(,,)" (Kfun Star (Kfun Star (Kfun Star Star))))
+tTuple3 = ConstructorType (TypeConstructor "(,,)" (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind StarKind))))
 
 tTuple4 :: Type
 tTuple4 =
-  TCon (Tycon "(,,,)" (Kfun Star (Kfun Star (Kfun Star (Kfun Star Star)))))
+  ConstructorType (TypeConstructor "(,,,)" (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind StarKind)))))
 
 tTuple5 :: Type
 tTuple5 =
-  TCon
-    (Tycon
+  ConstructorType
+    (TypeConstructor
        "(,,,,)"
-       (Kfun Star (Kfun Star (Kfun Star (Kfun Star (Kfun Star Star))))))
+       (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind StarKind))))))
 
 tTuple6 :: Type
 tTuple6 =
-  TCon
-    (Tycon
+  ConstructorType
+    (TypeConstructor
        "(,,,,,)"
-       (Kfun
-          Star
-          (Kfun Star (Kfun Star (Kfun Star (Kfun Star (Kfun Star Star)))))))
+       (FunctionKind
+          StarKind
+          (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind StarKind)))))))
 
 tTuple7 :: Type
 tTuple7 =
-  TCon
-    (Tycon
+  ConstructorType
+    (TypeConstructor
        "(,,,,,,)"
-       (Kfun
-          Star
-          (Kfun
-             Star
-             (Kfun Star (Kfun Star (Kfun Star (Kfun Star (Kfun Star Star))))))))
+       (FunctionKind
+          StarKind
+          (FunctionKind
+             StarKind
+             (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind (FunctionKind StarKind StarKind))))))))
 
 tString :: Type
 tString = list tChar
@@ -946,20 +1127,20 @@ tString = list tChar
 infixr 4 `fn`
 
 fn :: Type -> Type -> Type
-a `fn` b = TAp (TAp tArrow a) b
+a `fn` b = ApplicationType (ApplicationType tArrow a) b
 
 list :: Type -> Type
-list t = TAp tList t
+list t = ApplicationType tList t
 
 pair :: Type -> Type -> Type
-pair a b = TAp (TAp tTuple2 a) b
+pair a b = ApplicationType (ApplicationType tTuple2 a) b
 
 varBind
   :: Monad m
-  => Tyvar -> Type -> m Subst
+  => TypeVariable -> Type -> m [Substitution]
 
 varBind u t
-  | t == TVar u = return nullSubst
+  | t == VariableType u = return nullSubst
   | u `elem` tv t = fail "occurs check fails"
   | kind u /= kind t = fail "kinds do not match"
-  | otherwise = return (u +-> t)
+  | otherwise = return [Substitution u t]
