@@ -17,24 +17,7 @@ library
   default-language:
     Haskell2010
   exposed-modules:
-    Assump
-    Id
-    Kind
-    Lit
-    PPrint
-    Pat
-    Pred
-    Scheme
-    Static
-    Subst
-    TIMain
-    TIMonad
-    TIProg
-    Type
-    Unify
-  other-modules:
-    Debug
-    Infer
+    THIH
 
 test-suite thih-test
   type:
@@ -44,7 +27,7 @@ test-suite thih-test
   main-is:
     Main.hs
   build-depends:
-    base, thih
+    base, thih, pretty
   ghc-options:
     -Wall
   default-language:

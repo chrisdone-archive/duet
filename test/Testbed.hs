@@ -12,28 +12,10 @@
 --
 -----------------------------------------------------------------------------
 
-module Testbed(module PPrint,
-               module Id,
-               module Kind, module Type, module Pred, module Scheme,
-               module Subst, module Unify,
-               module Assump,
-               module Lit, module Pat, module TIMain, module TIProg,
-               module Static,
+module Testbed(module THIH,
                test, save) where
-import PPrint
-import Id
-import Kind
-import Type
-import Pred
-import Scheme
-import Subst
-import Unify
-import Assump
-import Lit
-import Pat
-import TIMain
-import TIProg
-import Static
+import THIH
+import Text.PrettyPrint.HughesPJ
 
 test          :: ClassEnv -> [Assump] -> [BindGroup] -> IO ()
 test ce as bgs = putStr $ render $ vcat $ map pprint $ reverse $

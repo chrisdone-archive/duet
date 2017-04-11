@@ -13,9 +13,8 @@
 -----------------------------------------------------------------------------
 
 module StaticPrelude where
-import Static
-import TIMain
-import Pat
+import THIH
+
 pNil :: Pat
 pNil            = PCon nilCfun []
 pCons :: Pat -> Pat -> Pat
