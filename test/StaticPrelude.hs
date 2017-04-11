@@ -14,6 +14,32 @@
 
 module StaticPrelude where
 import Static
+import TIMain
+import Pat
+pNil :: Pat
+pNil            = PCon nilCfun []
+pCons :: Pat -> Pat -> Pat
+pCons x y       = PCon consCfun [x,y]
+
+eNil :: Expr
+eNil            = econst nilCfun
+eCons :: Expr -> Expr -> Expr
+eCons x y       = ap [ econst consCfun, x, y ]
+
+eif :: Expr -> Expr -> Expr -> Expr
+eif c t f       = ecase c [(PCon trueCfun [], t),(PCon falseCfun [], f)]
+
+eguarded :: Foldable t => t (Expr, Expr) -> Expr
+eguarded        = foldr (\(c,t) e -> eif c t e) efail
+
+eCompFrom :: Pat -> Expr -> Expr -> Expr
+eCompFrom p e c = ap [ econst mbindMfun, e, elambda ([p],c) ]
+
+eCompGuard :: Expr -> Expr -> Expr
+eCompGuard e c  = eif e c eNil
+
+eListRet :: Expr -> Expr
+eListRet e      = eCons e eNil
 
 -----------------------------------------------------------------------------
 -- Standard Primitive Types:
@@ -104,8 +130,7 @@ tShowS :: Type
 tShowS
  = TAp tList tChar `fn` TAp tList tChar
 
-tBool :: Type
-tBool     = TCon (Tycon "Bool" Star)
+
 falseCfun :: Assump
 falseCfun = "False" :>: (Forall [] ([] :=> tBool))
 trueCfun :: Assump

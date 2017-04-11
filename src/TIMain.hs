@@ -27,7 +27,6 @@ import TIMonad
 import Infer
 import Lit
 import Pat
-import StaticPrelude
 
 -----------------------------------------------------------------------------
 
@@ -62,15 +61,6 @@ toBg           :: [(Id, Maybe Scheme, [Alt])] -> BindGroup
 toBg g          = ([(v, t, alts) | (v, Just t, alts) <- g ],
                    filter (not . null) [[(v,alts) | (v,Nothing,alts) <- g]])
 
-pNil :: Pat
-pNil            = PCon nilCfun []
-pCons :: Pat -> Pat -> Pat
-pCons x y       = PCon consCfun [x,y]
-
-eNil :: Expr
-eNil            = econst nilCfun
-eCons :: Expr -> Expr -> Expr
-eCons x y       = ap [ econst consCfun, x, y ]
 
 {-
 ecase           = Case
@@ -83,28 +73,24 @@ ecase d as      = elet [[ ("_case",
                            Nothing,
                            [([p],e) | (p,e) <- as]) ]]
                        (ap [evar "_case", d])
-eif :: Expr -> Expr -> Expr -> Expr
-eif c t f       = ecase c [(PCon trueCfun [], t),(PCon falseCfun [], f)]
+
 elambda :: Alt -> Expr
 elambda alt     = elet [[ ("_lambda",
                            Nothing,
                            [alt]) ]]
                              (evar "_lambda")
-eguarded :: Foldable t => t (Expr, Expr) -> Expr
-eguarded        = foldr (\(c,t) e -> eif c t e) efail
+
 efail :: Expr
 efail           = Const ("FAIL" :>: Forall [Star] ([] :=> TGen 0))
 esign :: Expr -> Scheme -> Expr
 esign e t       = elet [[ ("_val", Just t, [([],e)]) ]] (evar "_val")
 
-eCompFrom :: Pat -> Expr -> Expr -> Expr
-eCompFrom p e c = ap [ econst mbindMfun, e, elambda ([p],c) ]
-eCompGuard :: Expr -> Expr -> Expr
-eCompGuard e c  = eif e c eNil
+
 eCompLet :: [[(Id, Maybe Scheme, [Alt])]] -> Expr -> Expr
 eCompLet bgs c  = elet bgs c
-eListRet :: Expr -> Expr
-eListRet e      = eCons e eNil
+
+tBool :: Type
+tBool     = TCon (Tycon "Bool" Star)
 
 -----------------------------------------------------------------------------
 
