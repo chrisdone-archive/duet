@@ -11,8 +11,6 @@ import qualified Control.Monad
 import           Control.Monad hiding (ap)
 import           Data.List
 import           Data.String
-import           Debug.Trace
-import           Text.PrettyPrint.HughesPJ
 
 --------------------------------------------------------------------------------
 -- Types
@@ -21,7 +19,7 @@ import           Text.PrettyPrint.HughesPJ
 -- values of the Assump datatype, each of which pairs a variable name
 -- with a type scheme.
 data Assumption = Assumption
-  { assumptionId :: Identifier
+  { assumptionIdentifier :: Identifier
   , assumptionScheme :: Scheme
   }
 
@@ -272,19 +270,6 @@ ambiguities vs ps = [Ambiguity v (filter (elem v . tv) ps) | v <- tv ps \\ vs]
 
 type Infer e t = ClassEnvironment -> [Assumption] -> e -> TI ([Predicate], t)
 
-
-
-
-
-
-
-class PPrint a where
-  pprint :: a -> Doc
-  parPprint :: a -> Doc
-  parPprint = parens . pprint
-  pplist :: [a] -> Doc
-  pplist xs = brackets (fsep (punctuate comma (map pprint xs)))
-
 class Types t where
   apply :: [Substitution] -> t -> t
   tv :: t -> [TypeVariable]
@@ -305,53 +290,9 @@ class Match t where
     :: Monad m
     => t -> t -> m [Substitution]
 
-instance PPrint Assumption where
-  pprint (Assumption i  s) = (text (show (identifierString i)) <+> text ":>:") $$ nest 2 (pprint s)
-
 instance Types Assumption where
   apply s (Assumption i  sc) = Assumption i  (apply s sc)
   tv (Assumption _  sc) = tv sc
-
-instance PPrint Kind where
-  pprint = ppkind 0
-  parPprint = ppkind 10
-
-instance PPrint a =>
-         PPrint [a] where
-  pprint = pplist
-
-instance PPrint Char where
-  pprint = char
-  pplist = text
-
-instance PPrint Integer where
-  pprint = integer
-
-instance PPrint Int where
-  pprint = int
-
-instance PPrint Float where
-  pprint = float
-
-instance PPrint Double where
-  pprint = double
-
-instance (PPrint a, PPrint b) =>
-         PPrint (a, b) where
-  pprint (x, y) = parens (sep [pprint x <> comma, pprint y])
-
-instance (PPrint a, PPrint b, PPrint c) =>
-         PPrint (a, b, c) where
-  pprint (x, y, z) =
-    parens (sep [pprint x <> comma, pprint y <> comma, pprint z])
-
-instance PPrint t =>
-         PPrint (Qualified t) where
-  pprint (Qualified ps t) = (pprint ps <+> text ":=>") $$ nest 2 (parPprint t)
-
-instance PPrint Predicate where
-  pprint (IsIn i [t]) = text "isIn1" <+> text ("c" ++ identifierString i) <+> parPprint t
-  pprint (IsIn i ts) = text "isIn" <+> text ("c" ++ identifierString i) <+> pplist ts
 
 instance Types t =>
          Types (Qualified t) where
@@ -367,9 +308,6 @@ instance Unify Predicate where
 
 instance Match Predicate where
   match = lift match
-
-instance PPrint Scheme where
-  pprint (Forall ks qt) = (text "Forall" <+> pprint ks) $$ nest 2 (parPprint qt)
 
 instance Types Scheme where
   apply s (Forall ks qt) = Forall ks (apply s qt)
@@ -423,13 +361,6 @@ instance Instantiate t =>
 
 instance Instantiate Predicate where
   inst ts (IsIn c t) = IsIn c (inst ts t)
-
-instance PPrint Type where
-  pprint = pptype (0 :: Integer)
-  parPprint = pptype (10 :: Integer)
-
-instance PPrint TypeVariable where
-  pprint (TypeVariable v _) = text (identifierString v)
 
 instance HasKind TypeVariable where
   kind (TypeVariable _ k) = k
@@ -490,18 +421,8 @@ findId i ((Assumption i'  sc):as) =
     then return sc
     else findId i as
 
-debug
-  :: PPrint a
-  => String -> a -> b -> b
-debug msg val res = trace (msg ++ " = " ++ pretty val ++ "\n") res
-
 enumId :: Int -> Identifier
 enumId n = Identifier ("v" ++ show n)
-
-ppkind :: Int -> Kind -> Doc
-ppkind _ StarKind = text "Star"
-ppkind d (FunctionKind l r) =
-  ppParen (d >= 10) (text "FunctionKind" <+> ppkind 10 l <+> ppkind 0 r)
 
 tiLit :: Literal -> TI ([Predicate], Type)
 tiLit (CharacterLiteral _) = return ([], tChar)
@@ -512,17 +433,6 @@ tiLit (StringLiteral _) = return ([], tString)
 tiLit (RationalLiteral _) = do
   v <- newVariableType StarKind
   return ([IsIn "Fractional" [v]], v)
-
-pretty
-  :: PPrint a
-  => a -> String
-pretty = render . pprint
-
-ppParen :: Bool -> Doc -> Doc
-ppParen t x =
-  if t
-    then parens x
-    else x
 
 tiPat :: Pattern -> TI ([Predicate], [Assumption], Type)
 tiPat (VariablePattern i) = do
@@ -1032,33 +942,6 @@ tiProgram' ce as bgs =
     let rs = reduce ce (apply s ps)
     s' <- defaultSubst ce [] rs
     return (apply (s' @@ s) as')
-
-pptype
-  :: (Num t, Ord t)
-  => t -> Type -> Doc
-pptype d (ApplicationType (ApplicationType a x) y)
-  | a == tArrow =
-    ppParen
-      (d >= 5)
-      (pptype (5 :: Integer) x <+> text "`fn`" <+> pptype (0 :: Integer) y)
-pptype d (ApplicationType l r) =
-  ppParen
-    (d >= 10)
-    (text "ApplicationType" <+> pptype (10 :: Integer) l <+> pptype (10 :: Integer) r)
-pptype d (GenericType n) = ppParen (d >= 10) (text "GenericType" <+> int n)
-pptype _ t
-  | t == tList = text "tList"
-  | t == tArrow = text "tArrow"
-  | t == tUnit = text "tUnit"
-  | t == tTuple2 = text "tTuple2"
-  | t == tTuple3 = text "tTuple3"
-  | t == tTuple4 = text "tTuple4"
-  | t == tTuple5 = text "tTuple5"
-  | t == tTuple6 = text "tTuple6"
-  | t == tTuple7 = text "tTuple7"
-pptype _ (ConstructorType (TypeConstructor i _)) =
-  text ('t' : identifierString i)
-pptype _ (VariableType v) = pprint v
 
 tUnit :: Type
 tUnit = ConstructorType (TypeConstructor "()" StarKind)
