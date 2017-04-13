@@ -212,7 +212,10 @@ restrictImplicitlyTypedBindings = any simple
 -- and pairs each one with the list of predicates that must be
 -- satisfied by any choice of a default:
 ambiguities :: [TypeVariable] -> [Predicate] -> [Ambiguity]
-ambiguities vs ps = [Ambiguity v (filter (elem v . tv) ps) | v <- tv ps \\ vs]
+ambiguities typeVariables predicates =
+  [ Ambiguity typeVariable (filter (elem typeVariable . getTypeVariables) predicates)
+  | typeVariable <- getTypeVariables predicates \\ typeVariables
+  ]
 
 
 
@@ -270,9 +273,11 @@ ambiguities vs ps = [Ambiguity v (filter (elem v . tv) ps) | v <- tv ps \\ vs]
 
 type Infer e t = ClassEnvironment -> [Assumption] -> e -> TI ([Predicate], t)
 
-class Types t where
-  apply :: [Substitution] -> t -> t
-  tv :: t -> [TypeVariable]
+class Substitutable t where
+  substitute :: [Substitution] -> t -> t
+
+class HasTypeVariables t where
+  getTypeVariables :: t -> [TypeVariable]
 
 class Instantiate t where
   inst :: [Type] -> t -> t
@@ -290,18 +295,21 @@ class Match t where
     :: Monad m
     => t -> t -> m [Substitution]
 
-instance Types Assumption where
-  apply s (Assumption i  sc) = Assumption i  (apply s sc)
-  tv (Assumption _  sc) = tv sc
+instance Substitutable Assumption where
+  substitute s (Assumption i  sc) = Assumption i  (substitute s sc)
+instance HasTypeVariables Assumption where
+  getTypeVariables (Assumption _  sc) = getTypeVariables sc
 
-instance Types t =>
-         Types (Qualified t) where
-  apply s (Qualified ps t) = Qualified (apply s ps) (apply s t)
-  tv (Qualified ps t) = tv ps `union` tv t
+instance Substitutable t =>
+         Substitutable (Qualified t) where
+  substitute s (Qualified ps t) = Qualified (substitute s ps) (substitute s t)
+instance HasTypeVariables t => HasTypeVariables (Qualified t) where
+  getTypeVariables (Qualified ps t) = getTypeVariables ps `union` getTypeVariables t
 
-instance Types Predicate where
-  apply s (IsIn i ts) = IsIn i (apply s ts)
-  tv (IsIn _i ts) = tv ts
+instance Substitutable Predicate where
+  substitute s (IsIn i ts) = IsIn i (substitute s ts)
+instance HasTypeVariables Predicate where
+  getTypeVariables (IsIn _i ts) = getTypeVariables ts
 
 instance Unify Predicate where
   mgu = lift mgu
@@ -309,25 +317,28 @@ instance Unify Predicate where
 instance Match Predicate where
   match = lift match
 
-instance Types Scheme where
-  apply s (Forall ks qt) = Forall ks (apply s qt)
-  tv (Forall _ qt) = tv qt
+instance Substitutable Scheme where
+  substitute s (Forall ks qt) = Forall ks (substitute s qt)
+instance HasTypeVariables Scheme where
+  getTypeVariables (Forall _ qt) = getTypeVariables qt
 
-instance Types Type where
-  apply substitutions (VariableType typeVariable) =
+instance Substitutable Type where
+  substitute substitutions (VariableType typeVariable) =
     case find ((== typeVariable) . substitutionTypeVariable) substitutions of
       Just substitution -> substitutionType substitution
       Nothing -> VariableType typeVariable
-  apply s (ApplicationType l r) = ApplicationType (apply s l) (apply s r)
-  apply _ t = t
-  tv (VariableType u) = [u]
-  tv (ApplicationType l r) = tv l `union` tv r
-  tv _ = []
+  substitute s (ApplicationType l r) = ApplicationType (substitute s l) (substitute s r)
+  substitute _ t = t
+instance HasTypeVariables Type where
+  getTypeVariables (VariableType u) = [u]
+  getTypeVariables (ApplicationType l r) = getTypeVariables l `union` getTypeVariables r
+  getTypeVariables _ = []
 
-instance Types a =>
-         Types [a] where
-  apply s = map (apply s)
-  tv = nub . concat . map tv
+instance Substitutable a =>
+         Substitutable [a] where
+  substitute s = map (substitute s)
+instance HasTypeVariables a => HasTypeVariables [a] where
+  getTypeVariables = nub . concat . map getTypeVariables
 
 instance Functor TI where
   fmap = liftM
@@ -378,7 +389,7 @@ instance HasKind Type where
 instance Unify Type where
   mgu (ApplicationType l r) (ApplicationType l' r') = do
     s1 <- mgu l l'
-    s2 <- mgu (apply s1 r) (apply s1 r')
+    s2 <- mgu (substitute s1 r) (substitute s1 r')
     return (s2 @@ s1)
   mgu (VariableType u) t = varBind u t
   mgu t (VariableType u) = varBind u t
@@ -386,11 +397,11 @@ instance Unify Type where
     | tc1 == tc2 = return nullSubst
   mgu _ _ = fail "types do not unify"
 
-instance (Unify t, Types t) =>
+instance (Unify t, Substitutable t) =>
          Unify [t] where
   mgu (x:xs) (y:ys) = do
     s1 <- mgu x y
-    s2 <- mgu (apply s1 xs) (apply s1 ys)
+    s2 <- mgu (substitute s1 xs) (substitute s1 ys)
     return (s2 @@ s1)
   mgu [] [] = return nullSubst
   mgu _ _ = fail "lists do not unify"
@@ -583,7 +594,7 @@ exampleInsts =
 bySuper :: ClassEnvironment -> Predicate -> [Predicate]
 bySuper ce p@(IsIn i ts) = p : concat (map (bySuper ce) supers)
   where
-    supers = apply substitutions (super ce i)
+    supers = substitute substitutions (super ce i)
     substitutions = zipWith Substitution (sig ce i) ts
 
 byInst :: ClassEnvironment -> Predicate -> Maybe [Predicate]
@@ -591,7 +602,7 @@ byInst ce p@(IsIn i _) = msum [tryInst it | it <- insts ce i]
   where
     tryInst (Qualified ps h) = do
       u <- match h p
-      Just (map (apply u) ps)
+      Just (map (substitute u) ps)
 
 entail :: ClassEnvironment -> [Predicate] -> Predicate -> Bool
 entail ce ps p =
@@ -618,9 +629,9 @@ scEntail :: ClassEnvironment -> [Predicate] -> Predicate -> Bool
 scEntail ce ps p = any (p `elem`) (map (bySuper ce) ps)
 
 quantify :: [TypeVariable] -> Qualified Type -> Scheme
-quantify vs qt = Forall ks (apply s qt)
+quantify vs qt = Forall ks (substitute s qt)
   where
-    vs' = [v | v <- tv qt, v `elem` vs]
+    vs' = [v | v <- getTypeVariables qt, v `elem` vs]
     ks = map kind vs'
     s = zipWith Substitution vs' (map GenericType [0 ..])
 
@@ -649,7 +660,7 @@ nullSubst = []
 infixr 4 @@
 
 (@@) :: [Substitution] -> [Substitution] -> [Substitution]
-s1 @@ s2 = [Substitution u (apply s1 t) | (Substitution u t) <- s2] ++ s1
+s1 @@ s2 = [Substitution u (substitute s1 t) | (Substitution u t) <- s2] ++ s1
 
 merge
   :: Monad m
@@ -661,7 +672,7 @@ merge s1 s2 =
   where
     agree =
       all
-        (\v -> apply s1 (VariableType v) == apply s2 (VariableType v))
+        (\v -> substitute s1 (VariableType v) == substitute s2 (VariableType v))
         (map substitutionTypeVariable s1 `intersect`
          map substitutionTypeVariable s2)
 
@@ -770,7 +781,7 @@ split
   => ClassEnvironment -> [TypeVariable] -> [TypeVariable] -> [Predicate] -> m ([Predicate], [Predicate])
 split ce fs gs ps = do
   let ps' = reduce ce ps
-      (ds, rs) = partition (all (`elem` fs) . tv) ps'
+      (ds, rs) = partition (all (`elem` fs) . getTypeVariables) ps'
   rs' <- defaultedPredicates ce (fs ++ gs) rs
   return (ds, rs \\ rs')
 
@@ -830,12 +841,12 @@ tiExpl ce as (ExplicitlyTypedBinding _ sc alts) = do
   (Qualified qs t) <- freshInst sc
   ps <- tiAlts ce as alts t
   s <- getSubst
-  let qs' = apply s qs
-      t' = apply s t
-      fs = tv (apply s as)
-      gs = tv t' \\ fs
+  let qs' = substitute s qs
+      t' = substitute s t
+      fs = getTypeVariables (substitute s as)
+      gs = getTypeVariables t' \\ fs
       sc' = quantify gs (Qualified qs' t')
-      ps' = filter (not . entail ce qs') (apply s ps)
+      ps' = filter (not . entail ce qs') (substitute s ps)
   (ds, rs) <- split ce fs gs ps'
   if sc /= sc'
     then fail "signature too general"
@@ -852,14 +863,14 @@ tiImpls ce as bs = do
       altss = map implicitlyTypedBindingAlternatives bs
   pss <- sequence (zipWith (tiAlts ce as') altss ts)
   s <- getSubst
-  let ps' = apply s (concat pss)
-      ts' = apply s ts
-      fs = tv (apply s as)
-      vss = map tv ts'
+  let ps' = substitute s (concat pss)
+      ts' = substitute s ts
+      fs = getTypeVariables (substitute s as)
+      vss = map getTypeVariables ts'
       gs = foldr1 union vss \\ fs
   (ds, rs) <- split ce fs (foldr1 intersect vss) ps'
   if restrictImplicitlyTypedBindings bs
-    then let gs' = gs \\ tv rs
+    then let gs' = gs \\ getTypeVariables rs
              scs' = map (quantify gs' . (Qualified [])) ts'
          in return (ds ++ rs, zipWith Assumption is scs')
     else let scs' = map (quantify gs . (Qualified rs)) ts'
@@ -893,7 +904,7 @@ getSubst = TI (\s n -> (s, n, s))
 unify :: Type -> Type -> TI ()
 unify t1 t2 = do
   s <- getSubst
-  u <- mgu (apply s t1) (apply s t2)
+  u <- mgu (substitute s t1) (substitute s t2)
   extSubst u
 
 trim :: [TypeVariable] -> TI ()
@@ -901,7 +912,7 @@ trim vs =
   TI
     (\s n ->
        let s' = [(Substitution v t) | (Substitution v t) <- s, v `elem` vs]
-           force = length (tv (map substitutionType s'))
+           force = length (getTypeVariables (map substitutionType s'))
        in force `seq` (s', n, ()))
 
 extSubst :: [Substitution] -> TI ()
@@ -924,14 +935,14 @@ tiProgram ce as bgs =
   runTI $ do
     (ps, as') <- tiSeq tiBindGroup ce as bgs
     s <- getSubst
-    let rs = reduce ce (apply s ps)
+    let rs = reduce ce (substitute s ps)
     s' <- defaultSubst ce [] rs
-    return (apply (s' @@ s) as')
+    return (substitute (s' @@ s) as')
 
 tiBindGroup' :: ClassEnvironment -> [Assumption] -> BindGroup -> TI ([Predicate], [Assumption])
 tiBindGroup' ce as bs = do
   (ps, as') <- tiBindGroup ce as bs
-  trim (tv (as' ++ as))
+  trim (getTypeVariables (as' ++ as))
   return (ps, as')
 
 tiProgram' :: ClassEnvironment -> [Assumption] -> [BindGroup] -> [Assumption]
@@ -939,9 +950,9 @@ tiProgram' ce as bgs =
   runTI $ do
     (ps, as') <- tiSeq tiBindGroup' ce as bgs
     s <- getSubst
-    let rs = reduce ce (apply s ps)
+    let rs = reduce ce (substitute s ps)
     s' <- defaultSubst ce [] rs
-    return (apply (s' @@ s) as')
+    return (substitute (s' @@ s) as')
 
 tUnit :: Type
 tUnit = ConstructorType (TypeConstructor "()" StarKind)
@@ -1024,6 +1035,6 @@ varBind
 
 varBind u t
   | t == VariableType u = return nullSubst
-  | u `elem` tv t = fail "occurs check fails"
+  | u `elem` getTypeVariables t = fail "occurs check fails"
   | kind u /= kind t = fail "kinds do not match"
   | otherwise = return [Substitution u t]
