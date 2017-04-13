@@ -249,8 +249,16 @@ unifyTypeVariable :: Monad m => TypeVariable -> Type -> m [Substitution]
 unifyTypeVariable typeVariable typ
   | typ == VariableType typeVariable = return nullSubst
   | typeVariable `elem` getTypeVariables typ = fail "occurs check fails"
-  | getKind typeVariable /= getKind typ = fail "kinds do not match"
+  | typeVariableKind typeVariable /= typeKind typ = fail "kinds do not match"
   | otherwise = return [Substitution typeVariable typ]
+
+-- | Get the kind of a type.
+typeKind :: Type -> Kind
+typeKind (ConstructorType typeConstructor) = typeConstructorKind typeConstructor
+typeKind (VariableType typeVariable) = typeVariableKind typeVariable
+typeKind (ApplicationType typ _) =
+  case (typeKind typ) of
+    (FunctionKind _ kind) -> kind
 
 --------------------------------------------------------------------------------
 -- Good naming convention, but undocumented
@@ -267,8 +275,8 @@ class MostGeneralUnify t where
 class Instantiate t where
   instantiate :: [Type] -> t -> t
 
-class HasKind t where
-  getKind :: t -> Kind
+-- class HasKind t where
+--   getKind :: t -> Kind
 
 class OneWayMatch t where
   match :: Monad m => t -> t -> m [Substitution]
@@ -384,18 +392,7 @@ instance Instantiate t =>
 instance Instantiate Predicate where
   instantiate ts (IsIn c t) = IsIn c (instantiate ts t)
 
-instance HasKind TypeVariable where
-  getKind (TypeVariable _ k) = k
 
-instance HasKind TypeConstructor where
-  getKind (TypeConstructor _ k) = k
-
-instance HasKind Type where
-  getKind (ConstructorType tc) = getKind tc
-  getKind (VariableType u) = getKind u
-  getKind (ApplicationType t _) =
-    case (getKind t) of
-      (FunctionKind _ k) -> k
 
 instance MostGeneralUnify Type where
   mostGeneralUnify (ApplicationType l r) (ApplicationType l' r') = do
@@ -423,7 +420,7 @@ instance OneWayMatch Type where
     sr <- match r r'
     merge sl sr
   match (VariableType u) t
-    | getKind u == getKind t = return [Substitution u t]
+    | typeVariableKind u == typeKind t = return [Substitution u t]
   match (ConstructorType tc1) (ConstructorType tc2)
     | tc1 == tc2 = return nullSubst
   match _ _ = fail "types do not match"
@@ -592,7 +589,7 @@ quantify :: [TypeVariable] -> Qualified Type -> Scheme
 quantify vs qt = Forall ks (substitute s qt)
   where
     vs' = [v | v <- getTypeVariables qt, v `elem` vs]
-    ks = map getKind vs'
+    ks = map typeVariableKind vs'
     s = zipWith Substitution vs' (map GenericType [0 ..])
 
 toScheme :: Type -> Scheme
