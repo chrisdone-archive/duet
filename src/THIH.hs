@@ -224,12 +224,12 @@ data Scheme =
 --------------------------------------------------------------------------------
 -- Type inference
 
-typeCheckModule :: ClassEnvironment -> [Assumption] -> [BindGroup] -> [Assumption]
+typeCheckModule :: Monad m => ClassEnvironment -> [Assumption] -> [BindGroup] -> m [Assumption]
 typeCheckModule ce as bgs =
-  evalState
-    (runInfer $ do
+  evalStateT
+    (runInferT $ do
        (ps, as') <- inferSequenceTypes inferBindGroupTypes ce as bgs
-       s <- Infer (gets inferStateSubstitutions)
+       s <- InferT (gets inferStateSubstitutions)
        let rs = reduce ce (map (substitutePredicate s) ps)
        s' <- defaultSubst ce [] rs
        return (map (substituteAssumption (s' @@ s)) as'))
@@ -331,8 +331,8 @@ substituteType _ typ = typ
 -- Type inference
 
 -- | Type inferece monad.
-newtype Infer a = Infer
-  { runInfer :: State InferState a
+newtype InferT m a = InferT
+  { runInferT :: StateT InferState m a
   } deriving (Monad, Applicative, Functor)
 
 data InferState = InferState
@@ -340,25 +340,30 @@ data InferState = InferState
   , inferStateCounter :: !Int
   }
 
-unify :: Type -> Type -> Infer ()
+unify :: Monad m => Type -> Type -> InferT m ()
 unify t1 t2 = do
-  s <- Infer (gets inferStateSubstitutions)
+  s <- InferT (gets inferStateSubstitutions)
   u <- unifyTypes (substituteType s t1) (substituteType s t2)
   extSubst u
 
-newVariableType :: Kind -> Infer Type
+newVariableType :: Monad m => Kind -> InferT m Type
 newVariableType k =
-  Infer
+  InferT
     (do inferState <- get
         put inferState {inferStateCounter = inferStateCounter inferState + 1}
         return
           (VariableType (TypeVariable (enumId (inferStateCounter inferState)) k)))
 
-inferExplicitlyTypedBindingType :: ClassEnvironment -> [Assumption] -> ExplicitlyTypedBinding -> Infer [Predicate]
+inferExplicitlyTypedBindingType
+  :: Monad m
+  => ClassEnvironment
+  -> [Assumption]
+  -> ExplicitlyTypedBinding
+  -> InferT m [Predicate]
 inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding _ sc alts) = do
   (Qualified qs t) <- freshInst sc
   ps <- inferAltTypes ce as alts t
-  s <- Infer (gets inferStateSubstitutions)
+  s <- InferT (gets inferStateSubstitutions)
   let qs' = map (substitutePredicate s) qs
       t' = substituteType s t
       fs = getTypeVariablesOf getAssumptionTypeVariables (map (substituteAssumption s) as)
@@ -373,10 +378,11 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding _ sc alts) = do
            else return ds
 
 inferImplicitlyTypedBindingsTypes
-  :: ClassEnvironment
+  :: Monad m
+  => ClassEnvironment
   -> [Assumption]
   -> [ImplicitlyTypedBinding]
-  -> Infer ([Predicate], [Assumption])
+  -> InferT m ([Predicate], [Assumption])
 inferImplicitlyTypedBindingsTypes ce as bs = do
   ts <- mapM (\_ -> newVariableType StarKind) bs
   let is = map implicitlyTypedBindingId bs
@@ -384,7 +390,7 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
       as' = zipWith Assumption is scs ++ as
       altss = map implicitlyTypedBindingAlternatives bs
   pss <- sequence (zipWith (inferAltTypes ce as') altss ts)
-  s <- Infer (gets inferStateSubstitutions)
+  s <- InferT (gets inferStateSubstitutions)
   let ps' = map (substitutePredicate s) (concat pss)
       ts' = map (substituteType s) ts
       fs = getTypeVariablesOf getAssumptionTypeVariables (map (substituteAssumption s) as)
@@ -398,10 +404,12 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
     else let scs' = map (quantify gs . (Qualified rs)) ts'
          in return (ds, zipWith Assumption is scs')
 
-inferBindGroupTypes :: ClassEnvironment
-                    -> [Assumption]
-                    -> BindGroup
-                    -> Infer ([Predicate], [Assumption])
+inferBindGroupTypes
+  :: Monad m
+  => ClassEnvironment
+  -> [Assumption]
+  -> BindGroup
+  -> InferT m ([Predicate], [Assumption])
 inferBindGroupTypes ce as (BindGroup es iss) = do
   let as' = [Assumption v sc | ExplicitlyTypedBinding v sc _alts <- es]
   (ps, as'') <-
@@ -410,8 +418,9 @@ inferBindGroupTypes ce as (BindGroup es iss) = do
   return (ps ++ concat qss, as'' ++ as')
 
 inferSequenceTypes
-  :: (ClassEnvironment -> [Assumption] -> bg -> Infer ([Predicate], [Assumption]))
-  -> (ClassEnvironment -> [Assumption] -> [bg] -> Infer ([Predicate], [Assumption]))
+  :: Monad m
+  => (ClassEnvironment -> [Assumption] -> bg -> InferT m ([Predicate], [Assumption]))
+  -> (ClassEnvironment -> [Assumption] -> [bg] -> InferT m ([Predicate], [Assumption]))
 inferSequenceTypes _ _ _ [] = return ([], [])
 inferSequenceTypes ti ce as (bs:bss) = do
   (ps, as') <- ti ce as bs
@@ -561,7 +570,9 @@ lookupIdentifier i ((Assumption i'  sc):as) =
 enumId :: Int -> Identifier
 enumId n = Identifier ("v" ++ show n)
 
-inferLiteralType :: Literal -> Infer ([Predicate], Type)
+inferLiteralType
+  :: Monad m
+  => Literal -> InferT m ([Predicate], Type)
 inferLiteralType (CharacterLiteral _) = return ([], charType)
 inferLiteralType (IntegerLiteral _) = do
   v <- newVariableType StarKind
@@ -571,7 +582,9 @@ inferLiteralType (RationalLiteral _) = do
   v <- newVariableType StarKind
   return ([IsIn "Fractional" [v]], v)
 
-tiPat :: Pattern -> Infer ([Predicate], [Assumption], Type)
+tiPat
+  :: Monad m
+  => Pattern -> InferT m ([Predicate], [Assumption], Type)
 tiPat (VariablePattern i) = do
   v <- newVariableType StarKind
   return ([], [Assumption i (toScheme v)], v)
@@ -592,7 +605,9 @@ tiPat (ConstructorPattern (Assumption _  sc) pats) = do
   return (ps ++ qs, as, t')
 tiPat (LazyPattern pat) = tiPat pat
 
-tiPats :: [Pattern] -> Infer ([Predicate], [Assumption], [Type])
+tiPats
+  :: Monad m
+  => [Pattern] -> InferT m ([Predicate], [Assumption], [Type])
 tiPats pats = do
   psasts <- mapM tiPat pats
   let ps = concat [ps' | (ps', _, _) <- psasts]
@@ -722,10 +737,11 @@ merge s1 s2 =
          map substitutionTypeVariable s2)
 
 inferExpressionType
-  :: ClassEnvironment
+  :: Monad m
+  => ClassEnvironment
   -> [Assumption]
   -> Expression
-  -> Infer ([Predicate], Type)
+  -> InferT m ([Predicate], Type)
 inferExpressionType _ as (VariableExpression i) = do
   sc <- lookupIdentifier i as
   (Qualified ps t) <- freshInst sc
@@ -766,13 +782,24 @@ inferExpressionType ce as (CaseExpression e branches) = do
   pss <- mapM tiBr branches
   return (ps0 ++ concat pss, v)
 
-inferAltType :: ClassEnvironment -> [Assumption] -> Alternative -> Infer ([Predicate], Type)
+inferAltType
+  :: Monad m
+  => ClassEnvironment
+  -> [Assumption]
+  -> Alternative
+  -> InferT m ([Predicate], Type)
 inferAltType ce as (Alternative pats e) = do
   (ps, as', ts) <- tiPats pats
   (qs, t) <- inferExpressionType ce (as' ++ as) e
   return (ps ++ qs, foldr makeArrow t ts)
 
-inferAltTypes :: ClassEnvironment -> [Assumption] -> [Alternative] -> Type -> Infer [Predicate]
+inferAltTypes
+  :: Monad m
+  => ClassEnvironment
+  -> [Assumption]
+  -> [Alternative]
+  -> Type
+  -> InferT m [Predicate]
 inferAltTypes ce as alts t = do
   psts <- mapM (inferAltType ce as) alts
   mapM_ (unify t) (map snd psts)
@@ -819,13 +846,17 @@ defaultSubst
   => ClassEnvironment -> [TypeVariable] -> [Predicate] -> m [Substitution]
 defaultSubst = withDefaults (\vps ts -> zipWith Substitution (map ambiguityTypeVariable vps) ts)
 
-extSubst :: [Substitution] -> Infer ()
+extSubst
+  :: Monad m
+  => [Substitution] -> InferT m ()
 extSubst s' =
-  Infer
+  InferT
     (modify
        (\s -> s {inferStateSubstitutions = s' @@ inferStateSubstitutions s}))
 
-freshInst :: Scheme -> Infer (Qualified Type)
+freshInst
+  :: Monad m
+  => Scheme -> InferT m (Qualified Type)
 freshInst (Forall ks qt) = do
   ts <- mapM newVariableType ks
   return (instantiateQualified ts qt)
