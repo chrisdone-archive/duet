@@ -35,6 +35,8 @@ module THIH
 import qualified Control.Monad
 import           Control.Monad hiding (ap)
 import           Data.List
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 import           Data.String
 
 --------------------------------------------------------------------------------
@@ -141,7 +143,7 @@ data TypeVariable = TypeVariable
 -- | An identifier used for variables.
 newtype Identifier = Identifier
   { identifierString :: String
-  } deriving (Eq, IsString)
+  } deriving (Eq, IsString, Ord)
 
 -- | Haskell types can be qualified by adding a (possibly empty) list
 -- of predicates, or class constraints, to restrict the ways in which
@@ -198,7 +200,7 @@ data Literal
 
 -- | A class environment.
 data ClassEnvironment = ClassEnvironment
-  { classEnvironmentClasses :: !(Identifier -> Maybe Class)
+  { classEnvironmentClasses :: !(Map Identifier Class)
   , classEnvironmentDefaults :: ![Type]
   }
 
@@ -537,17 +539,17 @@ lift m (IsIn i ts) (IsIn i' ts')
 
 sig :: ClassEnvironment -> Identifier -> [TypeVariable]
 sig ce i =
-  case classEnvironmentClasses ce i of
+  case M.lookup i (classEnvironmentClasses ce) of
     Just (Class vs _ _) -> vs
 
 super :: ClassEnvironment -> Identifier -> [Predicate]
 super ce i =
-  case classEnvironmentClasses ce i of
+  case M.lookup i (classEnvironmentClasses ce) of
     Just (Class _ is _) -> is
 
 insts :: ClassEnvironment -> Identifier -> [Qualified Predicate]
 insts ce i =
-  case classEnvironmentClasses ce i of
+  case M.lookup i (classEnvironmentClasses ce) of
     Just (Class _ _ its) -> its
 
 defined :: Maybe a -> Bool
@@ -556,31 +558,25 @@ defined Nothing = False
 
 modify :: ClassEnvironment -> Identifier -> Class -> ClassEnvironment
 modify ce i c =
-  ce
-  { classEnvironmentClasses =
-      \j ->
-        if i == j
-          then Just c
-          else classEnvironmentClasses ce j
-  }
+  ce {classEnvironmentClasses = M.insert i c (classEnvironmentClasses ce)}
 
 initialEnv :: ClassEnvironment
 initialEnv =
   ClassEnvironment
-  { classEnvironmentClasses = \_ -> fail "class not defined"
+  { classEnvironmentClasses = mempty
   , classEnvironmentDefaults = [tInteger, tDouble]
   }
 
 addClass :: Identifier -> [TypeVariable] -> [Predicate] -> (ClassEnvironment -> Maybe ClassEnvironment)
 addClass i vs ps ce
-  | defined (classEnvironmentClasses ce i) = fail "class already defined"
-  | any (not . defined . classEnvironmentClasses ce . predHead) ps =
+  | defined (M.lookup i (classEnvironmentClasses ce)) = fail "class already defined"
+  | any (not . defined . flip M.lookup (classEnvironmentClasses ce) . predHead) ps =
     fail "superclass not defined"
   | otherwise = return (modify ce i (Class vs ps []))
 
 addInstance :: [Predicate] -> Predicate -> (ClassEnvironment -> Maybe ClassEnvironment)
 addInstance ps p@(IsIn i _) ce
-  | not (defined (classEnvironmentClasses ce i)) = fail "no class for instance"
+  | not (defined (M.lookup i (classEnvironmentClasses ce))) = fail "no class for instance"
   | any (overlap p) qs = fail "overlapping instance"
   | otherwise = return (modify ce i c)
   where

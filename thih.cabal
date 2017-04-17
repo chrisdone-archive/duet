@@ -27,7 +27,7 @@ test-suite thih-test
   main-is:
     Main.hs
   build-depends:
-    base, thih, pretty
+    base, thih, pretty, containers
   ghc-options:
     -Wall
   default-language:
