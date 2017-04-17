@@ -240,7 +240,7 @@ restrictImplicitlyTypedBindings = any simple
 ambiguities :: [TypeVariable] -> [Predicate] -> [Ambiguity]
 ambiguities typeVariables predicates =
   [ Ambiguity typeVariable (filter (elem typeVariable . getTypeVariables) predicates)
-  | typeVariable <- getTypeVariables predicates \\ typeVariables
+  | typeVariable <- getAllTypeVariables predicates \\ typeVariables
   ]
 
 -- | The unifyTypeVariable function is used for the special case of unifying a
@@ -275,9 +275,6 @@ class MostGeneralUnify t where
 class Instantiate t where
   instantiate :: [Type] -> t -> t
 
--- class HasKind t where
---   getKind :: t -> Kind
-
 class OneWayMatch t where
   match :: Monad m => t -> t -> m [Substitution]
 
@@ -291,19 +288,19 @@ instance HasTypeVariables Assumption where
 instance Substitutable t =>
          Substitutable (Qualified t) where
   substitute substitutions (Qualified predicates t) =
-    Qualified (substitute substitutions predicates) (substitute substitutions t)
+    Qualified (map(substitute substitutions) predicates) (substitute substitutions t)
 
 instance HasTypeVariables t =>
          HasTypeVariables (Qualified t) where
   getTypeVariables (Qualified predicates t) =
-    getTypeVariables predicates `union` getTypeVariables t
+    getAllTypeVariables predicates `union` getTypeVariables t
 
 instance Substitutable Predicate where
   substitute substitutions (IsIn identifier types) =
-    IsIn identifier (substitute substitutions types)
+    IsIn identifier (map (substitute substitutions) types)
 
 instance HasTypeVariables Predicate where
-  getTypeVariables (IsIn _ types) = getTypeVariables types
+  getTypeVariables (IsIn _ types) = getAllTypeVariables types
 
 instance MostGeneralUnify Predicate where
   mostGeneralUnify = lift mostGeneralUnify
@@ -335,26 +332,8 @@ instance HasTypeVariables Type where
     getTypeVariables type1 `union` getTypeVariables type2
   getTypeVariables _ = []
 
-instance Substitutable a =>
-         Substitutable [a] where
-  substitute substitutions = map (substitute substitutions)
-
-instance HasTypeVariables a => HasTypeVariables [a] where
-  getTypeVariables = nub . concat . map getTypeVariables
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+getAllTypeVariables :: HasTypeVariables a => [a] -> [TypeVariable]
+getAllTypeVariables = nub . concat . map getTypeVariables
 
 
 instance Functor TI where
@@ -409,7 +388,7 @@ instance (MostGeneralUnify t, Substitutable t) =>
          MostGeneralUnify [t] where
   mostGeneralUnify (x:xs) (y:ys) = do
     s1 <- mostGeneralUnify x y
-    s2 <- mostGeneralUnify (substitute s1 xs) (substitute s1 ys)
+    s2 <- mostGeneralUnify (map (substitute s1) xs) (map (substitute s1) ys)
     return (s2 @@ s1)
   mostGeneralUnify [] [] = return nullSubst
   mostGeneralUnify _ _ = fail "lists do not unify"
@@ -551,7 +530,7 @@ overlap p q = defined (mostGeneralUnify p q)
 bySuper :: ClassEnvironment -> Predicate -> [Predicate]
 bySuper ce p@(IsIn i ts) = p : concat (map (bySuper ce) supers)
   where
-    supers = substitute substitutions (super ce i)
+    supers = map (substitute substitutions) (super ce i)
     substitutions = zipWith Substitution (sig ce i) ts
 
 byInst :: ClassEnvironment -> Predicate -> Maybe [Predicate]
@@ -738,12 +717,12 @@ tiExpl ce as (ExplicitlyTypedBinding _ sc alts) = do
   (Qualified qs t) <- freshInst sc
   ps <- tiAlts ce as alts t
   s <- getSubst
-  let qs' = substitute s qs
+  let qs' = map (substitute s) qs
       t' = substitute s t
-      fs = getTypeVariables (substitute s as)
+      fs = getAllTypeVariables (map (substitute s) as)
       gs = getTypeVariables t' \\ fs
       sc' = quantify gs (Qualified qs' t')
-      ps' = filter (not . entail ce qs') (substitute s ps)
+      ps' = filter (not . entail ce qs') (map (substitute s) ps)
   (ds, rs) <- split ce fs gs ps'
   if sc /= sc'
     then fail "signature too general"
@@ -760,14 +739,14 @@ tiImpls ce as bs = do
       altss = map implicitlyTypedBindingAlternatives bs
   pss <- sequence (zipWith (tiAlts ce as') altss ts)
   s <- getSubst
-  let ps' = substitute s (concat pss)
-      ts' = substitute s ts
-      fs = getTypeVariables (substitute s as)
+  let ps' = map (substitute s) (concat pss)
+      ts' = map (substitute s) ts
+      fs = getAllTypeVariables (map (substitute s) as)
       vss = map getTypeVariables ts'
       gs = foldr1 union vss \\ fs
   (ds, rs) <- split ce fs (foldr1 intersect vss) ps'
   if restrictImplicitlyTypedBindings bs
-    then let gs' = gs \\ getTypeVariables rs
+    then let gs' = gs \\ getAllTypeVariables rs
              scs' = map (quantify gs' . (Qualified [])) ts'
          in return (ds ++ rs, zipWith Assumption is scs')
     else let scs' = map (quantify gs . (Qualified rs)) ts'
@@ -809,7 +788,7 @@ trim vs =
   TI
     (\s n ->
        let s' = [(Substitution v t) | (Substitution v t) <- s, v `elem` vs]
-           force = length (getTypeVariables (map substitutionType s'))
+           force = length (getAllTypeVariables (map substitutionType s'))
        in force `seq` (s', n, ()))
 
 extSubst :: [Substitution] -> TI ()
@@ -832,14 +811,14 @@ tiProgram ce as bgs =
   runTI $ do
     (ps, as') <- tiSeq tiBindGroup ce as bgs
     s <- getSubst
-    let rs = reduce ce (substitute s ps)
+    let rs = reduce ce (map (substitute s) ps)
     s' <- defaultSubst ce [] rs
-    return (substitute (s' @@ s) as')
+    return (map (substitute (s' @@ s)) as')
 
 tiBindGroup' :: ClassEnvironment -> [Assumption] -> BindGroup -> TI ([Predicate], [Assumption])
 tiBindGroup' ce as bs = do
   (ps, as') <- tiBindGroup ce as bs
-  trim (getTypeVariables (as' ++ as))
+  trim (getAllTypeVariables (as' ++ as))
   return (ps, as')
 
 tiProgram' :: ClassEnvironment -> [Assumption] -> [BindGroup] -> [Assumption]
@@ -847,9 +826,9 @@ tiProgram' ce as bgs =
   runTI $ do
     (ps, as') <- tiSeq tiBindGroup' ce as bgs
     s <- getSubst
-    let rs = reduce ce (substitute s ps)
+    let rs = reduce ce (map (substitute s) ps)
     s' <- defaultSubst ce [] rs
-    return (substitute (s' @@ s) as')
+    return (map (substitute (s' @@ s)) as')
 
 tChar :: Type
 tChar = ConstructorType (TypeConstructor "Char" StarKind)
