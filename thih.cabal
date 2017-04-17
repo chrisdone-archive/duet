@@ -11,7 +11,7 @@ library
   hs-source-dirs:
     src
   build-depends:
-    base, pretty
+    base, containers, mtl
   ghc-options:
     -Wall
   default-language:
@@ -27,7 +27,7 @@ test-suite thih-test
   main-is:
     Main.hs
   build-depends:
-    base, thih, pretty, containers
+    base, thih
   ghc-options:
     -Wall
   default-language:

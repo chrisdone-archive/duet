@@ -32,8 +32,7 @@ module THIH
   , TypeConstructor(..)
   ) where
 
-import qualified Control.Monad
-import           Control.Monad hiding (ap)
+import           Control.Monad.State
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
@@ -227,12 +226,14 @@ data Scheme =
 
 typeCheckModule :: ClassEnvironment -> [Assumption] -> [BindGroup] -> [Assumption]
 typeCheckModule ce as bgs =
-  runInfer $ do
-    (ps, as') <- inferSequenceTypes inferBindGroupTypes ce as bgs
-    s <- getSubst
-    let rs = reduce ce (map (substitutePredicate s) ps)
-    s' <- defaultSubst ce [] rs
-    return (map (substituteAssumption (s' @@ s)) as')
+  evalState
+    (runInfer $ do
+       (ps, as') <- inferSequenceTypes inferBindGroupTypes ce as bgs
+       s <- Infer (gets inferStateSubstitutions)
+       let rs = reduce ce (map (substitutePredicate s) ps)
+       s' <- defaultSubst ce [] rs
+       return (map (substituteAssumption (s' @@ s)) as'))
+    (InferState nullSubst 0)
 
 --------------------------------------------------------------------------------
 -- Built-in types and classes
@@ -330,37 +331,34 @@ substituteType _ typ = typ
 -- Type inference
 
 -- | Type inferece monad.
-newtype Infer a =
-  Infer ([Substitution] -> Int -> ([Substitution], Int, a))
+newtype Infer a = Infer
+  { runInfer :: State InferState a
+  } deriving (Monad, Applicative, Functor)
 
-instance Functor Infer where
-  fmap = liftM
-
-instance Applicative Infer where
-  (<*>) = Control.Monad.ap
-  pure = return
-
-instance Monad Infer where
-  return x = Infer (\s n -> (s, n, x))
-  Infer f >>= g =
-    Infer
-      (\s n ->
-         case f s n of
-           (s', m, x) ->
-             let Infer gx = g x
-             in gx s' m)
+data InferState = InferState
+  { inferStateSubstitutions :: ![Substitution]
+  , inferStateCounter :: !Int
+  }
 
 unify :: Type -> Type -> Infer ()
 unify t1 t2 = do
-  s <- getSubst
+  s <- Infer (gets inferStateSubstitutions)
   u <- unifyTypes (substituteType s t1) (substituteType s t2)
   extSubst u
+
+newVariableType :: Kind -> Infer Type
+newVariableType k =
+  Infer
+    (do inferState <- get
+        put inferState {inferStateCounter = inferStateCounter inferState + 1}
+        return
+          (VariableType (TypeVariable (enumId (inferStateCounter inferState)) k)))
 
 inferExplicitlyTypedBindingType :: ClassEnvironment -> [Assumption] -> ExplicitlyTypedBinding -> Infer [Predicate]
 inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding _ sc alts) = do
   (Qualified qs t) <- freshInst sc
   ps <- inferAltTypes ce as alts t
-  s <- getSubst
+  s <- Infer (gets inferStateSubstitutions)
   let qs' = map (substitutePredicate s) qs
       t' = substituteType s t
       fs = getTypeVariablesOf getAssumptionTypeVariables (map (substituteAssumption s) as)
@@ -386,7 +384,7 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
       as' = zipWith Assumption is scs ++ as
       altss = map implicitlyTypedBindingAlternatives bs
   pss <- sequence (zipWith (inferAltTypes ce as') altss ts)
-  s <- getSubst
+  s <- Infer (gets inferStateSubstitutions)
   let ps' = map (substitutePredicate s) (concat pss)
       ts' = map (substituteType s) ts
       fs = getTypeVariablesOf getAssumptionTypeVariables (map (substituteAssumption s) as)
@@ -508,10 +506,10 @@ unifyTypeVariable typeVariable typ
   | otherwise = return [Substitution typeVariable typ]
 
 unifyPredicates :: Predicate -> Predicate -> Maybe [Substitution]
-unifyPredicates = lift unifyTypeList
+unifyPredicates = lift' unifyTypeList
 
 oneWayMatchPredicate :: Predicate -> Predicate -> Maybe [Substitution]
-oneWayMatchPredicate = lift oneWayMatchLists
+oneWayMatchPredicate = lift' oneWayMatchLists
 
 unifyTypes :: Monad m => Type -> Type -> m [Substitution]
 unifyTypes (ApplicationType l r) (ApplicationType l' r') = do
@@ -605,10 +603,10 @@ tiPats pats = do
 predHead :: Predicate -> Identifier
 predHead (IsIn i _) = i
 
-lift
+lift'
   :: Monad m
   => ([Type] -> [Type] -> m a) -> Predicate -> Predicate -> m a
-lift m (IsIn i ts) (IsIn i' ts')
+lift' m (IsIn i ts) (IsIn i' ts')
   | i == i' = m ts ts'
   | otherwise = fail "classes differ"
 
@@ -631,8 +629,8 @@ defined :: Maybe a -> Bool
 defined (Just _) = True
 defined Nothing = False
 
-modify :: ClassEnvironment -> Identifier -> Class -> ClassEnvironment
-modify ce i c =
+modify0 :: ClassEnvironment -> Identifier -> Class -> ClassEnvironment
+modify0 ce i c =
   ce {classEnvironmentClasses = M.insert i c (classEnvironmentClasses ce)}
 
 initialEnv :: ClassEnvironment
@@ -647,13 +645,13 @@ addClass i vs ps ce
   | defined (M.lookup i (classEnvironmentClasses ce)) = fail "class already defined"
   | any (not . defined . flip M.lookup (classEnvironmentClasses ce) . predHead) ps =
     fail "superclass not defined"
-  | otherwise = return (modify ce i (Class vs ps []))
+  | otherwise = return (modify0 ce i (Class vs ps []))
 
 addInstance :: [Predicate] -> Predicate -> (ClassEnvironment -> Maybe ClassEnvironment)
 addInstance ps p@(IsIn i _) ce
   | not (defined (M.lookup i (classEnvironmentClasses ce))) = fail "no class for instance"
   | any (overlap p) qs = fail "overlapping instance"
-  | otherwise = return (modify ce i c)
+  | otherwise = return (modify0 ce i c)
   where
     its = insts ce i
     qs = [q | (Qualified _ q) <- its]
@@ -821,27 +819,11 @@ defaultSubst
   => ClassEnvironment -> [TypeVariable] -> [Predicate] -> m [Substitution]
 defaultSubst = withDefaults (\vps ts -> zipWith Substitution (map ambiguityTypeVariable vps) ts)
 
-
-
-runInfer :: Infer a -> a
-runInfer (Infer f) = x
-  where
-    (_, _, x) = f nullSubst 0
-
-getSubst :: Infer [Substitution]
-getSubst = Infer (\s n -> (s, n, s))
-
-
-
 extSubst :: [Substitution] -> Infer ()
-extSubst s' = Infer (\s n -> (s' @@ s, n, ()))
-
-newVariableType :: Kind -> Infer Type
-newVariableType k =
+extSubst s' =
   Infer
-    (\s n ->
-       let v = TypeVariable (enumId n) k
-       in (s, n + 1, VariableType v))
+    (modify
+       (\s -> s {inferStateSubstitutions = s' @@ inferStateSubstitutions s}))
 
 freshInst :: Scheme -> Infer (Qualified Type)
 freshInst (Forall ks qt) = do
