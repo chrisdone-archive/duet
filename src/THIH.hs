@@ -11,7 +11,7 @@ module THIH
   ( typeCheckModule
   , addClass
   , addInstance
-  , initialEnv
+  , defaultClassEnvironment
   , Type(..)
   , Expression(..)
   , Literal(..)
@@ -51,7 +51,7 @@ newtype InferT m a = InferT
 data InferState = InferState
   { inferStateSubstitutions :: ![Substitution]
   , inferStateCounter :: !Int
-  }
+  } deriving (Show)
 
 data ReadException
   = ClassAlreadyDefined
@@ -82,7 +82,7 @@ instance Exception InferException
 data Assumption = Assumption
   { assumptionIdentifier :: Identifier
   , assumptionScheme :: Scheme
-  }
+  } deriving (Show)
 
 -- | The first component in each such pair lists any explicitly typed
 -- bindings in the group. The second component provides an opportunity
@@ -113,7 +113,7 @@ data Assumption = Assumption
 data BindGroup = BindGroup
   { bindGroupExplicitlyTypedBindings :: ![ExplicitlyTypedBinding]
   , bindGroupImplicitlyTypedBindings :: ![[ImplicitlyTypedBinding]]
-  }
+  } deriving (Show)
 
 -- | A single implicitly typed binding is described by a pair
 -- containing the name of the variable and a list of alternatives.
@@ -123,7 +123,7 @@ data BindGroup = BindGroup
 data ImplicitlyTypedBinding = ImplicitlyTypedBinding
   { implicitlyTypedBindingId :: !Identifier
   , implicitlyTypedBindingAlternatives :: ![Alternative]
-  }
+  } deriving (Show)
 
 -- | The simplest case is for explicitly typed bindings, each of which
 -- is described by the name of the function that is being defined, the
@@ -137,7 +137,7 @@ data ExplicitlyTypedBinding = ExplicitlyTypedBinding
   { explicitlyTypedBindingId :: !Identifier
   , explicitlyTypedBindingScheme :: !Scheme
   , explicitlyTypedBindingAlternatives :: ![Alternative]
-  }
+  } deriving (Show)
 
 -- | Suppose, for example, that we are about to qualify a type with a
 -- list of predicates ps and that vs lists all known variables, both
@@ -150,7 +150,7 @@ data ExplicitlyTypedBinding = ExplicitlyTypedBinding
 data Ambiguity = Ambiguity
   { ambiguityTypeVariable :: !TypeVariable
   , ambiguityPredicates :: ![Predicate]
-  }
+  } deriving (Show)
 
 -- | An Alt specifies the left and right hand sides of a function
 -- definition. With a more complete syntax for Expr, values of type
@@ -159,25 +159,25 @@ data Ambiguity = Ambiguity
 data Alternative = Alternative
   { alternativePatterns :: ![Pattern]
   , alternativeExpression :: !Expression
-  }
+  } deriving (Show)
 
 -- | Substitutions-finite functions, mapping type variables to
 -- types-play a major role in type inference.
 data Substitution = Substitution
   { substitutionTypeVariable :: !TypeVariable
   , substitutionType :: !Type
-  }
+  } deriving (Show)
 
 -- | A type variable.
 data TypeVariable = TypeVariable
   { typeVariableIdentifier :: !Identifier
   , typeVariableKind :: !Kind
-  } deriving (Eq)
+  } deriving (Eq, Show)
 
 -- | An identifier used for variables.
 newtype Identifier = Identifier
   { identifierString :: String
-  } deriving (Eq, IsString, Ord)
+  } deriving (Eq, IsString, Ord, Show)
 
 -- | Haskell types can be qualified by adding a (possibly empty) list
 -- of predicates, or class constraints, to restrict the ways in which
@@ -185,12 +185,12 @@ newtype Identifier = Identifier
 data Qualified typ = Qualified
   { qualifiedPredicates :: ![Predicate]
   , qualifiedType :: !typ
-  } deriving (Eq)
+  } deriving (Eq, Show)
 
 -- | One of potentially many predicates.
 data Predicate =
   IsIn Identifier [Type]
-  deriving (Eq)
+  deriving (Eq, Show)
 
 -- | A simple Haskell type.
 data Type
@@ -198,13 +198,13 @@ data Type
   | ConstructorType TypeConstructor
   | ApplicationType Type Type
   | GenericType Int
-  deriving (Eq)
+  deriving (Eq, Show)
 
 -- | Kind of a type.
 data Kind
   = StarKind
   | FunctionKind Kind Kind
-  deriving (Eq)
+  deriving (Eq, Show)
 
 -- | A Haskell expression.
 data Expression
@@ -216,6 +216,7 @@ data Expression
   | LambdaExpression Alternative
   | IfExpression Expression Expression Expression
   | CaseExpression Expression [(Pattern, Expression)]
+  deriving (Show)
 
 -- | A pattern match.
 data Pattern
@@ -225,41 +226,60 @@ data Pattern
   | LiteralPattern Literal
   | ConstructorPattern Assumption [Pattern]
   | LazyPattern Pattern
+  deriving (Show)
 
 data Literal
   = IntegerLiteral Integer
   | CharacterLiteral Char
   | RationalLiteral Rational
   | StringLiteral String
+  deriving (Show)
 
 -- | A class environment.
 data ClassEnvironment = ClassEnvironment
   { classEnvironmentClasses :: !(Map Identifier Class)
   , classEnvironmentDefaults :: ![Type]
-  }
+  } deriving (Show)
 
 -- | A class.
 data Class = Class
   { classTypeVariables :: ![TypeVariable]
   , classPredicates :: ![Predicate]
   , classQualifiedPredicates :: ![Qualified Predicate]
-  }
+  } deriving (Show)
 
 -- | A type constructor.
 data TypeConstructor = TypeConstructor
   { typeConstructorIdentifier :: !Identifier
   , typeConstructorKind :: !Kind
-  } deriving (Eq)
+  } deriving (Eq, Show)
 
 -- | A type scheme.
 data Scheme =
   Forall [Kind] (Qualified Type)
-  deriving (Eq)
+  deriving (Eq, Show)
+
+--------------------------------------------------------------------------------
+-- Demo (remove later)
+
+demo :: IO [Assumption]
+demo =
+  typeCheckModule
+    defaultClassEnvironment
+    []
+    [ BindGroup
+        []
+        [[ImplicitlyTypedBinding "x" [Alternative [] (VariableExpression "x")]
+         ,ImplicitlyTypedBinding "f" [Alternative [] (LiteralExpression (StringLiteral "hi"))]
+         ,ImplicitlyTypedBinding "g" [Alternative [] (LiteralExpression (IntegerLiteral 5))]]]
+    ]
 
 --------------------------------------------------------------------------------
 -- Type inference
 
-typeCheckModule :: MonadThrow m => ClassEnvironment -> [Assumption] -> [BindGroup] -> m [Assumption]
+typeCheckModule
+  :: MonadThrow m
+  => ClassEnvironment -> [Assumption] -> [BindGroup] -> m [Assumption]
 typeCheckModule ce as bgs =
   evalStateT
     (runInferT $ do
@@ -269,6 +289,13 @@ typeCheckModule ce as bgs =
        s' <- defaultSubst ce [] rs
        return (map (substituteAssumption (s' @@ s)) as'))
     (InferState nullSubst 0)
+
+defaultClassEnvironment :: ClassEnvironment
+defaultClassEnvironment =
+  ClassEnvironment
+  { classEnvironmentClasses = mempty
+  , classEnvironmentDefaults = [tInteger, tDouble]
+  }
 
 --------------------------------------------------------------------------------
 -- Built-in types and classes
@@ -672,13 +699,6 @@ defined Nothing = False
 modify0 :: ClassEnvironment -> Identifier -> Class -> ClassEnvironment
 modify0 ce i c =
   ce {classEnvironmentClasses = M.insert i c (classEnvironmentClasses ce)}
-
-initialEnv :: ClassEnvironment
-initialEnv =
-  ClassEnvironment
-  { classEnvironmentClasses = mempty
-  , classEnvironmentDefaults = [tInteger, tDouble]
-  }
 
 addClass
   :: MonadThrow m
