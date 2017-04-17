@@ -11,7 +11,7 @@ library
   hs-source-dirs:
     src
   build-depends:
-    base, containers, mtl
+    base, containers, mtl, exceptions
   ghc-options:
     -Wall
   default-language:

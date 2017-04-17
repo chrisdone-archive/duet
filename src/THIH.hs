@@ -32,14 +32,49 @@ module THIH
   , TypeConstructor(..)
   ) where
 
+import           Control.Monad.Catch
 import           Control.Monad.State
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.String
+import           Data.Typeable
 
 --------------------------------------------------------------------------------
 -- Types
+
+-- | Type inference monad.
+newtype InferT m a = InferT
+  { runInferT :: StateT InferState m a
+  } deriving (Monad, Applicative, Functor, MonadThrow)
+
+data InferState = InferState
+  { inferStateSubstitutions :: ![Substitution]
+  , inferStateCounter :: !Int
+  }
+
+data ReadException
+  = ClassAlreadyDefined
+  | NoSuchClassForInstance
+  | OverlappingInstance
+  | UndefinedSuperclass
+  deriving (Show, Typeable)
+instance Exception ReadException
+
+data InferException
+  = SignatureTooGeneral
+  | ContextTooWeak
+  | OccursCheckFails
+  | KindMismatch
+  | TypeMismatch
+  | ListsDoNotUnify
+  | TypeMismatchOneWay
+  | NotInScope
+  | ClassMismatch
+  | MergeFail
+  | AmbiguousInstance
+  deriving (Show, Typeable)
+instance Exception InferException
 
 -- | Assumptions about the type of a variable are represented by
 -- values of the Assump datatype, each of which pairs a variable name
@@ -224,7 +259,7 @@ data Scheme =
 --------------------------------------------------------------------------------
 -- Type inference
 
-typeCheckModule :: Monad m => ClassEnvironment -> [Assumption] -> [BindGroup] -> m [Assumption]
+typeCheckModule :: MonadThrow m => ClassEnvironment -> [Assumption] -> [BindGroup] -> m [Assumption]
 typeCheckModule ce as bgs =
   evalStateT
     (runInferT $ do
@@ -330,17 +365,7 @@ substituteType _ typ = typ
 --------------------------------------------------------------------------------
 -- Type inference
 
--- | Type inferece monad.
-newtype InferT m a = InferT
-  { runInferT :: StateT InferState m a
-  } deriving (Monad, Applicative, Functor)
-
-data InferState = InferState
-  { inferStateSubstitutions :: ![Substitution]
-  , inferStateCounter :: !Int
-  }
-
-unify :: Monad m => Type -> Type -> InferT m ()
+unify :: MonadThrow m => Type -> Type -> InferT m ()
 unify t1 t2 = do
   s <- InferT (gets inferStateSubstitutions)
   u <- unifyTypes (substituteType s t1) (substituteType s t2)
@@ -355,7 +380,7 @@ newVariableType k =
           (VariableType (TypeVariable (enumId (inferStateCounter inferState)) k)))
 
 inferExplicitlyTypedBindingType
-  :: Monad m
+  :: MonadThrow m
   => ClassEnvironment
   -> [Assumption]
   -> ExplicitlyTypedBinding
@@ -372,13 +397,13 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding _ sc alts) = do
       ps' = filter (not . entail ce qs') (map (substitutePredicate s) ps)
   (ds, rs) <- split ce fs gs ps'
   if sc /= sc'
-    then fail "signature too general"
+    then throwM SignatureTooGeneral
     else if not (null rs)
-           then fail "context too weak"
+           then throwM ContextTooWeak
            else return ds
 
 inferImplicitlyTypedBindingsTypes
-  :: Monad m
+  :: MonadThrow m
   => ClassEnvironment
   -> [Assumption]
   -> [ImplicitlyTypedBinding]
@@ -405,7 +430,7 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
          in return (ds, zipWith Assumption is scs')
 
 inferBindGroupTypes
-  :: Monad m
+  :: MonadThrow m
   => ClassEnvironment
   -> [Assumption]
   -> BindGroup
@@ -507,11 +532,11 @@ ambiguities typeVariables predicates =
 
 -- | The unifyTypeVariable function is used for the special case of unifying a
 -- variable u with a type t.
-unifyTypeVariable :: Monad m => TypeVariable -> Type -> m [Substitution]
+unifyTypeVariable :: MonadThrow m => TypeVariable -> Type -> m [Substitution]
 unifyTypeVariable typeVariable typ
   | typ == VariableType typeVariable = return nullSubst
-  | typeVariable `elem` getTypeTypeVariables typ = fail "occurs check fails"
-  | typeVariableKind typeVariable /= typeKind typ = fail "kinds do not match"
+  | typeVariable `elem` getTypeTypeVariables typ = throwM OccursCheckFails
+  | typeVariableKind typeVariable /= typeKind typ = throwM KindMismatch
   | otherwise = return [Substitution typeVariable typ]
 
 unifyPredicates :: Predicate -> Predicate -> Maybe [Substitution]
@@ -520,7 +545,7 @@ unifyPredicates = lift' unifyTypeList
 oneWayMatchPredicate :: Predicate -> Predicate -> Maybe [Substitution]
 oneWayMatchPredicate = lift' oneWayMatchLists
 
-unifyTypes :: Monad m => Type -> Type -> m [Substitution]
+unifyTypes :: MonadThrow m => Type -> Type -> m [Substitution]
 unifyTypes (ApplicationType l r) (ApplicationType l' r') = do
               s1 <- unifyTypes l l'
               s2 <- unifyTypes (substituteType s1 r) (substituteType s1 r')
@@ -529,17 +554,17 @@ unifyTypes (VariableType u) t = unifyTypeVariable u t
 unifyTypes t (VariableType u) = unifyTypeVariable u t
 unifyTypes (ConstructorType tc1) (ConstructorType tc2)
               | tc1 == tc2 = return nullSubst
-unifyTypes _ _ = fail "types do not unify"
+unifyTypes _ _ = throwM TypeMismatch
 
-unifyTypeList :: Monad m => [Type] -> [Type] -> m [Substitution]
+unifyTypeList :: MonadThrow m => [Type] -> [Type] -> m [Substitution]
 unifyTypeList (x:xs) (y:ys) = do
     s1 <- unifyTypes x y
     s2 <- unifyTypeList (map (substituteType s1) xs) (map (substituteType s1) ys)
     return (s2 @@ s1)
 unifyTypeList [] [] = return nullSubst
-unifyTypeList _ _ = fail "lists do not unify"
+unifyTypeList _ _ = throwM ListsDoNotUnify
 
-oneWayMatchType :: Monad m => Type -> Type -> m [Substitution]
+oneWayMatchType :: MonadThrow m => Type -> Type -> m [Substitution]
 oneWayMatchType (ApplicationType l r) (ApplicationType l' r') = do
   sl <- oneWayMatchType l l'
   sr <- oneWayMatchType r r'
@@ -548,9 +573,9 @@ oneWayMatchType (VariableType u) t
   | typeVariableKind u == typeKind t = return [Substitution u t]
 oneWayMatchType (ConstructorType tc1) (ConstructorType tc2)
   | tc1 == tc2 = return nullSubst
-oneWayMatchType _ _ = fail "types do not oneWayMatchType"
+oneWayMatchType _ _ = throwM TypeMismatchOneWay
 
-oneWayMatchLists :: Monad m => [Type] -> [Type] -> m [Substitution]
+oneWayMatchLists :: MonadThrow m => [Type] -> [Type] -> m [Substitution]
 oneWayMatchLists ts ts' = do
     ss <- sequence (zipWith oneWayMatchType ts ts')
     foldM merge nullSubst ss
@@ -559,9 +584,9 @@ oneWayMatchLists ts ts' = do
 -- Garbage
 
 lookupIdentifier
-  :: Monad m
+  :: MonadThrow m
   => Identifier -> [Assumption] -> m Scheme
-lookupIdentifier i [] = fail ("unbound identifier: " ++ identifierString i)
+lookupIdentifier _ [] = throwM NotInScope
 lookupIdentifier i ((Assumption i'  sc):as) =
   if i == i'
     then return sc
@@ -583,7 +608,7 @@ inferLiteralType (RationalLiteral _) = do
   return ([IsIn "Fractional" [v]], v)
 
 tiPat
-  :: Monad m
+  :: MonadThrow m
   => Pattern -> InferT m ([Predicate], [Assumption], Type)
 tiPat (VariablePattern i) = do
   v <- newVariableType StarKind
@@ -606,7 +631,7 @@ tiPat (ConstructorPattern (Assumption _  sc) pats) = do
 tiPat (LazyPattern pat) = tiPat pat
 
 tiPats
-  :: Monad m
+  :: MonadThrow m
   => [Pattern] -> InferT m ([Predicate], [Assumption], [Type])
 tiPats pats = do
   psasts <- mapM tiPat pats
@@ -619,11 +644,11 @@ predHead :: Predicate -> Identifier
 predHead (IsIn i _) = i
 
 lift'
-  :: Monad m
+  :: MonadThrow m
   => ([Type] -> [Type] -> m a) -> Predicate -> Predicate -> m a
 lift' m (IsIn i ts) (IsIn i' ts')
   | i == i' = m ts ts'
-  | otherwise = fail "classes differ"
+  | otherwise = throwM ClassMismatch
 
 sig :: ClassEnvironment -> Identifier -> [TypeVariable]
 sig ce i =
@@ -655,17 +680,23 @@ initialEnv =
   , classEnvironmentDefaults = [tInteger, tDouble]
   }
 
-addClass :: Identifier -> [TypeVariable] -> [Predicate] -> (ClassEnvironment -> Maybe ClassEnvironment)
+addClass
+  :: MonadThrow m
+  => Identifier
+  -> [TypeVariable]
+  -> [Predicate]
+  -> (ClassEnvironment -> m ClassEnvironment)
 addClass i vs ps ce
-  | defined (M.lookup i (classEnvironmentClasses ce)) = fail "class already defined"
+  | defined (M.lookup i (classEnvironmentClasses ce)) = throwM ClassAlreadyDefined
   | any (not . defined . flip M.lookup (classEnvironmentClasses ce) . predHead) ps =
-    fail "superclass not defined"
+    throwM UndefinedSuperclass
   | otherwise = return (modify0 ce i (Class vs ps []))
 
 addInstance :: [Predicate] -> Predicate -> (ClassEnvironment -> Maybe ClassEnvironment)
 addInstance ps p@(IsIn i _) ce
-  | not (defined (M.lookup i (classEnvironmentClasses ce))) = fail "no class for instance"
-  | any (overlap p) qs = fail "overlapping instance"
+  | not (defined (M.lookup i (classEnvironmentClasses ce))) =
+    throwM NoSuchClassForInstance
+  | any (overlap p) qs = throwM OverlappingInstance
   | otherwise = return (modify0 ce i c)
   where
     its = insts ce i
@@ -723,12 +754,12 @@ toScheme :: Type -> Scheme
 toScheme t = Forall [] (Qualified [] t)
 
 merge
-  :: Monad m
+  :: MonadThrow m
   => [Substitution] -> [Substitution] -> m [Substitution]
 merge s1 s2 =
   if agree
     then return (s1 ++ s2)
-    else fail "merge fails"
+    else throwM MergeFail
   where
     agree =
       all
@@ -737,7 +768,7 @@ merge s1 s2 =
          map substitutionTypeVariable s2)
 
 inferExpressionType
-  :: Monad m
+  :: MonadThrow m
   => ClassEnvironment
   -> [Assumption]
   -> Expression
@@ -783,7 +814,7 @@ inferExpressionType ce as (CaseExpression e branches) = do
   return (ps0 ++ concat pss, v)
 
 inferAltType
-  :: Monad m
+  :: MonadThrow m
   => ClassEnvironment
   -> [Assumption]
   -> Alternative
@@ -794,7 +825,7 @@ inferAltType ce as (Alternative pats e) = do
   return (ps ++ qs, foldr makeArrow t ts)
 
 inferAltTypes
-  :: Monad m
+  :: MonadThrow m
   => ClassEnvironment
   -> [Assumption]
   -> [Alternative]
@@ -806,7 +837,7 @@ inferAltTypes ce as alts t = do
   return (concat (map fst psts))
 
 split
-  :: Monad m
+  :: MonadThrow m
   => ClassEnvironment -> [TypeVariable] -> [TypeVariable] -> [Predicate] -> m ([Predicate], [Predicate])
 split ce fs gs ps = do
   let ps' = reduce ce ps
@@ -827,22 +858,22 @@ candidates ce (Ambiguity v qs) =
   ]
 
 withDefaults
-  :: Monad m
+  :: MonadThrow m
   => ([Ambiguity] -> [Type] -> a) -> ClassEnvironment -> [TypeVariable] -> [Predicate] -> m a
 withDefaults f ce vs ps
-  | any null tss = fail "cannot resolve ambiguity"
+  | any null tss = throwM AmbiguousInstance
   | otherwise = return (f vps (map head tss))
   where
     vps = ambiguities vs ps
     tss = map (candidates ce) vps
 
 defaultedPredicates
-  :: Monad m
+  :: MonadThrow m
   => ClassEnvironment -> [TypeVariable] -> [Predicate] -> m [Predicate]
 defaultedPredicates = withDefaults (\vps _ -> concat (map ambiguityPredicates vps))
 
 defaultSubst
-  :: Monad m
+  :: MonadThrow m
   => ClassEnvironment -> [TypeVariable] -> [Predicate] -> m [Substitution]
 defaultSubst = withDefaults (\vps ts -> zipWith Substitution (map ambiguityTypeVariable vps) ts)
 
