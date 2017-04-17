@@ -17,7 +17,6 @@ module THIH
   , Expression(..)
   , Literal(..)
   , Kind(..)
-  , Instantiate(..)
   , Scheme(..)
   , Pattern(..)
   , Assumption(..)
@@ -270,9 +269,6 @@ substituteQualified substitutions (Qualified predicates t) =
     (map (substitutePredicate substitutions) predicates)
     (substituteType substitutions t)
 
-class Instantiate t where
-  instantiate :: [Type] -> t -> t
-
 class OneWayMatch t where
   match :: Monad m => t -> t -> m [Substitution]
 
@@ -351,24 +347,16 @@ instance Monad TI where
 
 type Infer e t = ClassEnvironment -> [Assumption] -> e -> TI ([Predicate], t)
 
-instance Instantiate Type where
-  instantiate ts (ApplicationType l r) = ApplicationType (instantiate ts l) (instantiate ts r)
-  instantiate ts (GenericType n) = ts !! n
-  instantiate _ t = t
+instantiateType :: [Type] -> Type -> Type
+instantiateType ts (ApplicationType l r) = ApplicationType (instantiateType ts l) (instantiateType ts r)
+instantiateType ts (GenericType n) = ts !! n
+instantiateType _ t = t
 
-instance Instantiate a =>
-         Instantiate [a] where
-  instantiate ts = map (instantiate ts)
+instantiateQualified :: [Type] -> Qualified Type -> Qualified Type
+instantiateQualified ts (Qualified ps t) = Qualified (map (instantiatePredicate ts) ps) (instantiateType ts t)
 
-instance Instantiate t =>
-         Instantiate (Qualified t) where
-  instantiate ts (Qualified ps t) = Qualified (instantiate ts ps) (instantiate ts t)
-
-instance Instantiate Predicate where
-  instantiate ts (IsIn c t) = IsIn c (instantiate ts t)
-
-
-
+instantiatePredicate :: [Type] -> Predicate -> Predicate
+instantiatePredicate ts (IsIn c t) = IsIn c (map (instantiateType ts) t)
 
 unifyTypes :: Monad m => Type -> Type -> m [Substitution]
 unifyTypes (ApplicationType l r) (ApplicationType l' r') = do
@@ -800,7 +788,7 @@ newVariableType k =
 freshInst :: Scheme -> TI (Qualified Type)
 freshInst (Forall ks qt) = do
   ts <- mapM newVariableType ks
-  return (instantiate ts qt)
+  return (instantiateQualified ts qt)
 
 tiProgram :: ClassEnvironment -> [Assumption] -> [BindGroup] -> [Assumption]
 tiProgram ce as bgs =
