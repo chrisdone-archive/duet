@@ -270,9 +270,6 @@ substituteQualified substitutions (Qualified predicates t) =
     (map (substitutePredicate substitutions) predicates)
     (substituteType substitutions t)
 
-class MostGeneralUnify t where
-  mostGeneralUnify :: Monad m => t -> t -> m [Substitution]
-
 class Instantiate t where
   instantiate :: [Type] -> t -> t
 
@@ -300,8 +297,8 @@ getPredicateTypeVariables :: Predicate -> [TypeVariable]
 getPredicateTypeVariables = getTypeVariables where
   getTypeVariables (IsIn _ types) = getTypeVariablesOf getTypeTypeVariables types
 
-instance MostGeneralUnify Predicate where
-  mostGeneralUnify = lift mostGeneralUnify
+unifyPredicates :: Predicate -> Predicate -> Maybe [Substitution]
+unifyPredicates = lift unifyTypeList
 
 instance OneWayMatch Predicate where
   match = lift match
@@ -372,24 +369,25 @@ instance Instantiate Predicate where
 
 
 
-instance MostGeneralUnify Type where
-  mostGeneralUnify (ApplicationType l r) (ApplicationType l' r') = do
-    s1 <- mostGeneralUnify l l'
-    s2 <- mostGeneralUnify (substituteType s1 r) (substituteType s1 r')
-    return (s2 @@ s1)
-  mostGeneralUnify (VariableType u) t = unifyTypeVariable u t
-  mostGeneralUnify t (VariableType u) = unifyTypeVariable u t
-  mostGeneralUnify (ConstructorType tc1) (ConstructorType tc2)
-    | tc1 == tc2 = return nullSubst
-  mostGeneralUnify _ _ = fail "types do not unify"
 
-instance MostGeneralUnify [Type] where
-  mostGeneralUnify (x:xs) (y:ys) = do
-    s1 <- mostGeneralUnify x y
-    s2 <- mostGeneralUnify (map (substituteType s1) xs) (map (substituteType s1) ys)
+unifyTypes :: Monad m => Type -> Type -> m [Substitution]
+unifyTypes (ApplicationType l r) (ApplicationType l' r') = do
+              s1 <- unifyTypes l l'
+              s2 <- unifyTypes (substituteType s1 r) (substituteType s1 r')
+              return (s2 @@ s1)
+unifyTypes (VariableType u) t = unifyTypeVariable u t
+unifyTypes t (VariableType u) = unifyTypeVariable u t
+unifyTypes (ConstructorType tc1) (ConstructorType tc2)
+              | tc1 == tc2 = return nullSubst
+unifyTypes _ _ = fail "types do not unify"
+
+unifyTypeList :: Monad m => [Type] -> [Type] -> m [Substitution]
+unifyTypeList (x:xs) (y:ys) = do
+    s1 <- unifyTypes x y
+    s2 <- unifyTypeList (map (substituteType s1) xs) (map (substituteType s1) ys)
     return (s2 @@ s1)
-  mostGeneralUnify [] [] = return nullSubst
-  mostGeneralUnify _ _ = fail "lists do not unify"
+unifyTypeList [] [] = return nullSubst
+unifyTypeList _ _ = fail "lists do not unify"
 
 instance OneWayMatch Type where
   match (ApplicationType l r) (ApplicationType l' r') = do
@@ -523,7 +521,7 @@ addInstance ps p@(IsIn i _) ce
     c = (Class (sig ce i) (super ce i) (Qualified ps p : its))
 
 overlap :: Predicate -> Predicate -> Bool
-overlap p q = defined (mostGeneralUnify p q)
+overlap p q = defined (unifyPredicates p q)
 
 bySuper :: ClassEnvironment -> Predicate -> [Predicate]
 bySuper ce p@(IsIn i ts) = p : concat (map (bySuper ce) supers)
@@ -778,7 +776,7 @@ getSubst = TI (\s n -> (s, n, s))
 unify :: Type -> Type -> TI ()
 unify t1 t2 = do
   s <- getSubst
-  u <- mostGeneralUnify (substituteType s t1) (substituteType s t2)
+  u <- unifyTypes (substituteType s t1) (substituteType s t2)
   extSubst u
 
 trim :: [TypeVariable] -> TI ()
