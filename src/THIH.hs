@@ -325,6 +325,9 @@ getTypeTypeVariables = getTypeVariables where
 getTypeVariablesOf :: (a -> [TypeVariable]) -> [a] -> [TypeVariable]
 getTypeVariablesOf f = nub . concatMap f
 
+--------------------------------------------------------------------------------
+-- Garbage
+
 instance Functor TI where
   fmap = liftM
 
