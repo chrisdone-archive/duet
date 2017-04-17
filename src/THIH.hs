@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# OPTIONS -Wno-incomplete-patterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -10,6 +11,7 @@
 module THIH
   ( typeCheckModule
   , addClass
+  , demo
   , addInstance
   , defaultClassEnvironment
   , Type(..)
@@ -77,8 +79,8 @@ data InferException
 instance Exception InferException
 
 -- | Assumptions about the type of a variable are represented by
--- values of the Assump datatype, each of which pairs a variable name
--- with a type scheme.
+-- values of this datatype, each of which pairs a variable name with a
+-- type scheme.
 data Assumption = Assumption
   { assumptionIdentifier :: Identifier
   , assumptionScheme :: Scheme
@@ -279,6 +281,12 @@ demo = do
                 "func"
                 [Alternative [VariablePattern "k"] (VariableExpression "k")]
             , ImplicitlyTypedBinding
+                "func2"
+                [ Alternative
+                    [VariablePattern "k", VariablePattern "l"]
+                    (VariableExpression "k")
+                ]
+            , ImplicitlyTypedBinding
                 "f"
                 [Alternative [] (LiteralExpression (StringLiteral "hi"))]
             ]
@@ -288,7 +296,80 @@ demo = do
             ]
           ]
       ]
-  mapM_ print assumptions
+  mapM_ (putStrLn . printAssumption) assumptions
+
+--------------------------------------------------------------------------------
+-- Printer
+
+printIdentifier :: Identifier -> String
+printIdentifier (Identifier i) = i
+
+printAssumption :: Assumption -> String
+printAssumption (Assumption identifier scheme) =
+  printIdentifier identifier ++ " :: " ++ printScheme scheme
+
+printScheme :: Scheme -> [Char]
+printScheme (Forall kinds qualifiedType') =
+  (if null kinds
+     then ""
+     else "forall " ++
+          unwords
+            (zipWith
+               (\i k ->
+                  printTypeVariable
+                    (TypeVariable (Identifier ("a" ++ show i)) k))
+               [0 :: Int ..]
+               kinds) ++
+          ". ") ++
+  printQualifiedType qualifiedType'
+
+printKind :: Kind -> [Char]
+printKind =
+  \case
+    StarKind -> "*"
+    FunctionKind x y -> printKind x ++ " -> " ++ printKind y
+
+printQualifiedType :: Qualified Type -> [Char]
+printQualifiedType (Qualified predicates typ) =
+  case predicates of
+    [] -> printType typ
+    _ ->
+      "(" ++
+      intercalate ", " (map printPredicate predicates) ++
+      ") => " ++ printType typ
+
+printType :: Type -> [Char]
+printType =
+  \case
+    VariableType v -> printTypeVariable v
+    ConstructorType tyCon -> printTypeConstructor tyCon
+    ApplicationType (ApplicationType (ConstructorType (TypeConstructor (Identifier "(->)") _)) x) y ->
+      "(" ++ printType x ++ " -> " ++ printType0 y ++ ")"
+      where printType0 =
+              \case
+                ApplicationType (ApplicationType (ConstructorType (TypeConstructor (Identifier "(->)") _)) x') y' ->
+                  printType x' ++ " -> " ++ printType0 y'
+                o -> printType o
+    ApplicationType (ConstructorType (TypeConstructor (Identifier "[]") _)) ty ->
+      "[" ++ printType ty ++ "]"
+    ApplicationType x y -> "(" ++ printType x ++ " " ++ printType y ++ ")"
+    GenericType int -> "a" ++ show int
+
+printTypeConstructor :: TypeConstructor -> String
+printTypeConstructor (TypeConstructor identifier kind) =
+  case kind of
+    StarKind -> printIdentifier identifier
+    _ -> "(" ++ printIdentifier identifier ++ " :: " ++ printKind kind ++ ")"
+
+printTypeVariable :: TypeVariable -> String
+printTypeVariable (TypeVariable identifier kind) =
+  case kind of
+    StarKind -> printIdentifier identifier
+    _ -> "(" ++ printIdentifier identifier ++ " :: " ++ printKind kind ++ ")"
+
+printPredicate :: Predicate -> [Char]
+printPredicate (IsIn identifier types) =
+  "(" ++ printIdentifier identifier ++ " " ++ unwords (map printType types) ++ ")"
 
 --------------------------------------------------------------------------------
 -- Type inference
