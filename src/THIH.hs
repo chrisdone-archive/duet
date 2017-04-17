@@ -239,8 +239,8 @@ restrictImplicitlyTypedBindings = any simple
 -- satisfied by any choice of a default:
 ambiguities :: [TypeVariable] -> [Predicate] -> [Ambiguity]
 ambiguities typeVariables predicates =
-  [ Ambiguity typeVariable (filter (elem typeVariable . getTypeVariables) predicates)
-  | typeVariable <- getAllTypeVariables predicates \\ typeVariables
+  [ Ambiguity typeVariable (filter (elem typeVariable . getPredicateTypeVariables) predicates)
+  | typeVariable <- getTypeVariablesOf getPredicateTypeVariables predicates \\ typeVariables
   ]
 
 -- | The unifyTypeVariable function is used for the special case of unifying a
@@ -248,7 +248,7 @@ ambiguities typeVariables predicates =
 unifyTypeVariable :: Monad m => TypeVariable -> Type -> m [Substitution]
 unifyTypeVariable typeVariable typ
   | typ == VariableType typeVariable = return nullSubst
-  | typeVariable `elem` getTypeVariables typ = fail "occurs check fails"
+  | typeVariable `elem` getTypeTypeVariables typ = fail "occurs check fails"
   | typeVariableKind typeVariable /= typeKind typ = fail "kinds do not match"
   | otherwise = return [Substitution typeVariable typ]
 
@@ -266,9 +266,6 @@ typeKind (ApplicationType typ _) =
 class Substitutable t where
   substitute :: [Substitution] -> t -> t
 
-class HasTypeVariables t where
-  getTypeVariables :: t -> [TypeVariable]
-
 class MostGeneralUnify t where
   mostGeneralUnify :: Monad m => t -> t -> m [Substitution]
 
@@ -282,25 +279,27 @@ instance Substitutable Assumption where
   substitute substitutions (Assumption identifier scheme) =
     Assumption identifier (substitute substitutions scheme)
 
-instance HasTypeVariables Assumption where
-  getTypeVariables (Assumption _  scheme) = getTypeVariables scheme
+getAssumptionTypeVariables :: Assumption -> [TypeVariable]
+getAssumptionTypeVariables = getTypeVariables where
+  getTypeVariables (Assumption _  scheme) = getSchemeTypeVariables scheme
 
 instance Substitutable t =>
          Substitutable (Qualified t) where
   substitute substitutions (Qualified predicates t) =
     Qualified (map(substitute substitutions) predicates) (substitute substitutions t)
 
-instance HasTypeVariables t =>
-         HasTypeVariables (Qualified t) where
+getQualifiedTypeVariables :: Qualified Type -> [TypeVariable]
+getQualifiedTypeVariables = getTypeVariables where
   getTypeVariables (Qualified predicates t) =
-    getAllTypeVariables predicates `union` getTypeVariables t
+    getTypeVariablesOf getPredicateTypeVariables predicates `union` getTypeTypeVariables t
 
 instance Substitutable Predicate where
   substitute substitutions (IsIn identifier types) =
     IsIn identifier (map (substitute substitutions) types)
 
-instance HasTypeVariables Predicate where
-  getTypeVariables (IsIn _ types) = getAllTypeVariables types
+getPredicateTypeVariables :: Predicate -> [TypeVariable]
+getPredicateTypeVariables = getTypeVariables where
+  getTypeVariables (IsIn _ types) = getTypeVariablesOf getTypeTypeVariables types
 
 instance MostGeneralUnify Predicate where
   mostGeneralUnify = lift mostGeneralUnify
@@ -312,8 +311,9 @@ instance Substitutable Scheme where
   substitute substitutions (Forall kinds qualified) =
     Forall kinds (substitute substitutions qualified)
 
-instance HasTypeVariables Scheme where
-  getTypeVariables (Forall _ qualified) = getTypeVariables qualified
+getSchemeTypeVariables :: Scheme -> [TypeVariable]
+getSchemeTypeVariables = getTypeVariables where
+  getTypeVariables (Forall _ qualified) = getQualifiedTypeVariables qualified
 
 instance Substitutable Type where
   substitute substitutions (VariableType typeVariable) =
@@ -326,15 +326,15 @@ instance Substitutable Type where
       (substitute substitutions type2)
   substitute _ typ = typ
 
-instance HasTypeVariables Type where
+getTypeTypeVariables :: Type -> [TypeVariable]
+getTypeTypeVariables = getTypeVariables where
   getTypeVariables (VariableType typeVariable) = [typeVariable]
   getTypeVariables (ApplicationType type1 type2) =
     getTypeVariables type1 `union` getTypeVariables type2
   getTypeVariables _ = []
 
-getAllTypeVariables :: HasTypeVariables a => [a] -> [TypeVariable]
-getAllTypeVariables = nub . concat . map getTypeVariables
-
+getTypeVariablesOf :: (a -> [TypeVariable]) -> [a] -> [TypeVariable]
+getTypeVariablesOf f = nub . concatMap f
 
 instance Functor TI where
   fmap = liftM
@@ -567,7 +567,7 @@ scEntail ce ps p = any (p `elem`) (map (bySuper ce) ps)
 quantify :: [TypeVariable] -> Qualified Type -> Scheme
 quantify vs qt = Forall ks (substitute s qt)
   where
-    vs' = [v | v <- getTypeVariables qt, v `elem` vs]
+    vs' = [v | v <- getQualifiedTypeVariables qt, v `elem` vs]
     ks = map typeVariableKind vs'
     s = zipWith Substitution vs' (map GenericType [0 ..])
 
@@ -657,7 +657,7 @@ split
   => ClassEnvironment -> [TypeVariable] -> [TypeVariable] -> [Predicate] -> m ([Predicate], [Predicate])
 split ce fs gs ps = do
   let ps' = reduce ce ps
-      (ds, rs) = partition (all (`elem` fs) . getTypeVariables) ps'
+      (ds, rs) = partition (all (`elem` fs) . getPredicateTypeVariables) ps'
   rs' <- defaultedPredicates ce (fs ++ gs) rs
   return (ds, rs \\ rs')
 
@@ -719,8 +719,8 @@ tiExpl ce as (ExplicitlyTypedBinding _ sc alts) = do
   s <- getSubst
   let qs' = map (substitute s) qs
       t' = substitute s t
-      fs = getAllTypeVariables (map (substitute s) as)
-      gs = getTypeVariables t' \\ fs
+      fs = getTypeVariablesOf getAssumptionTypeVariables (map (substitute s) as)
+      gs = getTypeTypeVariables t' \\ fs
       sc' = quantify gs (Qualified qs' t')
       ps' = filter (not . entail ce qs') (map (substitute s) ps)
   (ds, rs) <- split ce fs gs ps'
@@ -741,12 +741,12 @@ tiImpls ce as bs = do
   s <- getSubst
   let ps' = map (substitute s) (concat pss)
       ts' = map (substitute s) ts
-      fs = getAllTypeVariables (map (substitute s) as)
-      vss = map getTypeVariables ts'
+      fs = getTypeVariablesOf getAssumptionTypeVariables (map (substitute s) as)
+      vss = map getTypeTypeVariables ts'
       gs = foldr1 union vss \\ fs
   (ds, rs) <- split ce fs (foldr1 intersect vss) ps'
   if restrictImplicitlyTypedBindings bs
-    then let gs' = gs \\ getAllTypeVariables rs
+    then let gs' = gs \\ getTypeVariablesOf getPredicateTypeVariables rs
              scs' = map (quantify gs' . (Qualified [])) ts'
          in return (ds ++ rs, zipWith Assumption is scs')
     else let scs' = map (quantify gs . (Qualified rs)) ts'
@@ -788,7 +788,7 @@ trim vs =
   TI
     (\s n ->
        let s' = [(Substitution v t) | (Substitution v t) <- s, v `elem` vs]
-           force = length (getAllTypeVariables (map substitutionType s'))
+           force = length (getTypeVariablesOf getTypeTypeVariables (map substitutionType s'))
        in force `seq` (s', n, ()))
 
 extSubst :: [Substitution] -> TI ()
@@ -818,7 +818,7 @@ tiProgram ce as bgs =
 tiBindGroup' :: ClassEnvironment -> [Assumption] -> BindGroup -> TI ([Predicate], [Assumption])
 tiBindGroup' ce as bs = do
   (ps, as') <- tiBindGroup ce as bs
-  trim (getAllTypeVariables (as' ++ as))
+  trim (getTypeVariablesOf getAssumptionTypeVariables (as' ++ as))
   return (ps, as')
 
 tiProgram' :: ClassEnvironment -> [Assumption] -> [BindGroup] -> [Assumption]
