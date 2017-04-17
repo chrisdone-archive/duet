@@ -269,9 +269,6 @@ substituteQualified substitutions (Qualified predicates t) =
     (map (substitutePredicate substitutions) predicates)
     (substituteType substitutions t)
 
-class OneWayMatch t where
-  match :: Monad m => t -> t -> m [Substitution]
-
 substituteAssumption :: [Substitution] -> Assumption -> Assumption
 substituteAssumption substitutions (Assumption identifier scheme) =
     Assumption identifier (substituteInScheme substitutions scheme)
@@ -296,8 +293,8 @@ getPredicateTypeVariables = getTypeVariables where
 unifyPredicates :: Predicate -> Predicate -> Maybe [Substitution]
 unifyPredicates = lift unifyTypeList
 
-instance OneWayMatch Predicate where
-  match = lift match
+oneWayMatchPredicate :: Predicate -> Predicate -> Maybe [Substitution]
+oneWayMatchPredicate = lift oneWayMatchLists
 
 substituteInScheme :: [Substitution] -> Scheme -> Scheme
 substituteInScheme substitutions (Forall kinds qualified) =
@@ -377,21 +374,21 @@ unifyTypeList (x:xs) (y:ys) = do
 unifyTypeList [] [] = return nullSubst
 unifyTypeList _ _ = fail "lists do not unify"
 
-instance OneWayMatch Type where
-  match (ApplicationType l r) (ApplicationType l' r') = do
-    sl <- match l l'
-    sr <- match r r'
-    merge sl sr
-  match (VariableType u) t
-    | typeVariableKind u == typeKind t = return [Substitution u t]
-  match (ConstructorType tc1) (ConstructorType tc2)
-    | tc1 == tc2 = return nullSubst
-  match _ _ = fail "types do not match"
 
-instance OneWayMatch t =>
-         OneWayMatch [t] where
-  match ts ts' = do
-    ss <- sequence (zipWith match ts ts')
+oneWayMatchType :: Monad m => Type -> Type -> m [Substitution]
+oneWayMatchType (ApplicationType l r) (ApplicationType l' r') = do
+  sl <- oneWayMatchType l l'
+  sr <- oneWayMatchType r r'
+  merge sl sr
+oneWayMatchType (VariableType u) t
+  | typeVariableKind u == typeKind t = return [Substitution u t]
+oneWayMatchType (ConstructorType tc1) (ConstructorType tc2)
+  | tc1 == tc2 = return nullSubst
+oneWayMatchType _ _ = fail "types do not oneWayMatchType"
+
+oneWayMatchLists :: Monad m => [Type] -> [Type] -> m [Substitution]
+oneWayMatchLists ts ts' = do
+    ss <- sequence (zipWith oneWayMatchType ts ts')
     foldM merge nullSubst ss
 
 findId
@@ -521,7 +518,7 @@ byInst :: ClassEnvironment -> Predicate -> Maybe [Predicate]
 byInst ce p@(IsIn i _) = msum [tryInst it | it <- insts ce i]
   where
     tryInst (Qualified ps h) = do
-      u <- match h p
+      u <- oneWayMatchPredicate h p
       Just (map (substitutePredicate u) ps)
 
 entail :: ClassEnvironment -> [Predicate] -> Predicate -> Bool
