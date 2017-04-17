@@ -262,17 +262,33 @@ data Scheme =
 --------------------------------------------------------------------------------
 -- Demo (remove later)
 
-demo :: IO [Assumption]
-demo =
-  typeCheckModule
-    defaultClassEnvironment
-    []
-    [ BindGroup
-        []
-        [[ImplicitlyTypedBinding "x" [Alternative [] (VariableExpression "x")]
-         ,ImplicitlyTypedBinding "f" [Alternative [] (LiteralExpression (StringLiteral "hi"))]
-         ,ImplicitlyTypedBinding "g" [Alternative [] (LiteralExpression (IntegerLiteral 5))]]]
-    ]
+demo :: IO ()
+demo = do
+  env <- addClass "Num" [TypeVariable "n" StarKind] [] defaultClassEnvironment
+  env' <- addInstance [] (IsIn "Num" [tInteger]) env
+  assumptions <-
+    typeCheckModule
+      env'
+      []
+      [ BindGroup
+          []
+          [ [ ImplicitlyTypedBinding
+                "x"
+                [Alternative [] (VariableExpression "x")]
+            , ImplicitlyTypedBinding
+                "func"
+                [Alternative [VariablePattern "k"] (VariableExpression "k")]
+            , ImplicitlyTypedBinding
+                "f"
+                [Alternative [] (LiteralExpression (StringLiteral "hi"))]
+            ]
+          , [ ImplicitlyTypedBinding
+                "g"
+                [Alternative [] (LiteralExpression (IntegerLiteral 5))]
+            ]
+          ]
+      ]
+  mapM_ print assumptions
 
 --------------------------------------------------------------------------------
 -- Type inference
@@ -705,14 +721,17 @@ addClass
   => Identifier
   -> [TypeVariable]
   -> [Predicate]
-  -> (ClassEnvironment -> m ClassEnvironment)
+  -> ClassEnvironment
+  -> m ClassEnvironment
 addClass i vs ps ce
   | defined (M.lookup i (classEnvironmentClasses ce)) = throwM ClassAlreadyDefined
   | any (not . defined . flip M.lookup (classEnvironmentClasses ce) . predHead) ps =
     throwM UndefinedSuperclass
   | otherwise = return (modify0 ce i (Class vs ps []))
 
-addInstance :: [Predicate] -> Predicate -> (ClassEnvironment -> Maybe ClassEnvironment)
+addInstance
+  :: MonadThrow m
+  => [Predicate] -> Predicate -> ClassEnvironment -> m ClassEnvironment
 addInstance ps p@(IsIn i _) ce
   | not (defined (M.lookup i (classEnvironmentClasses ce))) =
     throwM NoSuchClassForInstance
