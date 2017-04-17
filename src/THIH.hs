@@ -8,11 +8,10 @@
 -- P. Jones.
 
 module THIH
-  ( tiProgram
+  ( typeCheckModule
   , addClass
   , addInstance
   , initialEnv
-  , tiProgram'
   , Type(..)
   , Expression(..)
   , Literal(..)
@@ -222,7 +221,167 @@ data Scheme =
   deriving (Eq)
 
 --------------------------------------------------------------------------------
--- Functions (to be split up later)
+-- Type inference
+
+typeCheckModule :: ClassEnvironment -> [Assumption] -> [BindGroup] -> [Assumption]
+typeCheckModule ce as bgs =
+  runTI $ do
+    (ps, as') <- tiSeq tiBindGroup ce as bgs
+    s <- getSubst
+    let rs = reduce ce (map (substitutePredicate s) ps)
+    s' <- defaultSubst ce [] rs
+    return (map (substituteAssumption (s' @@ s)) as')
+
+--------------------------------------------------------------------------------
+-- Built-in types and classes
+
+boolType :: Type
+boolType = ConstructorType (TypeConstructor "Bool" StarKind)
+
+charType :: Type
+charType = ConstructorType (TypeConstructor "Char" StarKind)
+
+stringType :: Type
+stringType = makeListType charType
+
+makeListType :: Type -> Type
+makeListType t = ApplicationType listType t
+
+listType :: Type
+listType = ConstructorType (TypeConstructor "[]" (FunctionKind StarKind StarKind))
+
+makeArrow :: Type -> Type -> Type
+a `makeArrow` b = ApplicationType (ApplicationType tArrow a) b
+
+tInteger :: Type
+tInteger = ConstructorType (TypeConstructor "Integer" StarKind)
+
+tDouble :: Type
+tDouble = ConstructorType (TypeConstructor "Double" StarKind)
+
+tArrow :: Type
+tArrow =
+  ConstructorType
+    (TypeConstructor
+       "(->)"
+       (FunctionKind StarKind (FunctionKind StarKind StarKind)))
+
+numClasses :: [Identifier]
+numClasses =
+  ["Num", "Integral", "Floating", "Fractional", "Real", "RealFloat", "RealFrac"]
+
+stdClasses :: [Identifier]
+stdClasses =
+  [ "Eq"
+  , "Ord"
+  , "Show"
+  , "Read"
+  , "Bounded"
+  , "Enum"
+  , "Ix"
+  , "Functor"
+  , "Monad"
+  , "MonadPlus"
+  ] ++
+  numClasses
+
+--------------------------------------------------------------------------------
+-- Substitution
+
+infixr 4 @@
+(@@) :: [Substitution] -> [Substitution] -> [Substitution]
+s1 @@ s2 = [Substitution u (substituteType s1 t) | (Substitution u t) <- s2] ++ s1
+
+nullSubst :: [Substitution]
+nullSubst = []
+
+substituteQualified :: [Substitution] -> Qualified Type -> Qualified Type
+substituteQualified substitutions (Qualified predicates t) =
+  Qualified
+    (map (substitutePredicate substitutions) predicates)
+    (substituteType substitutions t)
+
+substituteAssumption :: [Substitution] -> Assumption -> Assumption
+substituteAssumption substitutions (Assumption identifier scheme) =
+    Assumption identifier (substituteInScheme substitutions scheme)
+
+substitutePredicate :: [Substitution] -> Predicate -> Predicate
+substitutePredicate substitutions (IsIn identifier types) =
+    IsIn identifier (map (substituteType substitutions) types)
+
+substituteInScheme :: [Substitution] -> Scheme -> Scheme
+substituteInScheme substitutions (Forall kinds qualified) =
+  Forall kinds (substituteQualified substitutions qualified)
+
+substituteType :: [Substitution] -> Type -> Type
+substituteType substitutions (VariableType typeVariable) =
+    case find ((== typeVariable) . substitutionTypeVariable) substitutions of
+      Just substitution -> substitutionType substitution
+      Nothing -> VariableType typeVariable
+substituteType substitutions (ApplicationType type1 type2) =
+    ApplicationType
+      (substituteType substitutions type1)
+      (substituteType substitutions type2)
+substituteType _ typ = typ
+
+--------------------------------------------------------------------------------
+-- Instantiation
+
+instantiateType :: [Type] -> Type -> Type
+instantiateType ts (ApplicationType l r) =
+  ApplicationType (instantiateType ts l) (instantiateType ts r)
+instantiateType ts (GenericType n) = ts !! n
+instantiateType _ t = t
+
+instantiateQualified :: [Type] -> Qualified Type -> Qualified Type
+instantiateQualified ts (Qualified ps t) =
+  Qualified (map (instantiatePredicate ts) ps) (instantiateType ts t)
+
+instantiatePredicate :: [Type] -> Predicate -> Predicate
+instantiatePredicate ts (IsIn c t) = IsIn c (map (instantiateType ts) t)
+
+--------------------------------------------------------------------------------
+-- Type variables
+
+getAssumptionTypeVariables :: Assumption -> [TypeVariable]
+getAssumptionTypeVariables = getTypeVariables where
+  getTypeVariables (Assumption _  scheme) = getSchemeTypeVariables scheme
+
+getQualifiedTypeVariables :: Qualified Type -> [TypeVariable]
+getQualifiedTypeVariables = getTypeVariables
+  where
+    getTypeVariables (Qualified predicates t) =
+      getTypeVariablesOf getPredicateTypeVariables predicates `union`
+      getTypeTypeVariables t
+
+getPredicateTypeVariables :: Predicate -> [TypeVariable]
+getPredicateTypeVariables = getTypeVariables where
+  getTypeVariables (IsIn _ types) = getTypeVariablesOf getTypeTypeVariables types
+
+getSchemeTypeVariables :: Scheme -> [TypeVariable]
+getSchemeTypeVariables = getTypeVariables where
+  getTypeVariables (Forall _ qualified) = getQualifiedTypeVariables qualified
+
+getTypeTypeVariables :: Type -> [TypeVariable]
+getTypeTypeVariables = getTypeVariables where
+  getTypeVariables (VariableType typeVariable) = [typeVariable]
+  getTypeVariables (ApplicationType type1 type2) =
+    getTypeVariables type1 `union` getTypeVariables type2
+  getTypeVariables _ = []
+
+getTypeVariablesOf :: (a -> [TypeVariable]) -> [a] -> [TypeVariable]
+getTypeVariablesOf f = nub . concatMap f
+
+-- | Get the kind of a type.
+typeKind :: Type -> Kind
+typeKind (ConstructorType typeConstructor) = typeConstructorKind typeConstructor
+typeKind (VariableType typeVariable) = typeVariableKind typeVariable
+typeKind (ApplicationType typ _) =
+  case (typeKind typ) of
+    (FunctionKind _ kind) -> kind
+
+--------------------------------------------------------------------------------
+-- GOOD NAMING CONVENTION, UNSORTED
 
 -- | The monomorphism restriction is invoked when one or more of the
 -- entries in a list of implicitly typed bindings is simple, meaning
@@ -252,78 +411,46 @@ unifyTypeVariable typeVariable typ
   | typeVariableKind typeVariable /= typeKind typ = fail "kinds do not match"
   | otherwise = return [Substitution typeVariable typ]
 
--- | Get the kind of a type.
-typeKind :: Type -> Kind
-typeKind (ConstructorType typeConstructor) = typeConstructorKind typeConstructor
-typeKind (VariableType typeVariable) = typeVariableKind typeVariable
-typeKind (ApplicationType typ _) =
-  case (typeKind typ) of
-    (FunctionKind _ kind) -> kind
-
---------------------------------------------------------------------------------
--- Good naming convention, but undocumented
-
-substituteQualified :: [Substitution] -> Qualified Type -> Qualified Type
-substituteQualified substitutions (Qualified predicates t) =
-  Qualified
-    (map (substitutePredicate substitutions) predicates)
-    (substituteType substitutions t)
-
-substituteAssumption :: [Substitution] -> Assumption -> Assumption
-substituteAssumption substitutions (Assumption identifier scheme) =
-    Assumption identifier (substituteInScheme substitutions scheme)
-
-getAssumptionTypeVariables :: Assumption -> [TypeVariable]
-getAssumptionTypeVariables = getTypeVariables where
-  getTypeVariables (Assumption _  scheme) = getSchemeTypeVariables scheme
-
-getQualifiedTypeVariables :: Qualified Type -> [TypeVariable]
-getQualifiedTypeVariables = getTypeVariables where
-  getTypeVariables (Qualified predicates t) =
-    getTypeVariablesOf getPredicateTypeVariables predicates `union` getTypeTypeVariables t
-
-substitutePredicate :: [Substitution] -> Predicate -> Predicate
-substitutePredicate substitutions (IsIn identifier types) =
-    IsIn identifier (map (substituteType substitutions) types)
-
-getPredicateTypeVariables :: Predicate -> [TypeVariable]
-getPredicateTypeVariables = getTypeVariables where
-  getTypeVariables (IsIn _ types) = getTypeVariablesOf getTypeTypeVariables types
-
 unifyPredicates :: Predicate -> Predicate -> Maybe [Substitution]
 unifyPredicates = lift unifyTypeList
 
 oneWayMatchPredicate :: Predicate -> Predicate -> Maybe [Substitution]
 oneWayMatchPredicate = lift oneWayMatchLists
 
-substituteInScheme :: [Substitution] -> Scheme -> Scheme
-substituteInScheme substitutions (Forall kinds qualified) =
-  Forall kinds (substituteQualified substitutions qualified)
+unifyTypes :: Monad m => Type -> Type -> m [Substitution]
+unifyTypes (ApplicationType l r) (ApplicationType l' r') = do
+              s1 <- unifyTypes l l'
+              s2 <- unifyTypes (substituteType s1 r) (substituteType s1 r')
+              return (s2 @@ s1)
+unifyTypes (VariableType u) t = unifyTypeVariable u t
+unifyTypes t (VariableType u) = unifyTypeVariable u t
+unifyTypes (ConstructorType tc1) (ConstructorType tc2)
+              | tc1 == tc2 = return nullSubst
+unifyTypes _ _ = fail "types do not unify"
 
-getSchemeTypeVariables :: Scheme -> [TypeVariable]
-getSchemeTypeVariables = getTypeVariables where
-  getTypeVariables (Forall _ qualified) = getQualifiedTypeVariables qualified
+unifyTypeList :: Monad m => [Type] -> [Type] -> m [Substitution]
+unifyTypeList (x:xs) (y:ys) = do
+    s1 <- unifyTypes x y
+    s2 <- unifyTypeList (map (substituteType s1) xs) (map (substituteType s1) ys)
+    return (s2 @@ s1)
+unifyTypeList [] [] = return nullSubst
+unifyTypeList _ _ = fail "lists do not unify"
 
-substituteType :: [Substitution] -> Type -> Type
-substituteType substitutions (VariableType typeVariable) =
-    case find ((== typeVariable) . substitutionTypeVariable) substitutions of
-      Just substitution -> substitutionType substitution
-      Nothing -> VariableType typeVariable
-substituteType substitutions (ApplicationType type1 type2) =
-    ApplicationType
-      (substituteType substitutions type1)
-      (substituteType substitutions type2)
-substituteType _ typ = typ
+oneWayMatchType :: Monad m => Type -> Type -> m [Substitution]
+oneWayMatchType (ApplicationType l r) (ApplicationType l' r') = do
+  sl <- oneWayMatchType l l'
+  sr <- oneWayMatchType r r'
+  merge sl sr
+oneWayMatchType (VariableType u) t
+  | typeVariableKind u == typeKind t = return [Substitution u t]
+oneWayMatchType (ConstructorType tc1) (ConstructorType tc2)
+  | tc1 == tc2 = return nullSubst
+oneWayMatchType _ _ = fail "types do not oneWayMatchType"
 
-getTypeTypeVariables :: Type -> [TypeVariable]
-getTypeTypeVariables = getTypeVariables where
-  getTypeVariables (VariableType typeVariable) = [typeVariable]
-  getTypeVariables (ApplicationType type1 type2) =
-    getTypeVariables type1 `union` getTypeVariables type2
-  getTypeVariables _ = []
-
-getTypeVariablesOf :: (a -> [TypeVariable]) -> [a] -> [TypeVariable]
-getTypeVariablesOf f = nub . concatMap f
+oneWayMatchLists :: Monad m => [Type] -> [Type] -> m [Substitution]
+oneWayMatchLists ts ts' = do
+    ss <- sequence (zipWith oneWayMatchType ts ts')
+    foldM merge nullSubst ss
 
 --------------------------------------------------------------------------------
 -- Garbage
@@ -347,71 +474,24 @@ instance Monad TI where
 
 type Infer e t = ClassEnvironment -> [Assumption] -> e -> TI ([Predicate], t)
 
-instantiateType :: [Type] -> Type -> Type
-instantiateType ts (ApplicationType l r) = ApplicationType (instantiateType ts l) (instantiateType ts r)
-instantiateType ts (GenericType n) = ts !! n
-instantiateType _ t = t
-
-instantiateQualified :: [Type] -> Qualified Type -> Qualified Type
-instantiateQualified ts (Qualified ps t) = Qualified (map (instantiatePredicate ts) ps) (instantiateType ts t)
-
-instantiatePredicate :: [Type] -> Predicate -> Predicate
-instantiatePredicate ts (IsIn c t) = IsIn c (map (instantiateType ts) t)
-
-unifyTypes :: Monad m => Type -> Type -> m [Substitution]
-unifyTypes (ApplicationType l r) (ApplicationType l' r') = do
-              s1 <- unifyTypes l l'
-              s2 <- unifyTypes (substituteType s1 r) (substituteType s1 r')
-              return (s2 @@ s1)
-unifyTypes (VariableType u) t = unifyTypeVariable u t
-unifyTypes t (VariableType u) = unifyTypeVariable u t
-unifyTypes (ConstructorType tc1) (ConstructorType tc2)
-              | tc1 == tc2 = return nullSubst
-unifyTypes _ _ = fail "types do not unify"
-
-unifyTypeList :: Monad m => [Type] -> [Type] -> m [Substitution]
-unifyTypeList (x:xs) (y:ys) = do
-    s1 <- unifyTypes x y
-    s2 <- unifyTypeList (map (substituteType s1) xs) (map (substituteType s1) ys)
-    return (s2 @@ s1)
-unifyTypeList [] [] = return nullSubst
-unifyTypeList _ _ = fail "lists do not unify"
-
-
-oneWayMatchType :: Monad m => Type -> Type -> m [Substitution]
-oneWayMatchType (ApplicationType l r) (ApplicationType l' r') = do
-  sl <- oneWayMatchType l l'
-  sr <- oneWayMatchType r r'
-  merge sl sr
-oneWayMatchType (VariableType u) t
-  | typeVariableKind u == typeKind t = return [Substitution u t]
-oneWayMatchType (ConstructorType tc1) (ConstructorType tc2)
-  | tc1 == tc2 = return nullSubst
-oneWayMatchType _ _ = fail "types do not oneWayMatchType"
-
-oneWayMatchLists :: Monad m => [Type] -> [Type] -> m [Substitution]
-oneWayMatchLists ts ts' = do
-    ss <- sequence (zipWith oneWayMatchType ts ts')
-    foldM merge nullSubst ss
-
-findId
+lookupIdentifier
   :: Monad m
   => Identifier -> [Assumption] -> m Scheme
-findId i [] = fail ("unbound identifier: " ++ identifierString i)
-findId i ((Assumption i'  sc):as) =
+lookupIdentifier i [] = fail ("unbound identifier: " ++ identifierString i)
+lookupIdentifier i ((Assumption i'  sc):as) =
   if i == i'
     then return sc
-    else findId i as
+    else lookupIdentifier i as
 
 enumId :: Int -> Identifier
 enumId n = Identifier ("v" ++ show n)
 
 tiLit :: Literal -> TI ([Predicate], Type)
-tiLit (CharacterLiteral _) = return ([], tChar)
+tiLit (CharacterLiteral _) = return ([], charType)
 tiLit (IntegerLiteral _) = do
   v <- newVariableType StarKind
   return ([IsIn "Num" [v]], v)
-tiLit (StringLiteral _) = return ([], tString)
+tiLit (StringLiteral _) = return ([], stringType)
 tiLit (RationalLiteral _) = do
   v <- newVariableType StarKind
   return ([IsIn "Fractional" [v]], v)
@@ -433,7 +513,7 @@ tiPat (ConstructorPattern (Assumption _  sc) pats) = do
   (ps, as, ts) <- tiPats pats
   t' <- newVariableType StarKind
   (Qualified qs t) <- freshInst sc
-  unify t (foldr fn t' ts)
+  unify t (foldr makeArrow t' ts)
   return (ps ++ qs, as, t')
 tiPat (LazyPattern pat) = tiPat pat
 
@@ -558,14 +638,6 @@ quantify vs qt = Forall ks (substituteQualified s qt)
 toScheme :: Type -> Scheme
 toScheme t = Forall [] (Qualified [] t)
 
-nullSubst :: [Substitution]
-nullSubst = []
-
-infixr 4 @@
-
-(@@) :: [Substitution] -> [Substitution] -> [Substitution]
-s1 @@ s2 = [Substitution u (substituteType s1 t) | (Substitution u t) <- s2] ++ s1
-
 merge
   :: Monad m
   => [Substitution] -> [Substitution] -> m [Substitution]
@@ -580,12 +652,9 @@ merge s1 s2 =
         (map substitutionTypeVariable s1 `intersect`
          map substitutionTypeVariable s2)
 
-tBool :: Type
-tBool = ConstructorType (TypeConstructor "Bool" StarKind)
-
 tiExpression :: Infer Expression Type
 tiExpression _ as (VariableExpression i) = do
-  sc <- findId i as
+  sc <- lookupIdentifier i as
   (Qualified ps t) <- freshInst sc
   return (ps, t)
 tiExpression _ _ (ConstantExpression (Assumption _  sc)) = do
@@ -598,7 +667,7 @@ tiExpression ce as (ApplicationExpression e f) = do
   (ps, te) <- tiExpression ce as e
   (qs, tf) <- tiExpression ce as f
   t <- newVariableType StarKind
-  unify (tf `fn` t) te
+  unify (tf `makeArrow` t) te
   return (ps ++ qs, t)
 tiExpression ce as (LetExpression bg e) = do
   (ps, as') <- tiBindGroup ce as bg
@@ -607,7 +676,7 @@ tiExpression ce as (LetExpression bg e) = do
 tiExpression ce as (LambdaExpression alt) = tiAlt ce as alt
 tiExpression ce as (IfExpression e e1 e2) = do
   (ps, t) <- tiExpression ce as e
-  unify t tBool
+  unify t boolType
   (ps1, t1) <- tiExpression ce as e1
   (ps2, t2) <- tiExpression ce as e2
   unify t1 t2
@@ -628,7 +697,7 @@ tiAlt :: Infer Alternative Type
 tiAlt ce as (Alternative pats e) = do
   (ps, as', ts) <- tiPats pats
   (qs, t) <- tiExpression ce (as' ++ as) e
-  return (ps ++ qs, foldr fn t ts)
+  return (ps ++ qs, foldr makeArrow t ts)
 
 tiAlts :: ClassEnvironment -> [Assumption] -> [Alternative] -> Type -> TI [Predicate]
 tiAlts ce as alts t = do
@@ -644,25 +713,6 @@ split ce fs gs ps = do
       (ds, rs) = partition (all (`elem` fs) . getPredicateTypeVariables) ps'
   rs' <- defaultedPredicates ce (fs ++ gs) rs
   return (ds, rs \\ rs')
-
-numClasses :: [Identifier]
-numClasses =
-  ["Num", "Integral", "Floating", "Fractional", "Real", "RealFloat", "RealFrac"]
-
-stdClasses :: [Identifier]
-stdClasses =
-  [ "Eq"
-  , "Ord"
-  , "Show"
-  , "Read"
-  , "Bounded"
-  , "Enum"
-  , "Ix"
-  , "Functor"
-  , "Monad"
-  , "MonadPlus"
-  ] ++
-  numClasses
 
 candidates :: ClassEnvironment -> Ambiguity -> [Type]
 candidates ce (Ambiguity v qs) =
@@ -767,14 +817,6 @@ unify t1 t2 = do
   u <- unifyTypes (substituteType s t1) (substituteType s t2)
   extSubst u
 
-trim :: [TypeVariable] -> TI ()
-trim vs =
-  TI
-    (\s n ->
-       let s' = [(Substitution v t) | (Substitution v t) <- s, v `elem` vs]
-           force = length (getTypeVariablesOf getTypeTypeVariables (map substitutionType s'))
-       in force `seq` (s', n, ()))
-
 extSubst :: [Substitution] -> TI ()
 extSubst s' = TI (\s n -> (s' @@ s, n, ()))
 
@@ -789,52 +831,3 @@ freshInst :: Scheme -> TI (Qualified Type)
 freshInst (Forall ks qt) = do
   ts <- mapM newVariableType ks
   return (instantiateQualified ts qt)
-
-tiProgram :: ClassEnvironment -> [Assumption] -> [BindGroup] -> [Assumption]
-tiProgram ce as bgs =
-  runTI $ do
-    (ps, as') <- tiSeq tiBindGroup ce as bgs
-    s <- getSubst
-    let rs = reduce ce (map (substitutePredicate s) ps)
-    s' <- defaultSubst ce [] rs
-    return (map (substituteAssumption (s' @@ s)) as')
-
-tiBindGroup' :: ClassEnvironment -> [Assumption] -> BindGroup -> TI ([Predicate], [Assumption])
-tiBindGroup' ce as bs = do
-  (ps, as') <- tiBindGroup ce as bs
-  trim (getTypeVariablesOf getAssumptionTypeVariables (as' ++ as))
-  return (ps, as')
-
-tiProgram' :: ClassEnvironment -> [Assumption] -> [BindGroup] -> [Assumption]
-tiProgram' ce as bgs =
-  runTI $ do
-    (ps, as') <- tiSeq tiBindGroup' ce as bgs
-    s <- getSubst
-    let rs = reduce ce (map (substitutePredicate s) ps)
-    s' <- defaultSubst ce [] rs
-    return (map (substituteAssumption (s' @@ s)) as')
-
-tChar :: Type
-tChar = ConstructorType (TypeConstructor "Char" StarKind)
-
-tString :: Type
-tString = list tChar
-
-list :: Type -> Type
-list t = ApplicationType tList t
-
-tList :: Type
-tList = ConstructorType (TypeConstructor "[]" (FunctionKind StarKind StarKind))
-
-
-fn :: Type -> Type -> Type
-a `fn` b = ApplicationType (ApplicationType tArrow a) b
-
-tInteger :: Type
-tInteger = ConstructorType (TypeConstructor "Integer" StarKind)
-
-tDouble :: Type
-tDouble = ConstructorType (TypeConstructor "Double" StarKind)
-
-tArrow :: Type
-tArrow = ConstructorType (TypeConstructor "(->)" (FunctionKind StarKind (FunctionKind StarKind StarKind)))
