@@ -18,38 +18,3 @@ library
     Haskell2010
   exposed-modules:
     THIH
-
-test-suite thih-test
-  type:
-    exitcode-stdio-1.0
-  hs-source-dirs:
-    test
-  main-is:
-    Main.hs
-  build-depends:
-    base, thih
-  ghc-options:
-    -Wall
-  default-language:
-    Haskell2010
-  other-modules:
-    HaskellList
-    HaskellMaybe
-    HaskellMonad
-    HaskellPrelude
-    HaskellPrims
-    HaskellTest
-    HaskellThih
-    SourceList
-    SourceMaybe
-    SourceMonad
-    SourcePrelude
-    SourceTest
-    SourceThih
-    StaticList
-    StaticMaybe
-    StaticMonad
-    StaticPrelude
-    StaticTest
-    StaticThih
-    Testbed

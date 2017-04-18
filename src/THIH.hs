@@ -9,37 +9,47 @@
 -- P. Jones.
 
 module THIH
-  ( typeCheckModule
+  (
+  -- * Type checker
+  -- $type-checker
+    typeCheckModule
+  , InferException(..)
+  -- * Setting up
   , addClass
-  , demo
   , addInstance
-  , defaultClassEnvironment
-  , printAssumption
+  , ClassEnvironment(..)
+  , ReadException(..)
+  -- * Printers
+  , printTypeSignature
+  -- * Types syntax tree
   , Type(..)
-  , Expression(..)
-  , Literal(..)
   , Kind(..)
   , Scheme(..)
-  , Pattern(..)
-  , Assumption(..)
-  , ClassEnvironment(..)
-  , BindGroup(..)
-  , ImplicitlyTypedBinding(..)
-  , ExplicitlyTypedBinding(..)
-  , Alternative(..)
+  , TypeSignature(..)
   , TypeVariable(..)
   , Qualified(..)
   , Class(..)
-  , Identifier(..)
   , Predicate(..)
   , TypeConstructor(..)
+  -- * Values syntax tree
+  , ImplicitlyTypedBinding(..)
+  , ExplicitlyTypedBinding(..)
+  , Expression(..)
+  , Literal(..)
+  , Pattern(..)
+  , BindGroup(..)
+  , Alternative(..)
+  -- * Identifiers
+  , Identifier(..)
   ) where
 
 import           Control.Monad.Catch
 import           Control.Monad.State
+import           Data.Function
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+import           Data.Monoid
 import           Data.String
 import           Data.Typeable
 
@@ -51,11 +61,14 @@ newtype InferT m a = InferT
   { runInferT :: StateT InferState m a
   } deriving (Monad, Applicative, Functor, MonadThrow)
 
+-- | State of inferring.
 data InferState = InferState
   { inferStateSubstitutions :: ![Substitution]
   , inferStateCounter :: !Int
   } deriving (Show)
 
+-- | An exception that may be thrown when reading in source code,
+-- before we do any type-checking.
 data ReadException
   = ClassAlreadyDefined
   | NoSuchClassForInstance
@@ -64,6 +77,7 @@ data ReadException
   deriving (Show, Typeable)
 instance Exception ReadException
 
+-- | A type error.
 data InferException
   = SignatureTooGeneral
   | ContextTooWeak
@@ -79,12 +93,12 @@ data InferException
   deriving (Show, Typeable)
 instance Exception InferException
 
--- | Assumptions about the type of a variable are represented by
+-- | TypeSignatures about the type of a variable are represented by
 -- values of this datatype, each of which pairs a variable name with a
 -- type scheme.
-data Assumption = Assumption
-  { assumptionIdentifier :: Identifier
-  , assumptionScheme :: Scheme
+data TypeSignature = TypeSignature
+  { typeSignatureIdentifier :: Identifier
+  , typeSignatureScheme :: Scheme
   } deriving (Show)
 
 -- | The first component in each such pair lists any explicitly typed
@@ -213,7 +227,7 @@ data Kind
 data Expression
   = VariableExpression Identifier
   | LiteralExpression Literal
-  | ConstantExpression Assumption
+  | ConstantExpression TypeSignature
   | ApplicationExpression Expression Expression
   | LetExpression BindGroup Expression
   | LambdaExpression Alternative
@@ -227,7 +241,7 @@ data Pattern
   | WildcardPattern
   | AsPattern Identifier Pattern
   | LiteralPattern Literal
-  | ConstructorPattern Assumption [Pattern]
+  | ConstructorPattern TypeSignature [Pattern]
   | LazyPattern Pattern
   deriving (Show)
 
@@ -243,6 +257,13 @@ data ClassEnvironment = ClassEnvironment
   { classEnvironmentClasses :: !(Map Identifier Class)
   , classEnvironmentDefaults :: ![Type]
   } deriving (Show)
+
+instance Monoid ClassEnvironment where
+  mempty = ClassEnvironment mempty mempty
+  mappend x y =
+    ClassEnvironment
+      (on (<>) classEnvironmentClasses x y)
+      (on (<>) classEnvironmentDefaults x y)
 
 -- | A class.
 data Class = Class
@@ -267,12 +288,22 @@ data Scheme =
 
 demo :: IO ()
 demo = do
-  env <- addClass "Num" [TypeVariable "n" StarKind] [] defaultClassEnvironment
+  env <-
+    addClass
+      "Num"
+      [TypeVariable "n" StarKind]
+      []
+      mempty {classEnvironmentDefaults = [tInteger]}
   env' <- addInstance [] (IsIn "Num" [tInteger]) env
   assumptions <-
     typeCheckModule
       env'
-      []
+      [ TypeSignature
+          "id"
+          (Forall
+             [StarKind]
+             (Qualified [] (makeArrow (GenericType 0) (GenericType 0))))
+      ]
       [ BindGroup
           [ ExplicitlyTypedBinding
               "x"
@@ -288,7 +319,7 @@ demo = do
                 [Alternative [] (VariableExpression "x")]
             , ImplicitlyTypedBinding
                 "func"
-                [Alternative [VariablePattern "k"] (VariableExpression "k")]
+                [Alternative [VariablePattern "k"] (VariableExpression "id")]
             , ImplicitlyTypedBinding
                 "func2"
                 [ Alternative
@@ -305,7 +336,10 @@ demo = do
             ]
           ]
       ]
-  mapM_ (putStrLn . printAssumption) assumptions
+  mapM_ (putStrLn . printTypeSignature) assumptions
+  where
+    tInteger :: Type
+    tInteger = ConstructorType (TypeConstructor "Integer" StarKind)
 
 --------------------------------------------------------------------------------
 -- Printer
@@ -313,8 +347,8 @@ demo = do
 printIdentifier :: Identifier -> String
 printIdentifier (Identifier i) = i
 
-printAssumption :: Assumption -> String
-printAssumption (Assumption identifier scheme) =
+printTypeSignature :: TypeSignature -> String
+printTypeSignature (TypeSignature identifier scheme) =
   printIdentifier identifier ++ " :: " ++ printScheme scheme
 
 printScheme :: Scheme -> [Char]
@@ -384,10 +418,27 @@ printPredicate (IsIn identifier types) =
 
 --------------------------------------------------------------------------------
 -- Type inference
+--
 
+-- $type-checker
+--
+-- The type checker takes a module and produces a list of type
+-- signatures. It checks that all types unify, and infers the types of
+-- unannotated expressions. It resolves type-class instances.
+
+-- | Type check the given module and produce a list of type
+-- signatures.
+--
+-- >>> fmap (map printTypeSignature) (typeCheckModule mempty [] [BindGroup [] [[ImplicitlyTypedBinding (Identifier "id") [Alternative [VariablePattern (Identifier "x")] (VariableExpression (Identifier "x"))]]]])
+-- ["id :: forall a0. a0 -> a0"]
+--
+-- Throws 'InferException' in case of a type error.
 typeCheckModule
   :: MonadThrow m
-  => ClassEnvironment -> [Assumption] -> [BindGroup] -> m [Assumption]
+  => ClassEnvironment -- ^ Set of defined type-classes.
+  -> [TypeSignature]     -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
+  -> [BindGroup]      -- ^ Bindings in the module.
+  -> m [TypeSignature]   -- ^ Inferred types for all identifiers.
 typeCheckModule ce as bgs =
   evalStateT
     (runInferT $ do
@@ -395,15 +446,8 @@ typeCheckModule ce as bgs =
        s <- InferT (gets inferStateSubstitutions)
        let rs = reduce ce (map (substitutePredicate s) ps)
        s' <- defaultSubst ce [] rs
-       return (map (substituteAssumption (s' @@ s)) as'))
+       return (map (substituteTypeSignature (s' @@ s)) as'))
     (InferState nullSubst 0)
-
-defaultClassEnvironment :: ClassEnvironment
-defaultClassEnvironment =
-  ClassEnvironment
-  { classEnvironmentClasses = mempty
-  , classEnvironmentDefaults = [tInteger, tDouble]
-  }
 
 --------------------------------------------------------------------------------
 -- Built-in types and classes
@@ -425,12 +469,6 @@ listType = ConstructorType (TypeConstructor "[]" (FunctionKind StarKind StarKind
 
 makeArrow :: Type -> Type -> Type
 a `makeArrow` b = ApplicationType (ApplicationType tArrow a) b
-
-tInteger :: Type
-tInteger = ConstructorType (TypeConstructor "Integer" StarKind)
-
-tDouble :: Type
-tDouble = ConstructorType (TypeConstructor "Double" StarKind)
 
 tArrow :: Type
 tArrow =
@@ -474,9 +512,9 @@ substituteQualified substitutions (Qualified predicates t) =
     (map (substitutePredicate substitutions) predicates)
     (substituteType substitutions t)
 
-substituteAssumption :: [Substitution] -> Assumption -> Assumption
-substituteAssumption substitutions (Assumption identifier scheme) =
-    Assumption identifier (substituteInScheme substitutions scheme)
+substituteTypeSignature :: [Substitution] -> TypeSignature -> TypeSignature
+substituteTypeSignature substitutions (TypeSignature identifier scheme) =
+    TypeSignature identifier (substituteInScheme substitutions scheme)
 
 substitutePredicate :: [Substitution] -> Predicate -> Predicate
 substitutePredicate substitutions (IsIn identifier types) =
@@ -517,7 +555,7 @@ newVariableType k =
 inferExplicitlyTypedBindingType
   :: MonadThrow m
   => ClassEnvironment
-  -> [Assumption]
+  -> [TypeSignature]
   -> ExplicitlyTypedBinding
   -> InferT m [Predicate]
 inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding _ sc alts) = do
@@ -526,7 +564,7 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding _ sc alts) = do
   s <- InferT (gets inferStateSubstitutions)
   let qs' = map (substitutePredicate s) qs
       t' = substituteType s t
-      fs = getTypeVariablesOf getAssumptionTypeVariables (map (substituteAssumption s) as)
+      fs = getTypeVariablesOf getTypeSignatureTypeVariables (map (substituteTypeSignature s) as)
       gs = getTypeTypeVariables t' \\ fs
       sc' = quantify gs (Qualified qs' t')
       ps' = filter (not . entail ce qs') (map (substitutePredicate s) ps)
@@ -540,38 +578,38 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding _ sc alts) = do
 inferImplicitlyTypedBindingsTypes
   :: MonadThrow m
   => ClassEnvironment
-  -> [Assumption]
+  -> [TypeSignature]
   -> [ImplicitlyTypedBinding]
-  -> InferT m ([Predicate], [Assumption])
+  -> InferT m ([Predicate], [TypeSignature])
 inferImplicitlyTypedBindingsTypes ce as bs = do
   ts <- mapM (\_ -> newVariableType StarKind) bs
   let is = map implicitlyTypedBindingId bs
       scs = map toScheme ts
-      as' = zipWith Assumption is scs ++ as
+      as' = zipWith TypeSignature is scs ++ as
       altss = map implicitlyTypedBindingAlternatives bs
   pss <- sequence (zipWith (inferAltTypes ce as') altss ts)
   s <- InferT (gets inferStateSubstitutions)
   let ps' = map (substitutePredicate s) (concat pss)
       ts' = map (substituteType s) ts
-      fs = getTypeVariablesOf getAssumptionTypeVariables (map (substituteAssumption s) as)
+      fs = getTypeVariablesOf getTypeSignatureTypeVariables (map (substituteTypeSignature s) as)
       vss = map getTypeTypeVariables ts'
       gs = foldr1 union vss \\ fs
   (ds, rs) <- split ce fs (foldr1 intersect vss) ps'
   if restrictImplicitlyTypedBindings bs
     then let gs' = gs \\ getTypeVariablesOf getPredicateTypeVariables rs
              scs' = map (quantify gs' . (Qualified [])) ts'
-         in return (ds ++ rs, zipWith Assumption is scs')
+         in return (ds ++ rs, zipWith TypeSignature is scs')
     else let scs' = map (quantify gs . (Qualified rs)) ts'
-         in return (ds, zipWith Assumption is scs')
+         in return (ds, zipWith TypeSignature is scs')
 
 inferBindGroupTypes
   :: MonadThrow m
   => ClassEnvironment
-  -> [Assumption]
+  -> [TypeSignature]
   -> BindGroup
-  -> InferT m ([Predicate], [Assumption])
+  -> InferT m ([Predicate], [TypeSignature])
 inferBindGroupTypes ce as (BindGroup es iss) = do
-  let as' = [Assumption v sc | ExplicitlyTypedBinding v sc _alts <- es]
+  let as' = [TypeSignature v sc | ExplicitlyTypedBinding v sc _alts <- es]
   (ps, as'') <-
     inferSequenceTypes inferImplicitlyTypedBindingsTypes ce (as' ++ as) iss
   qss <- mapM (inferExplicitlyTypedBindingType ce (as'' ++ as' ++ as)) es
@@ -579,8 +617,8 @@ inferBindGroupTypes ce as (BindGroup es iss) = do
 
 inferSequenceTypes
   :: Monad m
-  => (ClassEnvironment -> [Assumption] -> bg -> InferT m ([Predicate], [Assumption]))
-  -> (ClassEnvironment -> [Assumption] -> [bg] -> InferT m ([Predicate], [Assumption]))
+  => (ClassEnvironment -> [TypeSignature] -> bg -> InferT m ([Predicate], [TypeSignature]))
+  -> (ClassEnvironment -> [TypeSignature] -> [bg] -> InferT m ([Predicate], [TypeSignature]))
 inferSequenceTypes _ _ _ [] = return ([], [])
 inferSequenceTypes ti ce as (bs:bss) = do
   (ps, as') <- ti ce as bs
@@ -606,9 +644,9 @@ instantiatePredicate ts (IsIn c t) = IsIn c (map (instantiateType ts) t)
 --------------------------------------------------------------------------------
 -- Type variables
 
-getAssumptionTypeVariables :: Assumption -> [TypeVariable]
-getAssumptionTypeVariables = getTypeVariables where
-  getTypeVariables (Assumption _  scheme) = getSchemeTypeVariables scheme
+getTypeSignatureTypeVariables :: TypeSignature -> [TypeVariable]
+getTypeSignatureTypeVariables = getTypeVariables where
+  getTypeVariables (TypeSignature _  scheme) = getSchemeTypeVariables scheme
 
 getQualifiedTypeVariables :: Qualified Type -> [TypeVariable]
 getQualifiedTypeVariables = getTypeVariables
@@ -720,9 +758,9 @@ oneWayMatchLists ts ts' = do
 
 lookupIdentifier
   :: MonadThrow m
-  => Identifier -> [Assumption] -> m Scheme
+  => Identifier -> [TypeSignature] -> m Scheme
 lookupIdentifier _ [] = throwM NotInScope
-lookupIdentifier i ((Assumption i'  sc):as) =
+lookupIdentifier i ((TypeSignature i'  sc):as) =
   if i == i'
     then return sc
     else lookupIdentifier i as
@@ -742,34 +780,34 @@ inferLiteralType (RationalLiteral _) = do
   v <- newVariableType StarKind
   return ([IsIn "Fractional" [v]], v)
 
-tiPat
+inferPattern
   :: MonadThrow m
-  => Pattern -> InferT m ([Predicate], [Assumption], Type)
-tiPat (VariablePattern i) = do
+  => Pattern -> InferT m ([Predicate], [TypeSignature], Type)
+inferPattern (VariablePattern i) = do
   v <- newVariableType StarKind
-  return ([], [Assumption i (toScheme v)], v)
-tiPat WildcardPattern = do
+  return ([], [TypeSignature i (toScheme v)], v)
+inferPattern WildcardPattern = do
   v <- newVariableType StarKind
   return ([], [], v)
-tiPat (AsPattern i pat) = do
-  (ps, as, t) <- tiPat pat
-  return (ps, (Assumption i (toScheme t)) : as, t)
-tiPat (LiteralPattern l) = do
+inferPattern (AsPattern i pat) = do
+  (ps, as, t) <- inferPattern pat
+  return (ps, (TypeSignature i (toScheme t)) : as, t)
+inferPattern (LiteralPattern l) = do
   (ps, t) <- inferLiteralType l
   return (ps, [], t)
-tiPat (ConstructorPattern (Assumption _  sc) pats) = do
-  (ps, as, ts) <- tiPats pats
+inferPattern (ConstructorPattern (TypeSignature _  sc) pats) = do
+  (ps, as, ts) <- inferPatterns pats
   t' <- newVariableType StarKind
   (Qualified qs t) <- freshInst sc
   unify t (foldr makeArrow t' ts)
   return (ps ++ qs, as, t')
-tiPat (LazyPattern pat) = tiPat pat
+inferPattern (LazyPattern pat) = inferPattern pat
 
-tiPats
+inferPatterns
   :: MonadThrow m
-  => [Pattern] -> InferT m ([Predicate], [Assumption], [Type])
-tiPats pats = do
-  psasts <- mapM tiPat pats
+  => [Pattern] -> InferT m ([Predicate], [TypeSignature], [Type])
+inferPatterns pats = do
+  psasts <- mapM inferPattern pats
   let ps = concat [ps' | (ps', _, _) <- psasts]
       as = concat [as' | (_, as', _) <- psasts]
       ts = [t | (_, _, t) <- psasts]
@@ -808,6 +846,13 @@ modify0 :: ClassEnvironment -> Identifier -> Class -> ClassEnvironment
 modify0 ce i c =
   ce {classEnvironmentClasses = M.insert i c (classEnvironmentClasses ce)}
 
+-- | Add a class to the environment. Example:
+--
+-- @
+-- env <- addClass (Identifier \"Num\") [TypeVariable (Identifier \"n\") StarKind] [] mempty
+-- @
+--
+-- Throws 'ReadException' in the case of error.
 addClass
   :: MonadThrow m
   => Identifier
@@ -821,6 +866,13 @@ addClass i vs ps ce
     throwM UndefinedSuperclass
   | otherwise = return (modify0 ce i (Class vs ps []))
 
+-- | Add an instance of a class. Example:
+--
+-- @
+-- env <- addInstance [] (IsIn (Identifier \"Num\") [ConstructorType (TypeConstructor (Identifier \"Integer\") StarKind)]) mempty
+-- @
+--
+-- Throws 'ReadException' in the case of error.
 addInstance
   :: MonadThrow m
   => [Predicate] -> Predicate -> ClassEnvironment -> m ClassEnvironment
@@ -901,14 +953,14 @@ merge s1 s2 =
 inferExpressionType
   :: MonadThrow m
   => ClassEnvironment
-  -> [Assumption]
+  -> [TypeSignature]
   -> Expression
   -> InferT m ([Predicate], Type)
 inferExpressionType _ as (VariableExpression i) = do
   sc <- lookupIdentifier i as
   (Qualified ps t) <- freshInst sc
   return (ps, t)
-inferExpressionType _ _ (ConstantExpression (Assumption _  sc)) = do
+inferExpressionType _ _ (ConstantExpression (TypeSignature _  sc)) = do
   (Qualified ps t) <- freshInst sc
   return (ps, t)
 inferExpressionType _ _ (LiteralExpression l) = do
@@ -936,7 +988,7 @@ inferExpressionType ce as (CaseExpression e branches) = do
   (ps0, t) <- inferExpressionType ce as e
   v <- newVariableType StarKind
   let tiBr (pat, f) = do
-        (ps, as', t') <- tiPat pat
+        (ps, as', t') <- inferPattern pat
         unify t t'
         (qs, t'') <- inferExpressionType ce (as' ++ as) f
         unify v t''
@@ -947,18 +999,18 @@ inferExpressionType ce as (CaseExpression e branches) = do
 inferAltType
   :: MonadThrow m
   => ClassEnvironment
-  -> [Assumption]
+  -> [TypeSignature]
   -> Alternative
   -> InferT m ([Predicate], Type)
 inferAltType ce as (Alternative pats e) = do
-  (ps, as', ts) <- tiPats pats
+  (ps, as', ts) <- inferPatterns pats
   (qs, t) <- inferExpressionType ce (as' ++ as) e
   return (ps ++ qs, foldr makeArrow t ts)
 
 inferAltTypes
   :: MonadThrow m
   => ClassEnvironment
-  -> [Assumption]
+  -> [TypeSignature]
   -> [Alternative]
   -> Type
   -> InferT m [Predicate]
