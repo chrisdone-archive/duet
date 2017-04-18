@@ -264,6 +264,9 @@ data Scheme =
 --------------------------------------------------------------------------------
 -- Demo (remove later)
 
+x :: Num a => a
+x = x
+
 demo :: IO ()
 demo = do
   env <- addClass "Num" [TypeVariable "n" StarKind] [] defaultClassEnvironment
@@ -273,7 +276,15 @@ demo = do
       env'
       []
       [ BindGroup
-          []
+          [ ExplicitlyTypedBinding
+              "x"
+              (Forall
+                 [StarKind]
+                 (Qualified
+                    [IsIn "Num" [(GenericType 0)]]
+                    (makeArrow (GenericType 0) (GenericType 0))))
+              [Alternative [VariablePattern "k"] (VariableExpression "k")]
+          ]
           [ [ ImplicitlyTypedBinding
                 "x"
                 [Alternative [] (VariableExpression "x")]
