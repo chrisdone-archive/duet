@@ -14,6 +14,7 @@ module THIH
   , demo
   , addInstance
   , defaultClassEnvironment
+  , printAssumption
   , Type(..)
   , Expression(..)
   , Literal(..)
