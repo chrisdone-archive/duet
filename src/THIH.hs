@@ -338,16 +338,23 @@ printKind :: Kind -> [Char]
 printKind =
   \case
     StarKind -> "*"
-    FunctionKind x y -> printKind x ++ " -> " ++ printKind y
+    FunctionKind x' y -> printKind x' ++ " -> " ++ printKind y
 
 printQualifiedType :: Qualified Type -> [Char]
 printQualifiedType (Qualified predicates typ) =
   case predicates of
-    [] -> printType typ
+    [] -> printTypeSansParens typ
     _ ->
       "(" ++
       intercalate ", " (map printPredicate predicates) ++
-      ") => " ++ printType typ
+      ") => " ++ printTypeSansParens typ
+
+printTypeSansParens :: Type -> [Char]
+printTypeSansParens =
+  \case
+    ApplicationType (ApplicationType (ConstructorType (TypeConstructor (Identifier "(->)") _)) x') y' ->
+      printType x' ++ " -> " ++ printTypeSansParens y'
+    o -> printType o
 
 printType :: Type -> [Char]
 printType =
@@ -355,15 +362,10 @@ printType =
     VariableType v -> printTypeVariable v
     ConstructorType tyCon -> printTypeConstructor tyCon
     ApplicationType (ApplicationType (ConstructorType (TypeConstructor (Identifier "(->)") _)) x) y ->
-      "(" ++ printType x ++ " -> " ++ printType0 y ++ ")"
-      where printType0 =
-              \case
-                ApplicationType (ApplicationType (ConstructorType (TypeConstructor (Identifier "(->)") _)) x') y' ->
-                  printType x' ++ " -> " ++ printType0 y'
-                o -> printType o
+      "(" ++ printType x ++ " -> " ++ printTypeSansParens y ++ ")"
     ApplicationType (ConstructorType (TypeConstructor (Identifier "[]") _)) ty ->
-      "[" ++ printType ty ++ "]"
-    ApplicationType x y -> "(" ++ printType x ++ " " ++ printType y ++ ")"
+      "[" ++ printTypeSansParens ty ++ "]"
+    ApplicationType x' y -> "(" ++ printType x' ++ " " ++ printType y ++ ")"
     GenericType int -> "a" ++ show int
 
 printTypeConstructor :: TypeConstructor -> String
