@@ -264,9 +264,6 @@ data Scheme =
 --------------------------------------------------------------------------------
 -- Demo (remove later)
 
-x :: Num a => a
-x = x
-
 demo :: IO ()
 demo = do
   env <- addClass "Num" [TypeVariable "n" StarKind] [] defaultClassEnvironment
@@ -361,8 +358,8 @@ printType =
   \case
     VariableType v -> printTypeVariable v
     ConstructorType tyCon -> printTypeConstructor tyCon
-    ApplicationType (ApplicationType (ConstructorType (TypeConstructor (Identifier "(->)") _)) x) y ->
-      "(" ++ printType x ++ " -> " ++ printTypeSansParens y ++ ")"
+    ApplicationType (ApplicationType (ConstructorType (TypeConstructor (Identifier "(->)") _)) x') y ->
+      "(" ++ printType x' ++ " -> " ++ printTypeSansParens y ++ ")"
     ApplicationType (ConstructorType (TypeConstructor (Identifier "[]") _)) ty ->
       "[" ++ printTypeSansParens ty ++ "]"
     ApplicationType x' y -> "(" ++ printType x' ++ " " ++ printType y ++ ")"
