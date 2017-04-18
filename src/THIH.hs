@@ -380,7 +380,7 @@ printTypeVariable (TypeVariable identifier kind) =
 
 printPredicate :: Predicate -> [Char]
 printPredicate (IsIn identifier types) =
-  "(" ++ printIdentifier identifier ++ " " ++ unwords (map printType types) ++ ")"
+  printIdentifier identifier ++ " " ++ unwords (map printType types)
 
 --------------------------------------------------------------------------------
 -- Type inference
