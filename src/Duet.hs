@@ -9,7 +9,7 @@
 -- type checker adapted from Typing Haskell In Haskell, by Mark
 -- P. Jones.
 
-module THIH
+module Duet
   (
   -- * Type checker
   -- $type-checker

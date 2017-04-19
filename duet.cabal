@@ -1,5 +1,5 @@
 name:
-  thih
+  duet
 version:
   0
 cabal-version:
@@ -17,4 +17,4 @@ library
   default-language:
     Haskell2010
   exposed-modules:
-    THIH
+    Duet
