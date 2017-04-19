@@ -1,3 +1,4 @@
-# thih
+# Duet
 
-Refactored codebase of Typing Haskell in Haskell by Mark P. Jones.
+A programming language focused on interactive collaboration between
+the developer and the computer.
