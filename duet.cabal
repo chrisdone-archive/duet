@@ -11,7 +11,11 @@ library
   hs-source-dirs:
     src
   build-depends:
-    base, containers, mtl, exceptions
+    base,
+    containers,
+    mtl,
+    exceptions,
+    parsec
   ghc-options:
     -Wall
   default-language:

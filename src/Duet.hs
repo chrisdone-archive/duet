@@ -48,6 +48,7 @@ module Duet
 
 import           Control.Monad.Catch
 import           Control.Monad.State
+import           Data.Char
 import           Data.Function
 import           Data.List
 import           Data.Map.Strict (Map)
@@ -56,6 +57,8 @@ import           Data.Monoid
 import           Data.String
 import           Data.Typeable
 import           Debug.Trace
+import           Text.Parsec
+import           Text.Parsec.String
 
 -- Demo (remove later)
 
@@ -68,6 +71,8 @@ demo = do
       []
       mempty {classEnvironmentDefaults = [tInteger]}
   env' <- addInstance [] (IsIn "Num" [tInteger]) env
+  let Right xid1 = parse implicitlyTypedBindingParser "" "onOne f = (f 1)"
+  print xid1
   assumptions <-
     typeCheckModule
       env'
@@ -79,36 +84,36 @@ demo = do
       ]
       defaultSpecialTypes
       [ BindGroup
-          (if True
-              then [ ExplicitlyTypedBinding
-                       "top_k"
-                       (Forall
-                          [StarKind]
-                          (Qualified
-                             [IsIn "Num" [(GenericType 0)]]
-                             (makeArrow (GenericType 0) (GenericType 0))))
-                       [Alternative [VariablePattern "k"] (VariableExpression "k")]
-                   ]
-              else [])
+          ([ ExplicitlyTypedBinding
+               "explicitlyTyped"
+               (Forall
+                  [StarKind]
+                  (Qualified
+                     [IsIn "Num" [(GenericType 0)]]
+                     (makeArrow (GenericType 0) (GenericType 0))))
+               [Alternative [VariablePattern "k"] (VariableExpression "k")]
+           ])
           [ [ ImplicitlyTypedBinding
-                "top_x"
-                [Alternative [] (VariableExpression "top_x")]
+                "loop"
+                [Alternative [] (VariableExpression "loop")]
             , ImplicitlyTypedBinding
-                "top_func"
+                "ignoreId"
                 [Alternative [VariablePattern "k"] (VariableExpression "id")]
             , ImplicitlyTypedBinding
-                "top_func2"
+                "const"
                 [ Alternative
                     [VariablePattern "k", VariablePattern "l"]
                     (VariableExpression "k")
                 ]
             , ImplicitlyTypedBinding
-                "top_f"
+                "someString"
                 [Alternative [] (LiteralExpression (StringLiteral "hi"))]
             ],
            [ ImplicitlyTypedBinding
-                "top_g"
+                "someInt"
                 [Alternative [] (LiteralExpression (IntegerLiteral 5))]
+            ]
+          ,[ xid1
             ]
           ]
       ]
@@ -326,6 +331,40 @@ data Scheme =
   deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
+-- Parser
+
+implicitlyTypedBindingParser :: Parser ImplicitlyTypedBinding
+implicitlyTypedBindingParser = do
+  identifier <- identifierParser
+  alternative <- alternativeParser
+  pure (ImplicitlyTypedBinding identifier [alternative])
+
+identifierParser :: Parser Identifier
+identifierParser = fmap Identifier (many1 (satisfy isAlphaNum))
+
+alternativeParser :: Parser Alternative
+alternativeParser = do
+  patterns <- many (spaces*>patternParser<*spaces)
+  _ <- string "="
+  spaces
+  expression <- expressionParser
+  pure (Alternative patterns expression)
+
+patternParser :: Parser Pattern
+patternParser = variableParser
+  where variableParser = VariablePattern <$> identifierParser
+
+expressionParser :: Parser Expression
+expressionParser = integralParser <|> applicationParser <|> variableParser
+  where
+    integralParser = (LiteralExpression . IntegerLiteral . read) <$> many1 digit
+    applicationParser =
+      string "(" *>
+      (ApplicationExpression <$> variableParser <*> (spaces *> expressionParser) <*
+       string ")")
+    variableParser = VariableExpression <$> identifierParser
+
+--------------------------------------------------------------------------------
 -- Printer
 
 printIdentifier :: Identifier -> String
@@ -338,13 +377,17 @@ printTypeSignature specialTypes (ExpressionSignature expression scheme) =
    "expression " ++ printExpression expression ++ " :: " ++ printScheme specialTypes scheme
 
 printExpression :: Expression -> String
-printExpression = \case
-                     LiteralExpression l -> printLiteral l
-                     VariableExpression i -> printIdentifier i
-                     e -> show e
+printExpression =
+  \case
+    LiteralExpression l -> printLiteral l
+    VariableExpression i -> printIdentifier i
+    ApplicationExpression f x ->
+      "(" ++ printExpression f ++ " " ++ printExpression x ++ ")"
+    e -> show e
 
 printLiteral :: Literal -> String
 printLiteral (IntegerLiteral i) = show i
+printLiteral (StringLiteral x) = show x
 printLiteral l = show l
 
 printScheme :: SpecialTypes -> Scheme -> [Char]
@@ -356,7 +399,7 @@ printScheme specialTypes (Forall kinds qualifiedType') =
             (zipWith
                (\i k ->
                   printTypeVariable
-                    (TypeVariable (Identifier ("a" ++ show i)) k))
+                    (TypeVariable (Identifier ("g" ++ show i)) k))
                [0 :: Int ..]
                kinds) ++
           ". ") ++
@@ -396,7 +439,7 @@ printType specialTypes =
     ApplicationType list ty | list == specialTypesList specialTypes ->
       "[" ++ printTypeSansParens specialTypes ty ++ "]"
     ApplicationType x' y -> "(" ++ printType specialTypes x' ++ " " ++ printType specialTypes y ++ ")"
-    GenericType int -> "a" ++ show int
+    GenericType int -> "g" ++ show int
   where printTypeConstructor (TypeConstructor identifier kind) =
           case kind of
             StarKind -> printIdentifier identifier
