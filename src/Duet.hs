@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
@@ -56,7 +58,6 @@ import qualified Data.Map.Strict as M
 import           Data.Monoid
 import           Data.String
 import           Data.Typeable
-import           Debug.Trace
 import           Text.Parsec
 import           Text.Parsec.String
 
@@ -71,7 +72,7 @@ demo = do
       []
       mempty {classEnvironmentDefaults = [tInteger]}
   env' <- addInstance [] (IsIn "Num" [tInteger]) env
-  let Right xid1 = parse implicitlyTypedBindingParser "" "onOne f = (f 1)"
+  let Right xid1 = fmap (fmap (const ())) (parse implicitlyTypedBindingParser "" "onOne f = (f 1)")
   print xid1
   assumptions <-
     typeCheckModule
@@ -91,27 +92,27 @@ demo = do
                   (Qualified
                      [IsIn "Num" [(GenericType 0)]]
                      (makeArrow (GenericType 0) (GenericType 0))))
-               [Alternative [VariablePattern "k"] (VariableExpression "k")]
+               [Alternative [VariablePattern "k"] (VariableExpression () "k")]
            ])
           [ [ ImplicitlyTypedBinding
                 "loop"
-                [Alternative [] (VariableExpression "loop")]
+                [Alternative [] (VariableExpression () "loop")]
             , ImplicitlyTypedBinding
                 "ignoreId"
-                [Alternative [VariablePattern "k"] (VariableExpression "id")]
+                [Alternative [VariablePattern "k"] (VariableExpression () "id")]
             , ImplicitlyTypedBinding
                 "const"
                 [ Alternative
                     [VariablePattern "k", VariablePattern "l"]
-                    (VariableExpression "k")
+                    (VariableExpression () "k")
                 ]
             , ImplicitlyTypedBinding
                 "someString"
-                [Alternative [] (LiteralExpression (StringLiteral "hi"))]
+                [Alternative [] (LiteralExpression () (StringLiteral "hi"))]
             ],
            [ ImplicitlyTypedBinding
                 "someInt"
-                [Alternative [] (LiteralExpression (IntegerLiteral 5))]
+                [Alternative [] (LiteralExpression () (IntegerLiteral 5))]
             ]
           ,[ xid1
             ]
@@ -145,7 +146,7 @@ data InferState = InferState
   { inferStateSubstitutions :: ![Substitution]
   , inferStateCounter :: !Int
   , inferStateSpecialTypes :: !SpecialTypes
-  , inferStateExpressionTypes :: ![(Expression, Scheme)]
+  -- , inferStateExpressionTypes :: ![(Expression (), Scheme)]
   } deriving (Show)
 
 -- | An exception that may be thrown when reading in source code,
@@ -176,18 +177,17 @@ instance Exception InferException
 
 data TypeSignature
   = IdentifierSignature Identifier Scheme
-  | ExpressionSignature Expression Scheme
   deriving (Show)
 
-data BindGroup = BindGroup
-  { bindGroupExplicitlyTypedBindings :: ![ExplicitlyTypedBinding]
-  , bindGroupImplicitlyTypedBindings :: ![[ImplicitlyTypedBinding]]
-  } deriving (Show)
+data BindGroup l = BindGroup
+  { bindGroupExplicitlyTypedBindings :: ![(ExplicitlyTypedBinding l)]
+  , bindGroupImplicitlyTypedBindings :: ![[(ImplicitlyTypedBinding l)]]
+  } deriving (Show, Functor, Traversable, Foldable)
 
-data ImplicitlyTypedBinding = ImplicitlyTypedBinding
+data ImplicitlyTypedBinding l = ImplicitlyTypedBinding
   { implicitlyTypedBindingId :: !Identifier
-  , implicitlyTypedBindingAlternatives :: ![Alternative]
-  } deriving (Show)
+  , implicitlyTypedBindingAlternatives :: ![Alternative l]
+  } deriving (Show, Functor, Traversable, Foldable)
 
 -- | The simplest case is for explicitly typed bindings, each of which
 -- is described by the name of the function that is being defined, the
@@ -197,11 +197,11 @@ data ImplicitlyTypedBinding = ImplicitlyTypedBinding
 -- Haskell requires that each Alt in the definition of a given
 -- identifier has the same number of left-hand side arguments, but we
 -- do not need to enforce that here.
-data ExplicitlyTypedBinding = ExplicitlyTypedBinding
+data ExplicitlyTypedBinding l = ExplicitlyTypedBinding
   { explicitlyTypedBindingId :: !Identifier
   , explicitlyTypedBindingScheme :: !Scheme
-  , explicitlyTypedBindingAlternatives :: ![Alternative]
-  } deriving (Show)
+  , explicitlyTypedBindingAlternatives :: ![(Alternative l)]
+  } deriving (Show, Functor, Traversable, Foldable)
 
 -- | Suppose, for example, that we are about to qualify a type with a
 -- list of predicates ps and that vs lists all known variables, both
@@ -220,10 +220,10 @@ data Ambiguity = Ambiguity
 -- definition. With a more complete syntax for Expr, values of type
 -- Alt might also be used in the representation of lambda and case
 -- expressions.
-data Alternative = Alternative
+data Alternative l = Alternative
   { alternativePatterns :: ![Pattern]
-  , alternativeExpression :: !Expression
-  } deriving (Show)
+  , alternativeExpression :: !(Expression l)
+  } deriving (Show, Functor, Traversable, Foldable)
 
 -- | Substitutions-finite functions, mapping type variables to
 -- types-play a major role in type inference.
@@ -270,17 +270,20 @@ data Kind
   | FunctionKind Kind Kind
   deriving (Eq, Show)
 
+data Location = Location
+  deriving Show
+
 -- | A Haskell expression.
-data Expression
-  = VariableExpression Identifier
-  | LiteralExpression Literal
-  | ConstantExpression TypeSignature
-  | ApplicationExpression Expression Expression
-  | LetExpression BindGroup Expression
-  | LambdaExpression Alternative
-  | IfExpression Expression Expression Expression
-  | CaseExpression Expression [(Pattern, Expression)]
-  deriving (Show)
+data Expression l
+  = VariableExpression l Identifier
+  | LiteralExpression l Literal
+  | ConstantExpression l TypeSignature
+  | ApplicationExpression l (Expression l) (Expression l)
+  | LetExpression l (BindGroup l) (Expression l)
+  | LambdaExpression l (Alternative l)
+  | IfExpression l (Expression l) (Expression l) (Expression l)
+  | CaseExpression l (Expression l) [(Pattern, (Expression l))]
+  deriving (Show, Functor, Traversable, Foldable)
 
 -- | A pattern match.
 data Pattern
@@ -333,7 +336,7 @@ data Scheme =
 --------------------------------------------------------------------------------
 -- Parser
 
-implicitlyTypedBindingParser :: Parser ImplicitlyTypedBinding
+implicitlyTypedBindingParser :: Parser (ImplicitlyTypedBinding Location)
 implicitlyTypedBindingParser = do
   identifier <- identifierParser
   alternative <- alternativeParser
@@ -342,7 +345,7 @@ implicitlyTypedBindingParser = do
 identifierParser :: Parser Identifier
 identifierParser = fmap Identifier (many1 (satisfy isAlphaNum))
 
-alternativeParser :: Parser Alternative
+alternativeParser :: Parser (Alternative Location)
 alternativeParser = do
   patterns <- many (spaces*>patternParser<*spaces)
   _ <- string "="
@@ -354,15 +357,15 @@ patternParser :: Parser Pattern
 patternParser = variableParser
   where variableParser = VariablePattern <$> identifierParser
 
-expressionParser :: Parser Expression
+expressionParser :: Parser (Expression Location)
 expressionParser = integralParser <|> applicationParser <|> variableParser
   where
-    integralParser = (LiteralExpression . IntegerLiteral . read) <$> many1 digit
+    integralParser = (LiteralExpression Location . IntegerLiteral . read) <$> many1 digit
     applicationParser =
       string "(" *>
-      (ApplicationExpression <$> variableParser <*> (spaces *> expressionParser) <*
+      (ApplicationExpression Location <$> variableParser <*> (spaces *> expressionParser) <*
        string ")")
-    variableParser = VariableExpression <$> identifierParser
+    variableParser = VariableExpression Location <$> identifierParser
 
 --------------------------------------------------------------------------------
 -- Printer
@@ -373,15 +376,15 @@ printIdentifier (Identifier i) = i
 printTypeSignature :: SpecialTypes -> TypeSignature -> String
 printTypeSignature specialTypes (IdentifierSignature identifier scheme) =
   "binding " ++ printIdentifier identifier ++ " :: " ++ printScheme specialTypes scheme
-printTypeSignature specialTypes (ExpressionSignature expression scheme) =
-   "expression " ++ printExpression expression ++ " :: " ++ printScheme specialTypes scheme
+-- printTypeSignature specialTypes (ExpressionSignature expression scheme) =
+--    "expression " ++ printExpression expression ++ " :: " ++ printScheme specialTypes scheme
 
-printExpression :: Expression -> String
+printExpression :: Show l => (Expression l) -> String
 printExpression =
   \case
-    LiteralExpression l -> printLiteral l
-    VariableExpression i -> printIdentifier i
-    ApplicationExpression f x ->
+    LiteralExpression _ l -> printLiteral l
+    VariableExpression _ i -> printIdentifier i
+    ApplicationExpression _ f x ->
       "(" ++ printExpression f ++ " " ++ printExpression x ++ ")"
     e -> show e
 
@@ -473,8 +476,8 @@ typeCheckModule
   => ClassEnvironment -- ^ Set of defined type-classes.
   -> [TypeSignature] -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
   -> SpecialTypes -- ^ Special types that Haskell uses for pattern matching and literals.
-  -> [BindGroup] -- ^ Bindings in the module.
-  -> m ([TypeSignature]) -- ^ Inferred types for all identifiers.
+  -> [(BindGroup l)] -- ^ Bindings in the module.
+  -> m [TypeSignature] -- ^ Inferred types for all identifiers.
 typeCheckModule ce as specialTypes bgs =
   evalStateT
     (runInferT $ do
@@ -482,13 +485,13 @@ typeCheckModule ce as specialTypes bgs =
        s <- InferT (gets inferStateSubstitutions)
        let rs = reduce ce (map (substitutePredicate s) ps)
        s' <- defaultSubst ce [] rs
-       ts <- InferT (gets inferStateExpressionTypes)
+       {-ts <- InferT (gets inferStateExpressionTypes)-}
        return
-         (map (substituteTypeSignature (s' @@ s)) as' ++
-          map
+         (map (substituteTypeSignature (s' @@ s)) as'
+          {-map
             (substituteTypeSignature (s' @@ s) . uncurry ExpressionSignature)
-            ts))
-    (InferState nullSubst 0 specialTypes [])
+            ts-}))
+    (InferState nullSubst 0 specialTypes {-[]-})
 
 --------------------------------------------------------------------------------
 -- Built-in types and classes
@@ -535,10 +538,10 @@ substituteTypeSignature substitutions (IdentifierSignature identifier scheme) =
     IdentifierSignature identifier (substituteInScheme substitutions scheme)
   where substituteInScheme substitutions (Forall kinds qualified) =
           Forall kinds (substituteQualified substitutions qualified)
-substituteTypeSignature substitutions (ExpressionSignature expression scheme) =
-    ExpressionSignature expression (substituteInScheme substitutions scheme)
-  where substituteInScheme substitutions (Forall kinds qualified) =
-          Forall kinds (substituteQualified substitutions qualified)
+-- substituteTypeSignature substitutions (ExpressionSignature expression scheme) =
+--     ExpressionSignature expression (substituteInScheme substitutions scheme)
+--   where substituteInScheme substitutions (Forall kinds qualified) =
+--           Forall kinds (substituteQualified substitutions qualified)
 
 substitutePredicate :: [Substitution] -> Predicate -> Predicate
 substitutePredicate substitutions (IsIn identifier types) =
@@ -578,7 +581,7 @@ inferExplicitlyTypedBindingType
   :: MonadThrow m
   => ClassEnvironment
   -> [TypeSignature]
-  -> ExplicitlyTypedBinding
+  -> (ExplicitlyTypedBinding l)
   -> InferT m [Predicate]
 inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding _ sc alts) = do
   (Qualified qs t) <- freshInst sc
@@ -601,7 +604,7 @@ inferImplicitlyTypedBindingsTypes
   :: MonadThrow m
   => ClassEnvironment
   -> [TypeSignature]
-  -> [ImplicitlyTypedBinding]
+  -> [(ImplicitlyTypedBinding l)]
   -> InferT m ([Predicate], [TypeSignature])
 inferImplicitlyTypedBindingsTypes ce as bs = do
   ts <- mapM (\_ -> newVariableType StarKind) bs
@@ -628,7 +631,7 @@ inferBindGroupTypes
   :: MonadThrow m
   => ClassEnvironment
   -> [TypeSignature]
-  -> BindGroup
+  -> (BindGroup l)
   -> InferT m ([Predicate], [TypeSignature])
 inferBindGroupTypes ce as (BindGroup es iss) = do
   let as' = [IdentifierSignature v sc | ExplicitlyTypedBinding v sc _alts <- es]
@@ -706,7 +709,7 @@ typeKind (ApplicationType typ _) =
 -- entries in a list of implicitly typed bindings is simple, meaning
 -- that it has an alternative with no left-hand side patterns. The
 -- following function provides a way to test for this:
-restrictImplicitlyTypedBindings :: [ImplicitlyTypedBinding] -> Bool
+restrictImplicitlyTypedBindings :: [(ImplicitlyTypedBinding l)] -> Bool
 restrictImplicitlyTypedBindings = any simple
   where
     simple =
@@ -788,15 +791,16 @@ enumId n = Identifier ("v" ++ show n)
 
 tellSig
   :: Monad m
-  => Expression -> Scheme -> InferT m ()
+  => (Expression l) -> Scheme -> InferT m ()
 tellSig ex ty =
-  InferT
+  pure ()
+  {-InferT
     (modify
        (\s ->
           s
           { inferStateExpressionTypes =
               inferStateExpressionTypes s ++ [(ex, ty)]
-          }))
+          }))-}
 
 inferLiteralType
   :: Monad m
@@ -990,24 +994,24 @@ inferExpressionType
   :: MonadThrow m
   => ClassEnvironment
   -> [TypeSignature]
-  -> Expression
+  -> (Expression l)
   -> InferT m ([Predicate], Type)
-inferExpressionType _ as expression@(VariableExpression i) = do
+inferExpressionType _ as expression@(VariableExpression _ i) = do
   sc <- lookupIdentifier i as
   qualified@(Qualified ps t) <- freshInst sc
   let scheme = (Forall [] qualified)
   tellSig expression scheme
   return (ps, t)
-inferExpressionType _ _ (ConstantExpression (IdentifierSignature _  sc)) = do
+inferExpressionType _ _ (ConstantExpression _ (IdentifierSignature _  sc)) = do
   (Qualified ps t) <- freshInst sc
   return (ps, t)
-inferExpressionType _ _ expression@(LiteralExpression l) = do
+inferExpressionType _ _ expression@(LiteralExpression _ l) = do
   specialTypes <- InferT (gets inferStateSpecialTypes)
   (ps, t) <- inferLiteralType specialTypes l
   let scheme = (Forall [] (Qualified ps t))
   tellSig expression scheme
   return (ps, t)
-inferExpressionType ce as expression@(ApplicationExpression e f) = do
+inferExpressionType ce as expression@(ApplicationExpression _ e f) = do
   (ps, te) <- inferExpressionType ce as e
   (qs, tf) <- inferExpressionType ce as f
   t <- newVariableType StarKind
@@ -1018,12 +1022,12 @@ inferExpressionType ce as expression@(ApplicationExpression e f) = do
   let scheme = (Forall [] (Qualified (ps++qs) t))
   tellSig expression scheme
   return (ps ++ qs, t)
-inferExpressionType ce as (LetExpression bg e) = do
+inferExpressionType ce as (LetExpression _ bg e) = do
   (ps, as') <- inferBindGroupTypes ce as bg
   (qs, t) <- inferExpressionType ce (as' ++ as) e
   return (ps ++ qs, t)
-inferExpressionType ce as (LambdaExpression alt) = inferAltType ce as alt
-inferExpressionType ce as (IfExpression e e1 e2) = do
+inferExpressionType ce as (LambdaExpression _ alt) = inferAltType ce as alt
+inferExpressionType ce as (IfExpression _ e e1 e2) = do
   (ps, t) <- inferExpressionType ce as e
   specialTypes <- InferT (gets inferStateSpecialTypes)
   unify t (specialTypesBool specialTypes)
@@ -1031,7 +1035,7 @@ inferExpressionType ce as (IfExpression e e1 e2) = do
   (ps2, t2) <- inferExpressionType ce as e2
   unify t1 t2
   return (ps ++ ps1 ++ ps2, t1)
-inferExpressionType ce as (CaseExpression e branches) = do
+inferExpressionType ce as (CaseExpression _ e branches) = do
   (ps0, t) <- inferExpressionType ce as e
   v <- newVariableType StarKind
   let tiBr (pat, f) = do
@@ -1047,7 +1051,7 @@ inferAltType
   :: MonadThrow m
   => ClassEnvironment
   -> [TypeSignature]
-  -> Alternative
+  -> (Alternative l)
   -> InferT m ([Predicate], Type)
 inferAltType ce as (Alternative pats e) = do
   (ps, as', ts) <- inferPatterns pats
@@ -1061,7 +1065,7 @@ inferAltTypes
   :: MonadThrow m
   => ClassEnvironment
   -> [TypeSignature]
-  -> [Alternative]
+  -> [(Alternative l)]
   -> Type
   -> InferT m [Predicate]
 inferAltTypes ce as alts t = do
