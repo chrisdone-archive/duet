@@ -79,33 +79,35 @@ demo = do
       ]
       defaultSpecialTypes
       [ BindGroup
-          [ ExplicitlyTypedBinding
-              "x"
-              (Forall
-                 [StarKind]
-                 (Qualified
-                    [IsIn "Num" [(GenericType 0)]]
-                    (makeArrow (GenericType 0) (GenericType 0))))
-              [Alternative [VariablePattern "k"] (VariableExpression "k")]
-          ]
+          (if True
+              then [ ExplicitlyTypedBinding
+                       "top_k"
+                       (Forall
+                          [StarKind]
+                          (Qualified
+                             [IsIn "Num" [(GenericType 0)]]
+                             (makeArrow (GenericType 0) (GenericType 0))))
+                       [Alternative [VariablePattern "k"] (VariableExpression "k")]
+                   ]
+              else [])
           [ [ ImplicitlyTypedBinding
-                "x"
-                [Alternative [] (VariableExpression "x")]
+                "top_x"
+                [Alternative [] (VariableExpression "top_x")]
             , ImplicitlyTypedBinding
-                "func"
+                "top_func"
                 [Alternative [VariablePattern "k"] (VariableExpression "id")]
             , ImplicitlyTypedBinding
-                "func2"
+                "top_func2"
                 [ Alternative
                     [VariablePattern "k", VariablePattern "l"]
                     (VariableExpression "k")
                 ]
             , ImplicitlyTypedBinding
-                "f"
+                "top_f"
                 [Alternative [] (LiteralExpression (StringLiteral "hi"))]
             ],
            [ ImplicitlyTypedBinding
-                "g"
+                "top_g"
                 [Alternative [] (LiteralExpression (IntegerLiteral 5))]
             ]
           ]
@@ -138,6 +140,7 @@ data InferState = InferState
   { inferStateSubstitutions :: ![Substitution]
   , inferStateCounter :: !Int
   , inferStateSpecialTypes :: !SpecialTypes
+  , inferStateExpressionTypes :: ![(Expression, Scheme)]
   } deriving (Show)
 
 -- | An exception that may be thrown when reading in source code,
@@ -330,7 +333,19 @@ printIdentifier (Identifier i) = i
 
 printTypeSignature :: SpecialTypes -> TypeSignature -> String
 printTypeSignature specialTypes (IdentifierSignature identifier scheme) =
-  printIdentifier identifier ++ " :: " ++ printScheme specialTypes scheme
+  "binding " ++ printIdentifier identifier ++ " :: " ++ printScheme specialTypes scheme
+printTypeSignature specialTypes (ExpressionSignature expression scheme) =
+   "expression " ++ printExpression expression ++ " :: " ++ printScheme specialTypes scheme
+
+printExpression :: Expression -> String
+printExpression = \case
+                     LiteralExpression l -> printLiteral l
+                     VariableExpression i -> printIdentifier i
+                     e -> show e
+
+printLiteral :: Literal -> String
+printLiteral (IntegerLiteral i) = show i
+printLiteral l = show l
 
 printScheme :: SpecialTypes -> Scheme -> [Char]
 printScheme specialTypes (Forall kinds qualifiedType') =
@@ -416,7 +431,7 @@ typeCheckModule
   -> [TypeSignature] -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
   -> SpecialTypes -- ^ Special types that Haskell uses for pattern matching and literals.
   -> [BindGroup] -- ^ Bindings in the module.
-  -> m [TypeSignature] -- ^ Inferred types for all identifiers.
+  -> m ([TypeSignature]) -- ^ Inferred types for all identifiers.
 typeCheckModule ce as specialTypes bgs =
   evalStateT
     (runInferT $ do
@@ -424,8 +439,13 @@ typeCheckModule ce as specialTypes bgs =
        s <- InferT (gets inferStateSubstitutions)
        let rs = reduce ce (map (substitutePredicate s) ps)
        s' <- defaultSubst ce [] rs
-       return (map (substituteTypeSignature (s' @@ s)) as'))
-    (InferState nullSubst 0 specialTypes)
+       ts <- InferT (gets inferStateExpressionTypes)
+       return
+         (map (substituteTypeSignature (s' @@ s)) as' ++
+          map
+            (substituteTypeSignature (s' @@ s) . uncurry ExpressionSignature)
+            ts))
+    (InferState nullSubst 0 specialTypes [])
 
 --------------------------------------------------------------------------------
 -- Built-in types and classes
@@ -470,6 +490,10 @@ substituteQualified substitutions (Qualified predicates t) =
 substituteTypeSignature :: [Substitution] -> TypeSignature -> TypeSignature
 substituteTypeSignature substitutions (IdentifierSignature identifier scheme) =
     IdentifierSignature identifier (substituteInScheme substitutions scheme)
+  where substituteInScheme substitutions (Forall kinds qualified) =
+          Forall kinds (substituteQualified substitutions qualified)
+substituteTypeSignature substitutions (ExpressionSignature expression scheme) =
+    ExpressionSignature expression (substituteInScheme substitutions scheme)
   where substituteInScheme substitutions (Forall kinds qualified) =
           Forall kinds (substituteQualified substitutions qualified)
 
@@ -719,6 +743,18 @@ lookupIdentifier i ((IdentifierSignature i'  sc):as) =
 enumId :: Int -> Identifier
 enumId n = Identifier ("v" ++ show n)
 
+tellSig
+  :: Monad m
+  => Expression -> Scheme -> InferT m ()
+tellSig ex ty =
+  InferT
+    (modify
+       (\s ->
+          s
+          { inferStateExpressionTypes =
+              inferStateExpressionTypes s ++ [(ex, ty)]
+          }))
+
 inferLiteralType
   :: Monad m
   => SpecialTypes -> Literal -> InferT m ([Predicate], Type)
@@ -913,18 +949,22 @@ inferExpressionType
   -> [TypeSignature]
   -> Expression
   -> InferT m ([Predicate], Type)
-inferExpressionType _ as (VariableExpression i) = do
+inferExpressionType _ as expression@(VariableExpression i) = do
   sc <- lookupIdentifier i as
-  (Qualified ps t) <- freshInst sc
+  qualified@(Qualified ps t) <- freshInst sc
+  let scheme = (Forall [] qualified)
+  tellSig expression scheme
   return (ps, t)
 inferExpressionType _ _ (ConstantExpression (IdentifierSignature _  sc)) = do
   (Qualified ps t) <- freshInst sc
   return (ps, t)
-inferExpressionType _ _ (LiteralExpression l) = do
+inferExpressionType _ _ expression@(LiteralExpression l) = do
   specialTypes <- InferT (gets inferStateSpecialTypes)
   (ps, t) <- inferLiteralType specialTypes l
+  let scheme = (Forall [] (Qualified ps t))
+  tellSig expression scheme
   return (ps, t)
-inferExpressionType ce as (ApplicationExpression e f) = do
+inferExpressionType ce as expression@(ApplicationExpression e f) = do
   (ps, te) <- inferExpressionType ce as e
   (qs, tf) <- inferExpressionType ce as f
   t <- newVariableType StarKind
@@ -932,6 +972,8 @@ inferExpressionType ce as (ApplicationExpression e f) = do
   let makeArrow :: Type -> Type -> Type
       a `makeArrow` b = ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
   unify (tf `makeArrow` t) te
+  let scheme = (Forall [] (Qualified (ps++qs) t))
+  tellSig expression scheme
   return (ps ++ qs, t)
 inferExpressionType ce as (LetExpression bg e) = do
   (ps, as') <- inferBindGroupTypes ce as bg
