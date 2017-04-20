@@ -10,7 +10,7 @@
 -- P. Jones.
 
 module Duet
-  (
+  (demo,
   -- * Type checker
   -- $type-checker
     typeCheckModule
@@ -55,13 +55,74 @@ import qualified Data.Map.Strict as M
 import           Data.Monoid
 import           Data.String
 import           Data.Typeable
+import           Debug.Trace
+
+-- Demo (remove later)
+
+demo :: IO ()
+demo = do
+  env <-
+    addClass
+      "Num"
+      [TypeVariable "n" StarKind]
+      []
+      mempty {classEnvironmentDefaults = [tInteger]}
+  env' <- addInstance [] (IsIn "Num" [tInteger]) env
+  assumptions <-
+    typeCheckModule
+      env'
+      [ IdentifierSignature
+          "id"
+          (Forall
+             [StarKind]
+             (Qualified [] (makeArrow (GenericType 0) (GenericType 0))))
+      ]
+      defaultSpecialTypes
+      [ BindGroup
+          [ ExplicitlyTypedBinding
+              "x"
+              (Forall
+                 [StarKind]
+                 (Qualified
+                    [IsIn "Num" [(GenericType 0)]]
+                    (makeArrow (GenericType 0) (GenericType 0))))
+              [Alternative [VariablePattern "k"] (VariableExpression "k")]
+          ]
+          [ [ ImplicitlyTypedBinding
+                "x"
+                [Alternative [] (VariableExpression "x")]
+            , ImplicitlyTypedBinding
+                "func"
+                [Alternative [VariablePattern "k"] (VariableExpression "id")]
+            , ImplicitlyTypedBinding
+                "func2"
+                [ Alternative
+                    [VariablePattern "k", VariablePattern "l"]
+                    (VariableExpression "k")
+                ]
+            , ImplicitlyTypedBinding
+                "f"
+                [Alternative [] (LiteralExpression (StringLiteral "hi"))]
+            ],
+           [ ImplicitlyTypedBinding
+                "g"
+                [Alternative [] (LiteralExpression (IntegerLiteral 5))]
+            ]
+          ]
+      ]
+  mapM_ (putStrLn . printTypeSignature defaultSpecialTypes) assumptions
+  where
+    tInteger :: Type
+    tInteger = ConstructorType (TypeConstructor "Integer" StarKind)
+    makeArrow :: Type -> Type -> Type
+    a `makeArrow` b = ApplicationType (ApplicationType (specialTypesFunction defaultSpecialTypes) a) b
 
 --------------------------------------------------------------------------------
 -- Types
 
 data SpecialTypes = SpecialTypes
   { specialTypesBool :: Type
-  , specialTypesChar :: Type
+  , specialTypesChar ::Type
   , specialTypesString :: Type
   , specialTypesFunction :: Type
   , specialTypesList :: Type
@@ -105,50 +166,16 @@ data InferException
   deriving (Show, Typeable)
 instance Exception InferException
 
--- | TypeSignatures about the type of a variable are represented by
--- values of this datatype, each of which pairs a variable name with a
--- type scheme.
-data TypeSignature = TypeSignature
-  { typeSignatureIdentifier :: Identifier
-  , typeSignatureScheme :: Scheme
-  } deriving (Show)
+data TypeSignature
+  = IdentifierSignature Identifier Scheme
+  | ExpressionSignature Expression Scheme
+  deriving (Show)
 
--- | The first component in each such pair lists any explicitly typed
--- bindings in the group. The second component provides an opportunity
--- to break down the list of any implicitly typed bindings into
--- several smaller lists, arranged in dependency order. In other
--- words, if a binding group is represented by a pair
--- (es,[is_1,...,is_n]), then the implicitly typed bindings in each
--- is_i should depend only on the bindings in es, is_1, ..., is_i, and
--- not on any bindings in is_j when j>i. (Bindings in es could depend
--- on any of the bindings in the group, but will presumably depend on
--- at least those in is_n, or else the group would not be
--- minimal. Note also that if es is empty, then n must be 1.) In
--- choosing this representation, we have assumed that dependency
--- analysis has been carried out prior to type checking, and that the
--- bindings in each group have been organized into values of type
--- BindGroup as appropriate. In particular, by separating out
--- implicitly typed bindings as much as possible, we can potentially
--- increase the degree of polymorphism in inferred types. For a
--- correct implementation of the semantics specified in the Haskell
--- report, a simpler but less flexible approach is required: all
--- implicitly typed bindings must be placed in a single list, even if
--- a more refined decomposition would be possible. In addition, if the
--- group is restricted, then we must also ensure that none of the
--- explicitly typed bindings in the same BindGroup have any predicates
--- in their type, even though this is not strictly necessary. With
--- hindsight, these are restrictions that we might prefer to avoid in
--- any future revision of Haskell.
 data BindGroup = BindGroup
   { bindGroupExplicitlyTypedBindings :: ![ExplicitlyTypedBinding]
   , bindGroupImplicitlyTypedBindings :: ![[ImplicitlyTypedBinding]]
   } deriving (Show)
 
--- | A single implicitly typed binding is described by a pair
--- containing the name of the variable and a list of alternatives.
--- The monomorphism restriction is invoked when one or more of the
--- entries in a list of implicitly typed bindings is simple, meaning
--- that it has an alternative with no left-hand side patterns.
 data ImplicitlyTypedBinding = ImplicitlyTypedBinding
   { implicitlyTypedBindingId :: !Identifier
   , implicitlyTypedBindingAlternatives :: ![Alternative]
@@ -302,7 +329,7 @@ printIdentifier :: Identifier -> String
 printIdentifier (Identifier i) = i
 
 printTypeSignature :: SpecialTypes -> TypeSignature -> String
-printTypeSignature specialTypes (TypeSignature identifier scheme) =
+printTypeSignature specialTypes (IdentifierSignature identifier scheme) =
   printIdentifier identifier ++ " :: " ++ printScheme specialTypes scheme
 
 printScheme :: SpecialTypes -> Scheme -> [Char]
@@ -319,21 +346,23 @@ printScheme specialTypes (Forall kinds qualifiedType') =
                kinds) ++
           ". ") ++
   printQualifiedType specialTypes qualifiedType'
+  where
+    printQualifiedType specialTypes (Qualified predicates typ) =
+      case predicates of
+        [] -> printTypeSansParens specialTypes typ
+        _ ->
+          "(" ++
+          intercalate ", " (map (printPredicate specialTypes) predicates) ++
+          ") => " ++ printTypeSansParens specialTypes typ
+    printPredicate specialTypes (IsIn identifier types) =
+      printIdentifier identifier ++
+      " " ++ unwords (map (printType specialTypes) types)
 
 printKind :: Kind -> [Char]
 printKind =
   \case
     StarKind -> "*"
     FunctionKind x' y -> printKind x' ++ " -> " ++ printKind y
-
-printQualifiedType :: SpecialTypes -> Qualified Type -> [Char]
-printQualifiedType specialTypes(Qualified predicates typ) =
-  case predicates of
-    [] -> printTypeSansParens specialTypes typ
-    _ ->
-      "(" ++
-      intercalate ", " (map (printPredicate specialTypes) predicates) ++
-      ") => " ++ printTypeSansParens specialTypes typ
 
 printTypeSansParens :: SpecialTypes -> Type -> [Char]
 printTypeSansParens specialTypes =
@@ -353,22 +382,16 @@ printType specialTypes =
       "[" ++ printTypeSansParens specialTypes ty ++ "]"
     ApplicationType x' y -> "(" ++ printType specialTypes x' ++ " " ++ printType specialTypes y ++ ")"
     GenericType int -> "a" ++ show int
-
-printTypeConstructor :: TypeConstructor -> String
-printTypeConstructor (TypeConstructor identifier kind) =
-  case kind of
-    StarKind -> printIdentifier identifier
-    _ -> "(" ++ printIdentifier identifier ++ " :: " ++ printKind kind ++ ")"
+  where printTypeConstructor (TypeConstructor identifier kind) =
+          case kind of
+            StarKind -> printIdentifier identifier
+            _ -> "(" ++ printIdentifier identifier ++ " :: " ++ printKind kind ++ ")"
 
 printTypeVariable :: TypeVariable -> String
 printTypeVariable (TypeVariable identifier kind) =
   case kind of
     StarKind -> printIdentifier identifier
     _ -> "(" ++ printIdentifier identifier ++ " :: " ++ printKind kind ++ ")"
-
-printPredicate :: SpecialTypes -> Predicate -> [Char]
-printPredicate specialTypes (IsIn identifier types) =
-  printIdentifier identifier ++ " " ++ unwords (map (printType specialTypes) types)
 
 --------------------------------------------------------------------------------
 -- Type inference
@@ -428,50 +451,6 @@ defaultSpecialTypes =
     listType =
       ConstructorType (TypeConstructor "[]" (FunctionKind StarKind StarKind))
 
--- boolType :: Type
--- boolType = ConstructorType (TypeConstructor "Bool" StarKind)
-
--- charType :: Type
--- charType = ConstructorType (TypeConstructor "Char" StarKind)
-
--- stringType :: Type
--- stringType = makeListType charType
-
--- makeListType :: Type -> Type
--- makeListType t = ApplicationType listType t
-
--- listType :: Type
--- listType = ConstructorType (TypeConstructor "[]" (FunctionKind StarKind StarKind))
-
--- makeArrow :: Type -> Type -> Type
--- a `makeArrow` b = ApplicationType (ApplicationType tArrow a) b
-
--- tArrow :: Type
--- tArrow =
---   ConstructorType
---     (TypeConstructor
---        "(->)"
---        (FunctionKind StarKind (FunctionKind StarKind StarKind)))
-
--- numClasses :: [Identifier]
--- numClasses =
---   ["Num", "Integral", "Floating", "Fractional", "Real", "RealFloat", "RealFrac"]
-
--- stdClasses :: [Identifier]
--- stdClasses =
---   [ "Eq"
---   , "Ord"
---   , "Show"
---   , "Read"
---   , "Bounded"
---   , "Enum"
---   , "Ix"
---   , "Functor"
---   , "Monad"
---   , "MonadPlus"
---   ] ++
---   numClasses
-
 --------------------------------------------------------------------------------
 -- Substitution
 
@@ -489,16 +468,14 @@ substituteQualified substitutions (Qualified predicates t) =
     (substituteType substitutions t)
 
 substituteTypeSignature :: [Substitution] -> TypeSignature -> TypeSignature
-substituteTypeSignature substitutions (TypeSignature identifier scheme) =
-    TypeSignature identifier (substituteInScheme substitutions scheme)
+substituteTypeSignature substitutions (IdentifierSignature identifier scheme) =
+    IdentifierSignature identifier (substituteInScheme substitutions scheme)
+  where substituteInScheme substitutions (Forall kinds qualified) =
+          Forall kinds (substituteQualified substitutions qualified)
 
 substitutePredicate :: [Substitution] -> Predicate -> Predicate
 substitutePredicate substitutions (IsIn identifier types) =
     IsIn identifier (map (substituteType substitutions) types)
-
-substituteInScheme :: [Substitution] -> Scheme -> Scheme
-substituteInScheme substitutions (Forall kinds qualified) =
-  Forall kinds (substituteQualified substitutions qualified)
 
 substituteType :: [Substitution] -> Type -> Type
 substituteType substitutions (VariableType typeVariable) =
@@ -518,7 +495,9 @@ unify :: MonadThrow m => Type -> Type -> InferT m ()
 unify t1 t2 = do
   s <- InferT (gets inferStateSubstitutions)
   u <- unifyTypes (substituteType s t1) (substituteType s t2)
-  extSubst u
+  InferT
+    (modify
+       (\s -> s {inferStateSubstitutions = u @@ inferStateSubstitutions s}))
 
 newVariableType :: Monad m => Kind -> InferT m Type
 newVariableType k =
@@ -561,7 +540,7 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
   ts <- mapM (\_ -> newVariableType StarKind) bs
   let is = map implicitlyTypedBindingId bs
       scs = map toScheme ts
-      as' = zipWith TypeSignature is scs ++ as
+      as' = zipWith IdentifierSignature is scs ++ as
       altss = map implicitlyTypedBindingAlternatives bs
   pss <- sequence (zipWith (inferAltTypes ce as') altss ts)
   s <- InferT (gets inferStateSubstitutions)
@@ -574,9 +553,9 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
   if restrictImplicitlyTypedBindings bs
     then let gs' = gs \\ getTypeVariablesOf getPredicateTypeVariables rs
              scs' = map (quantify gs' . (Qualified [])) ts'
-         in return (ds ++ rs, zipWith TypeSignature is scs')
+         in return (ds ++ rs, zipWith IdentifierSignature is scs')
     else let scs' = map (quantify gs . (Qualified rs)) ts'
-         in return (ds, zipWith TypeSignature is scs')
+         in return (ds, zipWith IdentifierSignature is scs')
 
 inferBindGroupTypes
   :: MonadThrow m
@@ -585,7 +564,7 @@ inferBindGroupTypes
   -> BindGroup
   -> InferT m ([Predicate], [TypeSignature])
 inferBindGroupTypes ce as (BindGroup es iss) = do
-  let as' = [TypeSignature v sc | ExplicitlyTypedBinding v sc _alts <- es]
+  let as' = [IdentifierSignature v sc | ExplicitlyTypedBinding v sc _alts <- es]
   (ps, as'') <-
     inferSequenceTypes inferImplicitlyTypedBindingsTypes ce (as' ++ as) iss
   qss <- mapM (inferExplicitlyTypedBindingType ce (as'' ++ as' ++ as)) es
@@ -622,7 +601,8 @@ instantiatePredicate ts (IsIn c t) = IsIn c (map (instantiateType ts) t)
 
 getTypeSignatureTypeVariables :: TypeSignature -> [TypeVariable]
 getTypeSignatureTypeVariables = getTypeVariables where
-  getTypeVariables (TypeSignature _  scheme) = getSchemeTypeVariables scheme
+  getTypeVariables (IdentifierSignature _  scheme) = getSchemeTypeVariables scheme
+    where getSchemeTypeVariables (Forall _ qualified) = getQualifiedTypeVariables qualified
 
 getQualifiedTypeVariables :: Qualified Type -> [TypeVariable]
 getQualifiedTypeVariables = getTypeVariables
@@ -632,12 +612,7 @@ getQualifiedTypeVariables = getTypeVariables
       getTypeTypeVariables t
 
 getPredicateTypeVariables :: Predicate -> [TypeVariable]
-getPredicateTypeVariables = getTypeVariables where
-  getTypeVariables (IsIn _ types) = getTypeVariablesOf getTypeTypeVariables types
-
-getSchemeTypeVariables :: Scheme -> [TypeVariable]
-getSchemeTypeVariables = getTypeVariables where
-  getTypeVariables (Forall _ qualified) = getQualifiedTypeVariables qualified
+getPredicateTypeVariables (IsIn _ types) = getTypeVariablesOf getTypeTypeVariables types
 
 getTypeTypeVariables :: Type -> [TypeVariable]
 getTypeTypeVariables = getTypeVariables where
@@ -736,7 +711,7 @@ lookupIdentifier
   :: MonadThrow m
   => Identifier -> [TypeSignature] -> m Scheme
 lookupIdentifier _ [] = throwM NotInScope
-lookupIdentifier i ((TypeSignature i'  sc):as) =
+lookupIdentifier i ((IdentifierSignature i'  sc):as) =
   if i == i'
     then return sc
     else lookupIdentifier i as
@@ -763,18 +738,18 @@ inferPattern
   => Pattern -> InferT m ([Predicate], [TypeSignature], Type)
 inferPattern (VariablePattern i) = do
   v <- newVariableType StarKind
-  return ([], [TypeSignature i (toScheme v)], v)
+  return ([], [IdentifierSignature i (toScheme v)], v)
 inferPattern WildcardPattern = do
   v <- newVariableType StarKind
   return ([], [], v)
 inferPattern (AsPattern i pat) = do
   (ps, as, t) <- inferPattern pat
-  return (ps, (TypeSignature i (toScheme t)) : as, t)
+  return (ps, (IdentifierSignature i (toScheme t)) : as, t)
 inferPattern (LiteralPattern l) = do
   specialTypes <- InferT (gets inferStateSpecialTypes)
   (ps, t) <- inferLiteralType specialTypes l
   return (ps, [], t)
-inferPattern (ConstructorPattern (TypeSignature _  sc) pats) = do
+inferPattern (ConstructorPattern (IdentifierSignature _  sc) pats) = do
   (ps, as, ts) <- inferPatterns pats
   t' <- newVariableType StarKind
   (Qualified qs t) <- freshInst sc
@@ -942,7 +917,7 @@ inferExpressionType _ as (VariableExpression i) = do
   sc <- lookupIdentifier i as
   (Qualified ps t) <- freshInst sc
   return (ps, t)
-inferExpressionType _ _ (ConstantExpression (TypeSignature _  sc)) = do
+inferExpressionType _ _ (ConstantExpression (IdentifierSignature _  sc)) = do
   (Qualified ps t) <- freshInst sc
   return (ps, t)
 inferExpressionType _ _ (LiteralExpression l) = do
@@ -1050,13 +1025,13 @@ defaultSubst
   => ClassEnvironment -> [TypeVariable] -> [Predicate] -> m [Substitution]
 defaultSubst = withDefaults (\vps ts -> zipWith Substitution (map ambiguityTypeVariable vps) ts)
 
-extSubst
-  :: Monad m
-  => [Substitution] -> InferT m ()
-extSubst s' =
-  InferT
-    (modify
-       (\s -> s {inferStateSubstitutions = s' @@ inferStateSubstitutions s}))
+-- extSubst
+--   :: Monad m
+--   => [Substitution] -> InferT m ()
+-- extSubst s' =
+--   InferT
+--     (modify
+--        (\s -> s {inferStateSubstitutions = s' @@ inferStateSubstitutions s}))
 
 freshInst
   :: Monad m
