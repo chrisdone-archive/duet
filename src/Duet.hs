@@ -72,7 +72,7 @@ demo = do
       "Num"
       [TypeVariable "num_n" StarKind]
       []
-      mempty {classEnvironmentDefaults = [{-tInteger-}]}
+      mempty -- {classEnvironmentDefaults = [{-tInteger-}]}
   env' <- addInstance [] (IsIn "Num" [tInteger]) env
   env'' <-
     addClass
@@ -350,15 +350,16 @@ data Literal
 -- | A class environment.
 data ClassEnvironment = ClassEnvironment
   { classEnvironmentClasses :: !(Map Identifier Class)
-  , classEnvironmentDefaults :: ![Type]
+  -- , classEnvironmentDefaults :: ![Type]--Disabling for now because
+  -- I don't understand how it works.
   } deriving (Show)
 
 instance Monoid ClassEnvironment where
-  mempty = ClassEnvironment mempty mempty
+  mempty = ClassEnvironment mempty {-mempty-}
   mappend x y =
     ClassEnvironment
       (on (<>) classEnvironmentClasses x y)
-      (on (<>) classEnvironmentDefaults x y)
+      {-(on (<>) classEnvironmentDefaults x y)-}
 
 -- | A class.
 data Class = Class
@@ -1183,12 +1184,12 @@ candidates ce (Ambiguity v qs) =
   , all ([VariableType v] ==) ts
   , any (`elem` numClasses) is
   , all (`elem` stdClasses) is
-  , t' <- classEnvironmentDefaults ce
+  , t' <- []{-classEnvironmentDefaults ce-}
   , all (entail ce []) [IsIn i [t'] | i <- is]
   ]
-
-numClasses = ["Num"]
-stdClasses = numClasses ++ ["Show"]
+  where -- disabling these
+        numClasses = []
+        stdClasses = []
 
 withDefaults
   :: MonadThrow m
