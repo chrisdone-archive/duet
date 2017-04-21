@@ -337,7 +337,7 @@ data Pattern
   | AsPattern Identifier Pattern
   | LiteralPattern Literal
   | ConstructorPattern (TypeSignature Identifier) [Pattern]
-  | LazyPattern Pattern
+--  | LazyPattern Pattern
   deriving (Show)
 
 data Literal
@@ -419,6 +419,22 @@ expressionParser = integralParser <|> applicationParser <|> variableParser
 printIdentifier :: Identifier -> String
 printIdentifier (Identifier i) = i
 
+printImplicitlyTypedBinding :: ImplicitlyTypedBinding l -> String
+printImplicitlyTypedBinding (ImplicitlyTypedBinding _ i [alt]) =
+  printIdentifier i ++ " " ++ printAlternative alt
+
+printAlternative (Alternative _ patterns expression) =
+  unwords (map printPattern patterns) ++ " = " ++ printExpression expression
+
+printPattern =
+  \case
+    VariablePattern i -> printIdentifier i
+    WildcardPattern -> "_"
+    AsPattern i p -> printIdentifier i ++ "@" ++ printPattern p
+    LiteralPattern l -> printLiteral l
+    ConstructorPattern (TypeSignature i _ _) pats ->
+      printIdentifier i ++ " " ++ unwords (map printPattern pats)
+
 -- printTypeSignatureIdent :: SpecialTypes -> (TypeSignature Identifier) -> String
 -- printTypeSignatureIdent specialTypes (TypeSignature identifier scheme) =
 --   "binding " ++ printIdentifier identifier ++ " :: " ++ printScheme specialTypes scheme
@@ -427,19 +443,19 @@ printIdentifier (Identifier i) = i
 -- printTypeSignatureExp specialTypes (TypeSignature expression scheme) =
 --    "expression " ++ printExpression expression ++ " :: " ++ printScheme specialTypes scheme
 
-printExpression :: Show l => (Expression l) -> String
+printExpression :: (Expression l) -> String
 printExpression =
   \case
     LiteralExpression _ l -> printLiteral l
     VariableExpression _ i -> printIdentifier i
     ApplicationExpression _ f x ->
       "(" ++ printExpression f ++ " " ++ printExpression x ++ ")"
-    e -> show e
+    e -> "<TODO>"
 
 printLiteral :: Literal -> String
 printLiteral (IntegerLiteral i) = show i
 printLiteral (StringLiteral x) = show x
-printLiteral l = show l
+printLiteral l = "<TODO: literal>"
 
 printScheme :: SpecialTypes -> Scheme -> [Char]
 printScheme specialTypes (Forall kinds qualifiedType') =
@@ -924,7 +940,7 @@ inferPattern (ConstructorPattern (TypeSignature _  sc _) pats) = do
       a `makeArrow` b = ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
   unify t (foldr makeArrow t' ts)
   return (ps ++ qs, as, t')
-inferPattern (LazyPattern pat) = inferPattern pat
+-- inferPattern (LazyPattern pat) = inferPattern pat
 
 inferPatterns
   :: MonadThrow m
