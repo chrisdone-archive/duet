@@ -66,7 +66,6 @@ instance Exception InferException
 data TypeSignature a = TypeSignature
   { typeSignatureA :: a
   , typeSignatureScheme :: Scheme
-  , typeSignatureTouched :: String
   } deriving (Show)
 
 data BindGroup l = BindGroup

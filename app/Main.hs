@@ -57,7 +57,6 @@ builtInSignatures =
          (Qualified
             [IsIn "Show" [(GenericType 0)]]
             (GenericType 0 --> stringType)))
-      ""
   ]
 
 setupEnv :: ClassEnvironment -> IO ClassEnvironment
