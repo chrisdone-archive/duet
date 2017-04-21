@@ -72,6 +72,13 @@ demo = do
       []
       mempty {classEnvironmentDefaults = [tInteger]}
   env' <- addInstance [] (IsIn "Num" [tInteger]) env
+  env'' <-
+    addClass
+      "Show"
+      [TypeVariable "n" StarKind]
+      []
+      env'
+  env''' <- addInstance [] (IsIn "Show" [tInteger]) env''
   let Right xid1 =
         fmap
           (fmap (const ()))
@@ -79,16 +86,23 @@ demo = do
   {-print xid1-}
   bindGroups <-
     typeCheckModule
-      env'
+      env'''
       [ TypeSignature
           "id"
           (Forall
              [StarKind]
              (Qualified [] (makeArrow (GenericType 0) (GenericType 0))))
+      , TypeSignature
+          "show"
+          (Forall
+             [StarKind]
+             (Qualified
+                [IsIn "Show" [(GenericType 0)]]
+                (makeArrow (GenericType 0) tString)))
       ]
       defaultSpecialTypes
       [ BindGroup
-          ([]{-[ ExplicitlyTypedBinding
+          ([] {-[ ExplicitlyTypedBinding
                  "explicitlyTyped"
                  (Forall
                     [StarKind]
@@ -96,11 +110,20 @@ demo = do
                        [IsIn "Num" [(GenericType 0)]]
                        (makeArrow (GenericType 0) (GenericType 0))))
                  [Alternative () [VariablePattern "k"] (VariableExpression () "k")]
-           ]-})
-          [[ ImplicitlyTypedBinding ()
-               "someInt"
-               [Alternative () [] (LiteralExpression () (IntegerLiteral 5))]
-           ]]
+           ]-}
+           )
+          [ [ ImplicitlyTypedBinding
+                ()
+                "someStr"
+                [ Alternative
+                    ()
+                    []
+                    (ApplicationExpression ()
+                       (VariableExpression () "show")
+                       (LiteralExpression () (IntegerLiteral 5)))
+                ]
+            ]
+          ]
           {-[ [ ImplicitlyTypedBinding ()
                 "loop"
                 [Alternative () [] (VariableExpression () "loop")]
@@ -128,6 +151,8 @@ demo = do
   where
     tInteger :: Type
     tInteger = ConstructorType (TypeConstructor "Integer" StarKind)
+    tString :: Type
+    tString = ConstructorType (TypeConstructor "String" StarKind)
     makeArrow :: Type -> Type -> Type
     a `makeArrow` b =
       ApplicationType
