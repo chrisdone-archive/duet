@@ -242,20 +242,22 @@ smartQuotes t = "“" <> t <> "”"
 curlyQuotes :: [Char] -> [Char]
 curlyQuotes t = "‘" <> t <> "’"
 
+type TokenParser = Parsec (Token, Location) ()
+
 -- | Consume the given predicate from the token stream.
-consumeToken :: Stream s m (Token, Location) => ((Token, Location) -> Maybe a) -> ParsecT s u m a
+consumeToken :: Stream s m (Token, Location) => (Token -> Maybe a) -> ParsecT s u m (a, Location)
 consumeToken f =
   tokenPrim tokenString
             tokenPosition
-            f
+            (\(x,tok) -> fmap (, tok) (f x))
 
 -- | Consume the given predicate from the token stream.
-satisfyToken :: Stream s m (Token, Location) => (Token -> Bool) -> ParsecT s u m Token
+satisfyToken :: Stream s m (Token, Location) => (Token -> Bool) -> ParsecT s u m (Token, Location)
 satisfyToken f =
   tokenPrim tokenString
             tokenPosition
-            (\(tok, _) -> if f tok
-                             then Just tok
+            (\(tok, l) -> if f tok
+                             then Just (tok, l)
                              else Nothing)
 
 -- | The parser @anyToken@ accepts any kind of token. It is for example
