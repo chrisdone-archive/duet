@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -15,10 +16,10 @@ import qualified Data.Text as T
 import           Duet.Types
 import           Text.Parsec
 import           Text.Parsec.Text
+import           Text.Printf
 
 data Token
-  = ImportToken
-  | If
+  = If
   | Then
   | Else
   | Case
@@ -237,3 +238,55 @@ parseNumbers = parser <?> "number (e.g. 42, 3.141, etc.)"
 
 smartQuotes :: [Char] -> [Char]
 smartQuotes t = "“" <> t <> "”"
+
+curlyQuotes :: [Char] -> [Char]
+curlyQuotes t = "‘" <> t <> "’"
+
+-- | Consume the given predicate from the token stream.
+consumeToken :: Stream s m (Token, Location) => ((Token, Location) -> Maybe a) -> ParsecT s u m a
+consumeToken f =
+  tokenPrim tokenString
+            tokenPosition
+            f
+
+-- | Consume the given predicate from the token stream.
+satisfyToken :: Stream s m (Token, Location) => (Token -> Bool) -> ParsecT s u m Token
+satisfyToken f =
+  tokenPrim tokenString
+            tokenPosition
+            (\(tok, _) -> if f tok
+                             then Just tok
+                             else Nothing)
+
+-- | The parser @anyToken@ accepts any kind of token. It is for example
+-- used to implement 'eof'. Returns the accepted token.
+anyToken :: (Stream s m (Token, Location)) => ParsecT s u m (Token, Location)
+anyToken = consumeToken Just
+
+-- | Make a string out of the token, for error message purposes.
+tokenString :: (Token, Location) -> [Char]
+tokenString (tok, _) =
+  case tok of
+    If -> curlyQuotes "if"
+    Then -> curlyQuotes "then"
+    Else -> curlyQuotes "else"
+    Case -> curlyQuotes "case"
+    Let -> curlyQuotes "let"
+    In -> curlyQuotes "in"
+    OpenParen -> "open parenthesis " ++ curlyQuotes "("
+    CloseParen -> "close parenthesis " ++ curlyQuotes ")"
+    Equals -> curlyQuotes "="
+    Variable t -> "variable " ++ curlyQuotes (T.unpack t)
+    Constructor t -> "constructor " ++ curlyQuotes (T.unpack t)
+    Character !c -> "character " ++ curlyQuotes (T.unpack (T.singleton c))
+    String !t -> "string " ++ show t
+    Operator !t -> "operator " ++ curlyQuotes (T.unpack t)
+    Comma -> curlyQuotes ","
+    Integer !i -> "integer " ++ show i
+    Decimal !d -> "decimal " ++ printf "%f" d
+
+-- | Update the position by the token.
+tokenPosition :: SourcePos -> (Token, Location) -> t -> SourcePos
+tokenPosition pos (_, l) _ =
+  setSourceColumn (setSourceLine pos line) col
+  where (line,col) = (locationStartLine l, locationStartColumn l)
