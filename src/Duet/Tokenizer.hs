@@ -14,7 +14,7 @@ import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Duet.Types
-import           Text.Parsec
+import           Text.Parsec hiding (anyToken)
 import           Text.Parsec.Text
 import           Text.Printf
 
@@ -273,12 +273,12 @@ tokenString (tok, _) =
     Case -> curlyQuotes "case"
     Let -> curlyQuotes "let"
     In -> curlyQuotes "in"
-    OpenParen -> "open parenthesis " ++ curlyQuotes "("
-    CloseParen -> "close parenthesis " ++ curlyQuotes ")"
+    OpenParen -> "opening parenthesis " ++ curlyQuotes "("
+    CloseParen -> "closing parenthesis " ++ curlyQuotes ")"
     Equals -> curlyQuotes "="
     Variable t -> "variable " ++ curlyQuotes (T.unpack t)
     Constructor t -> "constructor " ++ curlyQuotes (T.unpack t)
-    Character !c -> "character " ++ curlyQuotes (T.unpack (T.singleton c))
+    Character !c -> "character '" ++  (T.unpack (T.singleton c)) ++ "'"
     String !t -> "string " ++ show t
     Operator !t -> "operator " ++ curlyQuotes (T.unpack t)
     Comma -> curlyQuotes ","
@@ -292,3 +292,27 @@ tokenPosition pos (_, l) _ =
   where (line,col) = (locationStartLine l, locationStartColumn l)
 
 type TokenParser e = forall s m u. Stream s m (Token, Location) => ParsecT s u m e
+
+-- | @notFollowedBy p@ only succeeds when parser @p@ fails. This parser
+-- does not consume any input. This parser can be used to implement the
+-- \'longest match\' rule. For example, when recognizing keywords (for
+-- example @let@), we want to make sure that a keyword is not followed
+-- by a legal identifier character, in which case the keyword is
+-- actually an identifier (for example @lets@). We can program this
+-- behaviour as follows:
+--
+-- >  keywordLet  = try (do{ string "let"
+-- >                       ; notFollowedBy alphaNum
+-- >                       })
+notFollowedBy' :: TokenParser (Token, Location) -> TokenParser ()
+notFollowedBy' p =
+  try ((do c <- try p
+           unexpected (tokenString c)) <|>
+       return ())
+
+-- | This parser only succeeds at the end of the input. This is not a
+-- primitive parser but it is defined using 'notFollowedBy'.
+--
+-- >  eof  = notFollowedBy anyToken <?> "end of input"
+endOfTokens :: TokenParser ()
+endOfTokens = notFollowedBy' anyToken <?> "end of input"

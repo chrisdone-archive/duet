@@ -42,16 +42,29 @@ printExpression =
     LiteralExpression _ l -> printLiteral l
     VariableExpression _ i -> printIdentifier i
     ApplicationExpression _ f x ->
-      "(" ++ printExpression f ++ " " ++ printExpression x ++ ")"
+      printExpressionAppOp f ++ " " ++ printExpressionAppArg x
     IfExpression _ a b c ->
       "if " ++
       printExpression a ++
       " then " ++ printExpression b ++ " else " ++ printExpression c
     e -> "<TODO>"
+  where
+    printExpressionAppArg =
+      \case
+        e@(ApplicationExpression {}) -> paren (printExpression e)
+        e@(IfExpression {}) -> paren (printExpression e)
+        e -> printExpression e
+    printExpressionAppOp =
+      \case
+        e@(IfExpression {}) -> paren (printExpression e)
+        e -> printExpression e
+
+paren e = "("  ++ e ++ ")"
 
 printLiteral :: Literal -> String
 printLiteral (IntegerLiteral i) = show i
 printLiteral (StringLiteral x) = show x
+printLiteral (CharacterLiteral x) = show x
 printLiteral l = "<TODO: literal>"
 
 printScheme :: SpecialTypes -> Scheme -> [Char]

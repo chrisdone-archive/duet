@@ -10,7 +10,7 @@ import qualified Data.Text as T
 import           Duet.Printer
 import           Duet.Tokenizer
 import           Duet.Types
-import           Text.Parsec hiding (satisfy)
+import           Text.Parsec hiding (satisfy, anyToken)
 
 parseText :: SourceName -> Text -> Either ParseError (Expression Location)
 parseText fp inp =
@@ -22,24 +22,38 @@ parseText fp inp =
         Right ast -> Right ast
 
 tokensParser :: TokenParser (Expression Location)
-tokensParser = expParser
+tokensParser = expParser <* endOfTokens
 
 expParser :: TokenParser (Expression Location)
-expParser = app <|> varParser <|> ifParser
+expParser = ifParser <|> app <|> atomic
   where
     app = do
       left <- unambiguous
-      right <- many1 unambiguous
-      pure (foldl (ApplicationExpression (Location 0 0 0 0)) left right)
-    unambiguous = parensExpr <|> varParser
+      right <- many unambiguous
+      case right of
+        [] -> pure left
+        _ -> pure (foldl (ApplicationExpression (Location 0 0 0 0)) left right)
+    unambiguous = parensExpr <|> atomic
     parensExpr = parens expParser
 
+atomic :: TokenParser (Expression Location)
+atomic = varParser <|> charParser
+  where
+    charParser = do
+      (c, loc) <-
+        consumeToken
+          (\case
+             Character c -> Just c
+             _ -> Nothing)
+      pure (LiteralExpression loc (CharacterLiteral c))
+
 parens :: TokenParser a -> TokenParser a
-parens p = do
-  _ <- satisfyToken (== OpenParen)
-  e <- p
-  _ <- satisfyToken (== CloseParen)
-  pure e
+parens p = go <?> "parens e.g. (x)"
+  where go = do
+         _ <- satisfyToken (== OpenParen)
+         e <- p <?> "expression inside parentheses e.g. (foo)"
+         _ <- satisfyToken (== CloseParen)<?> "closing parenthesis ‘)’"
+         pure e
 
 varParser :: TokenParser (Expression Location)
 varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
