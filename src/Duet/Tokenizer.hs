@@ -242,8 +242,6 @@ smartQuotes t = "“" <> t <> "”"
 curlyQuotes :: [Char] -> [Char]
 curlyQuotes t = "‘" <> t <> "’"
 
-type TokenParser = Parsec (Token, Location) ()
-
 -- | Consume the given predicate from the token stream.
 consumeToken :: Stream s m (Token, Location) => (Token -> Maybe a) -> ParsecT s u m (a, Location)
 consumeToken f =
@@ -292,3 +290,5 @@ tokenPosition :: SourcePos -> (Token, Location) -> t -> SourcePos
 tokenPosition pos (_, l) _ =
   setSourceColumn (setSourceLine pos line) col
   where (line,col) = (locationStartLine l, locationStartColumn l)
+
+type TokenParser e = forall s m u. Stream s m (Token, Location) => ParsecT s u m e

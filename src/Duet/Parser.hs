@@ -1,10 +1,10 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 -- |
 
 module Duet.Parser where
 
-import           Data.Foldable
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Duet.Tokenizer
@@ -20,14 +20,14 @@ parseText fp inp =
         Left e -> Left e
         Right ast -> Right ast
 
-tokensParser :: Stream s m (Token, Location) => ParsecT s u m (Expression Location)
+tokensParser :: TokenParser (Expression Location)
 tokensParser = expParser
 
-expParser :: Stream s m (Token, Location) => ParsecT s u m (Expression Location)
+expParser :: TokenParser (Expression Location)
 expParser = do
-  ifParser <|> varParser
+  varParser <|> ifParser
 
-varParser :: Stream s m (Token, Location) => ParsecT s u m (Expression Location)
+varParser :: TokenParser (Expression Location)
 varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
   where
     go = do
@@ -38,7 +38,7 @@ varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
              _ -> Nothing)
       pure (VariableExpression loc (Identifier (T.unpack v)))
 
-ifParser :: Stream s m (Token, Location) => ParsecT s u m (Expression Location)
+ifParser :: TokenParser (Expression Location)
 ifParser = go <?> "if expression (e.g. ‘if p then x else y’)"
   where
     go = do
