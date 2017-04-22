@@ -25,7 +25,7 @@ printPattern =
     WildcardPattern -> "_"
     AsPattern i p -> printIdentifier i ++ "@" ++ printPattern p
     LiteralPattern l -> printLiteral l
-    ConstructorPattern (TypeSignature i _ _) pats ->
+    ConstructorPattern (TypeSignature i _) pats ->
       printIdentifier i ++ " " ++ unwords (map printPattern pats)
 
 -- printTypeSignatureIdent :: SpecialTypes -> (TypeSignature Identifier) -> String

@@ -7,13 +7,14 @@ module Duet.Parser where
 
 import           Data.Text (Text)
 import qualified Data.Text as T
+import           Duet.Printer
 import           Duet.Tokenizer
 import           Duet.Types
 import           Text.Parsec hiding (satisfy)
 
 parseText :: SourceName -> Text -> Either ParseError (Expression Location)
 parseText fp inp =
-  case parse tokensTokenizer fp inp of
+  case parse tokensTokenizer fp (inp) of
     Left e -> Left e
     Right tokens' ->
       case parse tokensParser fp tokens' of
@@ -25,18 +26,32 @@ tokensParser = expParser
 
 expParser :: TokenParser (Expression Location)
 expParser = do
-  varParser <|> ifParser
+  appParser <|> ifParser
+
+parens :: TokenParser a -> TokenParser a
+parens p = do
+  _ <- satisfyToken (== OpenParen)
+  e <- p
+  _ <- satisfyToken (== CloseParen)
+  pure e
+
+appParser :: TokenParser (Expression Location)
+appParser = do
+  funcExp <- varParser <|> parens expParser
+  ((ApplicationExpression (Location 0 0 0 0) funcExp <$>
+    (varParser <|> parens expParser)) <|>
+   pure funcExp)
 
 varParser :: TokenParser (Expression Location)
 varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
-  where
-    go = do
-      (v, loc) <-
-        consumeToken
-          (\case
-             Variable i -> Just i
-             _ -> Nothing)
-      pure (VariableExpression loc (Identifier (T.unpack v)))
+           where
+             go = do
+               (v, loc) <-
+                 consumeToken
+                   (\case
+                      Variable i -> Just i
+                      _ -> Nothing)
+               pure (VariableExpression loc (Identifier (T.unpack v)))
 
 ifParser :: TokenParser (Expression Location)
 ifParser = go <?> "if expression (e.g. ‘if p then x else y’)"
