@@ -41,7 +41,7 @@ tokenize :: FilePath -> Text -> Either ParseError [(Token, Location)]
 tokenize = parse tokensTokenizer
 
 tokensTokenizer :: Parser [(Token, Location)]
-tokensTokenizer = many (spaces *> tokenTokenizer <* spaces) <* eof
+tokensTokenizer = spaces *> many (tokenTokenizer <* spaces) <* eof
 
 tokenTokenizer :: Parser (Token, Location)
 tokenTokenizer =
@@ -117,14 +117,14 @@ tokenTokenizer =
         "variable (e.g. “elephant”, “age”, “t2”, etc.)"
     , parseNumbers
     ]
-  where
 
-
+ellipsis :: Int -> [Char] -> [Char]
 ellipsis n text =
   if length text > 2
     then take n text ++ "…"
     else text
 
+specialParsing ::  (t1 -> t) -> Parser  t1 -> String -> Parser  (t, Location)
 specialParsing constructor parser description = do
   start <- getPosition
   thing <- parser <?> description
@@ -137,6 +137,7 @@ specialParsing constructor parser description = do
         (sourceLine end)
         (sourceColumn end))
 
+atom ::  t -> String -> Parser  (t, Location)
 atom constructor text = do
   start <- getPosition
   _ <- try (string text) <?> smartQuotes text
@@ -149,6 +150,7 @@ atom constructor text = do
         (sourceLine end)
         (sourceColumn end))
 
+parsing ::  (Text -> t) -> Parser  Text -> String -> Parser  (t, Location)
 parsing constructor parser description = do
   start <- getPosition
   text <- parser <?> description
