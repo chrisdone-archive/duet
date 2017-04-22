@@ -52,7 +52,6 @@ import           Control.Monad.State
 import           Data.List
 import qualified Data.Map.Strict as M
 import           Data.Maybe
-import           Debug.Trace
 import           Duet.Types
 
 --------------------------------------------------------------------------------
@@ -110,10 +109,6 @@ substituteTypeSignature substitutions (TypeSignature l scheme) =
     TypeSignature l (substituteInScheme substitutions scheme)
   where substituteInScheme substitutions (Forall kinds qualified) =
           Forall kinds (substituteQualified substitutions qualified)
--- substituteTypeSignature substitutions (ExpressionSignature expression scheme) =
---     ExpressionSignature expression (substituteInScheme substitutions scheme)
---   where substituteInScheme substitutions (Forall kinds qualified) =
---           Forall kinds (substituteQualified substitutions qualified)
 
 substitutePredicate :: [Substitution] -> Predicate -> Predicate
 substitutePredicate substitutions (IsIn identifier types) =

@@ -162,7 +162,11 @@ data Kind
   deriving (Eq, Show)
 
 data Location = Location
-  deriving Show
+  { locationStartLine :: !Int
+  , locationStartColumn :: !Int
+  , locationEndLine :: !Int
+  , locationEndColumn :: !Int
+  } deriving (Show)
 
 -- | A Haskell expression.
 data Expression l
