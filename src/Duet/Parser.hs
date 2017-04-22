@@ -25,14 +25,36 @@ tokensParser :: TokenParser (Expression Location)
 tokensParser = expParser <* endOfTokens
 
 expParser :: TokenParser (Expression Location)
-expParser = ifParser <|> app <|> atomic
+expParser = ifParser <|> infix' <|> app <|> atomic
   where
     app = do
-      left <- unambiguous
-      right <- many unambiguous
+      left <- unambiguous <?> "function expression"
+      right <- many unambiguous <?> "function arguments"
       case right of
         [] -> pure left
         _ -> pure (foldl (ApplicationExpression (Location 0 0 0 0)) left right)
+    infix' = (do
+       left <- (app <|> unambiguous) <?> "left-hand side of operator"
+       tok <-
+         fmap
+           Just
+           ((satisfyToken
+              (\case
+                 Operator {} -> True
+                 _ -> False)) <?> "infix operator") <|>
+         pure Nothing
+       case tok of
+         Nothing -> pure left
+         Just (Operator t, _) -> do
+           right <-
+             (app <|> unambiguous) <?>
+             ("right-hand side of " ++ curlyQuotes (T.unpack t) ++ " operator")
+           pure
+             (InfixExpression
+                (Location 0 0 0 0)
+                (VariableExpression (Location 0 0 0 0) (Identifier "op"))
+                left
+                right)) <?> "infix expression (e.g. x * y)"
     unambiguous = parensExpr <|> atomic
     parensExpr = parens expParser
 
@@ -73,11 +95,11 @@ ifParser = go <?> "if expression (e.g. ‘if p then x else y’)"
   where
     go = do
       (_, loc) <- satisfyToken (== If)
-      p <- expParser
-      _ <- satisfyToken (== Then)
-      e1 <- expParser
-      _ <- satisfyToken (== Else)
-      e2 <- expParser
+      p <- expParser <?> "condition expresion of if-expression"
+      _ <- satisfyToken (== Then) <?> "‘then’ keyword for if-expression"
+      e1 <- expParser <?> "‘then’ clause of if-expression"
+      _ <- satisfyToken (== Else)<?> "‘else’ keyword for if-expression"
+      e2 <- expParser <?> "‘else’ clause of if-expression"
       pure
         (IfExpression
            loc

@@ -47,12 +47,15 @@ printExpression =
       "if " ++
       printExpression a ++
       " then " ++ printExpression b ++ " else " ++ printExpression c
+    InfixExpression _ o f x ->
+      printExpressionAppArg f ++ " * " ++ printExpressionAppArg x
     e -> "<TODO>"
   where
     printExpressionAppArg =
       \case
         e@(ApplicationExpression {}) -> paren (printExpression e)
         e@(IfExpression {}) -> paren (printExpression e)
+        e@(InfixExpression {}) -> paren (printExpression e)
         e -> printExpression e
     printExpressionAppOp =
       \case

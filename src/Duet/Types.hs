@@ -174,6 +174,7 @@ data Expression l
   | LiteralExpression l Literal
   | ConstantExpression l (TypeSignature Identifier)
   | ApplicationExpression l (Expression l) (Expression l)
+  | InfixExpression l (Expression l) (Expression l) (Expression l)
   | LetExpression l (BindGroup l) (Expression l)
   | LambdaExpression l (Alternative l)
   | IfExpression l (Expression l) (Expression l) (Expression l)
