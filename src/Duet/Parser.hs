@@ -25,8 +25,14 @@ tokensParser :: TokenParser (Expression Location)
 tokensParser = expParser
 
 expParser :: TokenParser (Expression Location)
-expParser = do
-  appParser <|> ifParser
+expParser = app <|> varParser <|> ifParser
+  where
+    app = do
+      left <- unambiguous
+      right <- many1 unambiguous
+      pure (foldl (ApplicationExpression (Location 0 0 0 0)) left right)
+    unambiguous = parensExpr <|> varParser
+    parensExpr = parens expParser
 
 parens :: TokenParser a -> TokenParser a
 parens p = do
@@ -35,23 +41,16 @@ parens p = do
   _ <- satisfyToken (== CloseParen)
   pure e
 
-appParser :: TokenParser (Expression Location)
-appParser = do
-  funcExp <- varParser <|> parens expParser
-  ((ApplicationExpression (Location 0 0 0 0) funcExp <$>
-    (varParser <|> parens expParser)) <|>
-   pure funcExp)
-
 varParser :: TokenParser (Expression Location)
 varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
-           where
-             go = do
-               (v, loc) <-
-                 consumeToken
-                   (\case
-                      Variable i -> Just i
-                      _ -> Nothing)
-               pure (VariableExpression loc (Identifier (T.unpack v)))
+  where
+    go = do
+      (v, loc) <-
+        consumeToken
+          (\case
+             Variable i -> Just i
+             _ -> Nothing)
+      pure (VariableExpression loc (Identifier (T.unpack v)))
 
 ifParser :: TokenParser (Expression Location)
 ifParser = go <?> "if expression (e.g. ‘if p then x else y’)"

@@ -74,7 +74,7 @@ tokenTokenizer =
     , specialParsing
         Character
         (do _ <- string "'"
-            chars <- many1 (satisfy (/= '\''))
+            chars <- many1 (satisfy (/= '\'')) <?> "character e.g. 'a'"
             when
               (length chars > 1)
               (unexpected

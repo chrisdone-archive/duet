@@ -43,6 +43,10 @@ printExpression =
     VariableExpression _ i -> printIdentifier i
     ApplicationExpression _ f x ->
       "(" ++ printExpression f ++ " " ++ printExpression x ++ ")"
+    IfExpression _ a b c ->
+      "if " ++
+      printExpression a ++
+      " then " ++ printExpression b ++ " else " ++ printExpression c
     e -> "<TODO>"
 
 printLiteral :: Literal -> String
