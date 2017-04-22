@@ -39,13 +39,15 @@ expParser = ifParser <|> app <|> atomic
 atomic :: TokenParser (Expression Location)
 atomic = varParser <|> charParser
   where
-    charParser = do
-      (c, loc) <-
-        consumeToken
-          (\case
-             Character c -> Just c
-             _ -> Nothing)
-      pure (LiteralExpression loc (CharacterLiteral c))
+    charParser = go <?> "character (e.g. 'a')"
+      where
+        go = do
+          (c, loc) <-
+            consumeToken
+              (\case
+                 Character c -> Just c
+                 _ -> Nothing)
+          pure (LiteralExpression loc (CharacterLiteral c))
 
 parens :: TokenParser a -> TokenParser a
 parens p = go <?> "parens e.g. (x)"
