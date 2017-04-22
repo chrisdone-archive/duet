@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -21,6 +22,8 @@ data Token
   | Then
   | Else
   | Case
+  | Let
+  | In
   | OpenParen
   | CloseParen
   | Equals
@@ -50,6 +53,8 @@ tokenTokenizer =
     , atom OpenParen "("
     , atom CloseParen ")"
     , atom Equals "="
+    , atom Let "let"
+    , atom In "in"
     , atom Comma ","
     , parsing
         Operator
@@ -110,113 +115,123 @@ tokenTokenizer =
                  pure (start ++ end)
             pure (T.pack variable))
         "variable (e.g. “elephant”, “age”, “t2”, etc.)"
-    , ((do start <- getPosition
-           neg <- fmap Just (char '-') <|> pure Nothing
-           let operator = do
-                 end <- getPosition
-                 pure
-                   ( Operator "-"
-                   , Location
-                       (sourceLine start)
-                       (sourceColumn start)
-                       (sourceLine end)
-                       (sourceColumn end))
-               number f = do
-                 x <- many1 digit
-                 (do _ <- char '.'
-                     y <-
-                       many1 digit <?> ("decimal component, e.g. " ++ x ++ ".0")
-                     end <- getPosition
-                     pure
-                       ( Decimal (read (x ++ "." ++ y))
-                       , Location
-                           (sourceLine start)
-                           (sourceColumn start)
-                           (sourceLine end)
-                           (sourceColumn end))) <|>
-                   (do end <- getPosition
-                       pure
-                         ( Integer (f (read x))
-                         , Location
-                             (sourceLine start)
-                             (sourceColumn start)
-                             (sourceLine end)
-                             (sourceColumn end)))
-           case neg of
-             Nothing -> number id
-             Just {} -> number (* (-1)) <|> operator) <?>
-       "number (e.g. 42, 3.141, etc.)")
+    , parseNumbers
     ]
   where
-    ellipsis n text =
-      if length text > 2
-        then take n text ++ "…"
-        else text
-    specialParsing constructor parser description = do
-      start <- getPosition
-      thing <- parser <?> description
-      end <- getPosition
-      pure
-        ( constructor thing
-        , Location
-            (sourceLine start)
-            (sourceColumn start)
-            (sourceLine end)
-            (sourceColumn end))
-    parsing constructor parser description = do
-      start <- getPosition
-      text <- parser <?> description
-      mapM_
-        (bailOnUnsupportedKeywords text)
-        [ "class"
-        , "data"
-        , "default"
-        , "deriving"
-        , "do"
-        , "forall"
-        , "import"
-        , "infix"
-        , "infixl"
-        , "infixr"
-        , "instance"
-        , "module"
-        , "newtype"
-        , "qualified"
-        , "type"
-        , "where"
-        , "foreign"
-        , "ccall"
-        , "as"
-        , "safe"
-        , "unsafe"
-        ]
-      end <- getPosition
-      pure
-        ( constructor text
-        , Location
-            (sourceLine start)
-            (sourceColumn start)
-            (sourceLine end)
-            (sourceColumn end))
+
+
+ellipsis n text =
+  if length text > 2
+    then take n text ++ "…"
+    else text
+
+specialParsing constructor parser description = do
+  start <- getPosition
+  thing <- parser <?> description
+  end <- getPosition
+  pure
+    ( constructor thing
+    , Location
+        (sourceLine start)
+        (sourceColumn start)
+        (sourceLine end)
+        (sourceColumn end))
+
+atom constructor text = do
+  start <- getPosition
+  _ <- try (string text) <?> smartQuotes text
+  end <- getPosition
+  pure
+    ( constructor
+    , Location
+        (sourceLine start)
+        (sourceColumn start)
+        (sourceLine end)
+        (sourceColumn end))
+
+parsing constructor parser description = do
+  start <- getPosition
+  text <- parser <?> description
+  mapM_
+    (bailOnUnsupportedKeywords text)
+    [ "class"
+    , "data"
+    , "default"
+    , "deriving"
+    , "do"
+    , "forall"
+    , "import"
+    , "infix"
+    , "infixl"
+    , "infixr"
+    , "instance"
+    , "module"
+    , "newtype"
+    , "qualified"
+    , "type"
+    , "where"
+    , "foreign"
+    , "ccall"
+    , "as"
+    , "safe"
+    , "unsafe"
+    ]
+  end <- getPosition
+  pure
+    ( constructor text
+    , Location
+        (sourceLine start)
+        (sourceColumn start)
+        (sourceLine end)
+        (sourceColumn end))
+  where
+    bailOnUnsupportedKeywords text word =
+      when
+        (text == word)
+        (unexpected
+           ("“" ++ T.unpack word ++ "”: that keyword isn't allowed, " ++ ext))
       where
-        bailOnUnsupportedKeywords text word =
-          when
-            (text == word)
-            (unexpected
-               ("“" ++ T.unpack word ++ "”: that keyword isn't allowed, " ++ ext))
-          where
-            ext = "but you could use this instead: " ++ T.unpack word ++ "_"
-    atom constructor text = do
+        ext = "but you could use this instead: " ++ T.unpack word ++ "_"
+
+parseNumbers :: Parser (Token, Location)
+parseNumbers = parser <?> "number (e.g. 42, 3.141, etc.)"
+  where
+    parser = do
       start <- getPosition
-      _ <- try (string text) <?> smartQuotes text
-      end <- getPosition
-      pure
-        ( constructor
-        , Location
-            (sourceLine start)
-            (sourceColumn start)
-            (sourceLine end)
-            (sourceColumn end))
+      neg <- fmap Just (char '-') <|> pure Nothing
+      let operator = do
+            end <- getPosition
+            pure
+              ( Operator "-"
+              , Location
+                  (sourceLine start)
+                  (sourceColumn start)
+                  (sourceLine end)
+                  (sourceColumn end))
+          number :: (forall a. (Num a) => a -> a) -> Parser (Token, Location)
+          number f = do
+            x <- many1 digit
+            (do _ <- char '.'
+                y <- many1 digit <?> ("decimal component, e.g. " ++ x ++ ".0")
+                end <- getPosition
+                pure
+                  ( Decimal (f (read (x ++ "." ++ y)))
+                  , Location
+                      (sourceLine start)
+                      (sourceColumn start)
+                      (sourceLine end)
+                      (sourceColumn end))) <|>
+              (do end <- getPosition
+                  pure
+                    ( Integer (f (read x))
+                    , Location
+                        (sourceLine start)
+                        (sourceColumn start)
+                        (sourceLine end)
+                        (sourceColumn end)))
+      case neg of
+        Nothing -> number id
+        Just {} -> number (* (-1)) <|> operator
 
 smartQuotes :: [Char] -> [Char]
 smartQuotes t = "“" <> t <> "”"
