@@ -26,6 +26,12 @@ data Token
   | Equals
   | Variable !Text
   | Constructor !Text
+  | Character !Char
+  | String !Text
+  | Operator !Text
+  | Comma
+  | Integer !Integer
+  | Decimal !Double
   deriving (Show, Eq, Ord)
 
 tokenize :: FilePath -> Text -> Either ParseError [(Token, Location)]
@@ -44,6 +50,50 @@ tokenTokenizer =
     , atom OpenParen "("
     , atom CloseParen ")"
     , atom Equals "="
+    , atom Comma ","
+    , parsing
+        Operator
+        (fmap
+           T.pack
+           (choice
+              [ string "*"
+              , string "+"
+              , try (string ">=")
+              , try (string "<=")
+              , string ">"
+              , string "<"
+              , string "/"
+              ]))
+        "operator (e.g. *, <, +, etc.)"
+    , specialParsing
+        Character
+        (do _ <- string "'"
+            chars <- many1 (satisfy (/= '\''))
+            when
+              (length chars > 1)
+              (unexpected
+                 (concat
+                    [ "character: you wrote\n"
+                    , "'" ++ ellipsis 5 chars ++ "\n"
+                    , "but only one character is allowed inside single quotes, like this:\n'" ++
+                      take 1 chars ++ "'"
+                    , "\nPerhaps you forgot to put the closing single quote?\n"
+                    , "You may also have meant to use double quotes for text, e.g.\n"
+                    , "\"" ++ takeWhile (/= '\'') chars ++ "\""
+                    ]))
+            _ <- string "'"
+            pure (head chars))
+        "character (e.g. 'a', 'z', '9', etc.)"
+    , parsing
+        String
+        (do _ <- string "\""
+            chars <- many1 (satisfy (\c -> c /= '"'))
+            when
+              (any (== '\\') chars)
+              (unexpected "\\ character, not allowed inside a string.")
+            _ <- string "\"" <?> "double quotes (\") to close the string"
+            pure (T.pack chars))
+        "string (e.g. \"hello\", \"123\", etc.)"
     , parsing
         Constructor
         (do c <- satisfy isUpper
@@ -60,13 +110,59 @@ tokenTokenizer =
                  pure (start ++ end)
             pure (T.pack variable))
         "variable (e.g. “elephant”, “age”, “t2”, etc.)"
-    , parsing
-        Constructor
-        (do variable <- many1 digit
-            pure (T.pack variable))
-        "number (e.g. 0, 42, 666, 3.141, etc.)"
+    , ((do start <- getPosition
+           neg <- fmap Just (char '-') <|> pure Nothing
+           let operator = do
+                 end <- getPosition
+                 pure
+                   ( Operator "-"
+                   , Location
+                       (sourceLine start)
+                       (sourceColumn start)
+                       (sourceLine end)
+                       (sourceColumn end))
+               number f = do
+                 x <- many1 digit
+                 (do _ <- char '.'
+                     y <-
+                       many1 digit <?> ("decimal component, e.g. " ++ x ++ ".0")
+                     end <- getPosition
+                     pure
+                       ( Decimal (read (x ++ "." ++ y))
+                       , Location
+                           (sourceLine start)
+                           (sourceColumn start)
+                           (sourceLine end)
+                           (sourceColumn end))) <|>
+                   (do end <- getPosition
+                       pure
+                         ( Integer (f (read x))
+                         , Location
+                             (sourceLine start)
+                             (sourceColumn start)
+                             (sourceLine end)
+                             (sourceColumn end)))
+           case neg of
+             Nothing -> number id
+             Just {} -> number (* (-1)) <|> operator) <?>
+       "number (e.g. 42, 3.141, etc.)")
     ]
   where
+    ellipsis n text =
+      if length text > 2
+        then take n text ++ "…"
+        else text
+    specialParsing constructor parser description = do
+      start <- getPosition
+      thing <- parser <?> description
+      end <- getPosition
+      pure
+        ( constructor thing
+        , Location
+            (sourceLine start)
+            (sourceColumn start)
+            (sourceLine end)
+            (sourceColumn end))
     parsing constructor parser description = do
       start <- getPosition
       text <- parser <?> description
@@ -108,7 +204,8 @@ tokenTokenizer =
             (text == word)
             (unexpected
                ("“" ++ T.unpack word ++ "”: that keyword isn't allowed, " ++ ext))
-          where ext = "but you could use this instead: " ++ T.unpack word ++ "'"
+          where
+            ext = "but you could use this instead: " ++ T.unpack word ++ "_"
     atom constructor text = do
       start <- getPosition
       _ <- try (string text) <?> smartQuotes text
