@@ -47,20 +47,22 @@ printExpression =
       "if " ++
       printExpression a ++
       " then " ++ printExpression b ++ " else " ++ printExpression c
-    InfixExpression _ o f x ->
-      printExpressionAppArg f ++ " * " ++ printExpressionAppArg x
+    InfixExpression _ f o x ->
+      printExpressionAppArg f ++
+      " " ++ printIdentifier o ++ " " ++ printExpressionAppArg x
     e -> "<TODO>"
   where
-    printExpressionAppArg =
-      \case
-        e@(ApplicationExpression {}) -> paren (printExpression e)
-        e@(IfExpression {}) -> paren (printExpression e)
-        e@(InfixExpression {}) -> paren (printExpression e)
-        e -> printExpression e
-    printExpressionAppOp =
-      \case
-        e@(IfExpression {}) -> paren (printExpression e)
-        e -> printExpression e
+
+printExpressionAppArg =
+  \case
+    e@(ApplicationExpression {}) -> paren (printExpression e)
+    e@(IfExpression {}) -> paren (printExpression e)
+    e@(InfixExpression {}) -> paren (printExpression e)
+    e -> printExpression e
+printExpressionAppOp =
+  \case
+    e@(IfExpression {}) -> paren (printExpression e)
+    e -> printExpression e
 
 paren e = "("  ++ e ++ ")"
 

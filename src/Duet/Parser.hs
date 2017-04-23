@@ -5,6 +5,8 @@
 
 module Duet.Parser where
 
+import           Control.Monad
+import           Data.Maybe
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Duet.Printer
@@ -33,28 +35,59 @@ expParser = ifParser <|> infix' <|> app <|> atomic
       case right of
         [] -> pure left
         _ -> pure (foldl (ApplicationExpression (Location 0 0 0 0)) left right)
-    infix' = (do
-       left <- (app <|> unambiguous) <?> "left-hand side of operator"
-       tok <-
-         fmap
-           Just
-           ((satisfyToken
-              (\case
-                 Operator {} -> True
-                 _ -> False)) <?> "infix operator") <|>
-         pure Nothing
-       case tok of
-         Nothing -> pure left
-         Just (Operator t, _) -> do
-           right <-
-             (app <|> unambiguous) <?>
-             ("right-hand side of " ++ curlyQuotes (T.unpack t) ++ " operator")
-           pure
-             (InfixExpression
-                (Location 0 0 0 0)
-                (VariableExpression (Location 0 0 0 0) (Identifier "op"))
-                left
-                right)) <?> "infix expression (e.g. x * y)"
+    infix' =
+      (do left <- (app <|> unambiguous) <?> "left-hand side of operator"
+          tok <- fmap Just (operator <?> "infix operator") <|> pure Nothing
+          case tok of
+            Nothing -> pure left
+            Just (Operator t, _) -> do
+              right <-
+                (app <|> unambiguous) <?>
+                ("right-hand side of " ++
+                 curlyQuotes (T.unpack t) ++ " operator")
+              badop <- fmap Just (lookAhead operator) <|> pure Nothing
+              let infixexp =
+                    InfixExpression
+                      (Location 0 0 0 0)
+                      left
+                      (Identifier (T.unpack t))
+                      right
+              maybe
+                (return ())
+                (\op ->
+                   unexpected
+                     (concat
+                        [ "operator " ++
+                          tokenString op ++
+                          ". When more than one operator is used\n"
+                        , "in the same expression, use parentheses, like this:\n"
+                        , "(" ++
+                          printExpression infixexp ++
+                          ") " ++
+                          (case op of
+                             (Operator i, _) -> T.unpack i ++ " ..."
+                             _ -> "* ...") ++
+                          "\n"
+                        , "Or like this:\n"
+                        , printExpressionAppArg left ++
+                          " " ++
+                          T.unpack t ++
+                          " (" ++
+                          printExpressionAppArg right ++
+                          " " ++
+                          case op of
+                            (Operator i, _) -> T.unpack i ++ " ...)"
+                            _ -> "* ...)"
+                        ]))
+                badop
+              pure infixexp) <?>
+      "infix expression (e.g. x * y)"
+      where
+        operator =
+          (satisfyToken
+             (\case
+                Operator {} -> True
+                _ -> False))
     unambiguous = parensExpr <|> atomic
     parensExpr = parens expParser
 
