@@ -41,6 +41,7 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
          "variable name"
       _ <- satisfyToken (== Equals)
       e <- expParser
+      _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> eof
       pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [Alternative loc [] e])
 
 expParser :: TokenParser (Expression Location)

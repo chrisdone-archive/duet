@@ -10,6 +10,7 @@ module Duet.Tokenizer where
 
 import           Control.Monad
 import           Data.Char
+import           Data.List
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Text (Text)
@@ -39,6 +40,7 @@ data Token
   | Comma
   | Integer !Integer
   | Decimal !Double
+  | NonIndentedNewline
   deriving (Show, Eq, Ord)
 
 tokenize :: FilePath -> Text -> Either ParseError [(Token, Location)]
@@ -48,10 +50,21 @@ tokensTokenizer :: Parser [(Token, Location)]
 tokensTokenizer =
   manyTill (many space >>= tokenTokenizer) (try (spaces >> eof))
 
-tokenTokenizer :: [a] -> Parser (Token, Location)
+tokenTokenizer :: [Char] -> Parser (Token, Location)
 tokenTokenizer prespaces =
   choice
-    [ atom If "if"
+    [ if isSuffixOf "\n" prespaces
+        then do
+          pos <- getPosition
+          pure
+            ( NonIndentedNewline
+            , Location
+                (sourceLine pos)
+                (sourceColumn pos)
+                (sourceLine pos)
+                (sourceColumn pos))
+        else unexpected "indented newline"
+    , atom If "if"
     , atom Then "then"
     , atom Else "else"
     , atom Case "case"
@@ -132,7 +145,8 @@ tokenTokenizer prespaces =
         "variable (e.g. “elephant”, “age”, “t2”, etc.)"
     , parseNumbers prespaces
     ]
-  where spaces1 = space >> spaces
+  where
+    spaces1 = space >> spaces
 
 ellipsis :: Int -> [Char] -> [Char]
 ellipsis n text =
@@ -297,6 +311,7 @@ tokenString (tok, _) =
     Else -> curlyQuotes "else"
     Case -> curlyQuotes "case"
     Let -> curlyQuotes "let"
+    NonIndentedNewline -> "non-indented newline"
     In -> curlyQuotes "in"
     Backslash -> curlyQuotes ("backslash " ++ curlyQuotes "\\")
     OpenParen -> "opening parenthesis " ++ curlyQuotes "("
