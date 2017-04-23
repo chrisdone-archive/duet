@@ -14,7 +14,7 @@ import           Duet.Tokenizer
 import           Duet.Types
 import           Text.Parsec hiding (satisfy, anyToken)
 
-parseText :: SourceName -> Text -> Either ParseError (Expression Location)
+parseText :: SourceName -> Text -> Either ParseError [BindGroup Location]
 parseText fp inp =
   case parse tokensTokenizer fp (inp) of
     Left e -> Left e
@@ -23,8 +23,25 @@ parseText fp inp =
         Left e -> Left e
         Right ast -> Right ast
 
-tokensParser :: TokenParser (Expression Location)
-tokensParser = expParser <* endOfTokens
+tokensParser :: TokenParser [BindGroup Location]
+tokensParser = moduleParser <* endOfTokens
+
+moduleParser :: TokenParser [BindGroup Location]
+moduleParser = fmap (map (\x -> BindGroup [] [[x]])) (many varfundecl)
+
+varfundecl :: TokenParser (ImplicitlyTypedBinding Location)
+varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
+  where
+    go = do
+      (v, loc) <-
+         consumeToken
+           (\case
+              Variable i -> Just i
+              _ -> Nothing) <?>
+         "variable name"
+      _ <- satisfyToken (== Equals)
+      e <- expParser
+      pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [Alternative loc [] e])
 
 expParser :: TokenParser (Expression Location)
 expParser = lambda <|> ifParser <|> infix' <|> app <|> atomic

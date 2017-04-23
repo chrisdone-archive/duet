@@ -25,6 +25,8 @@ library
     Duet
     Duet.Types
     Duet.Parser
+    Duet.Printer
+    Duet.Tokenizer
 
 executable duet
   hs-source-dirs:

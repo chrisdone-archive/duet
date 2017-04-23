@@ -10,6 +10,7 @@ module Duet.Tokenizer where
 
 import           Control.Monad
 import           Data.Char
+import           Data.Maybe
 import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
@@ -44,7 +45,8 @@ tokenize :: FilePath -> Text -> Either ParseError [(Token, Location)]
 tokenize fp t = parse tokensTokenizer fp t
 
 tokensTokenizer :: Parser [(Token, Location)]
-tokensTokenizer = many (many space >>= tokenTokenizer) <* eof
+tokensTokenizer =
+  manyTill (many space >>= tokenTokenizer) (try (spaces >> eof))
 
 tokenTokenizer :: [a] -> Parser (Token, Location)
 tokenTokenizer prespaces =

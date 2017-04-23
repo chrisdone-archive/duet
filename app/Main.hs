@@ -18,10 +18,7 @@ main = do
   case args of
     [file] -> do
       text <- T.readFile file
-      case parse
-             (sepBy (implicitlyTypedBindingParser <* optional newline) newline)
-             file
-             text of
+      case parseText file text of
         Left e -> error (show e)
         Right bindings -> do
           bindGroups <-
@@ -29,14 +26,11 @@ main = do
               env
               builtInSignatures
               defaultSpecialTypes
-              [BindGroup [] (map return bindings)]
+              bindings
           print bindGroups
     [] -> do
       text <- T.getContents
-      case parse
-             (sepBy (implicitlyTypedBindingParser <* optional newline) newline)
-             "<interactive>"
-             text of
+      case parseText "<interactive>" text of
         Left e -> error (show e)
         Right bindings -> do
           bindGroups <-
@@ -44,7 +38,7 @@ main = do
               env
               builtInSignatures
               defaultSpecialTypes
-              [BindGroup [] (map return bindings)]
+              bindings
           print bindGroups
     _ -> error "usage: duet <file> or pipe a module into duet"
 

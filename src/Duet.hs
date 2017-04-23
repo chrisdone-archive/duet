@@ -3,7 +3,6 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
-{-# OPTIONS -Wno-incomplete-patterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -610,6 +609,14 @@ inferExpressionType ce as (ApplicationExpression l e f) = do
   unify (tf `makeArrow` t) te
   let scheme = (Forall [] (Qualified (ps++qs) t))
   return (ps ++ qs, t, ApplicationExpression (TypeSignature l scheme) e' f')
+inferExpressionType ce as (InfixExpression l x op y) = do
+  inferExpressionType
+    ce
+    as
+    (ApplicationExpression
+       l
+       (ApplicationExpression l x (VariableExpression l op))
+       y)
 inferExpressionType ce as (LetExpression l bg e) = do
   (ps, as', bg') <- inferBindGroupTypes ce as bg
   (qs, t, e') <- inferExpressionType ce (as' ++ as) e
