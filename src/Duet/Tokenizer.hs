@@ -39,13 +39,13 @@ data Token
   deriving (Show, Eq, Ord)
 
 tokenize :: FilePath -> Text -> Either ParseError [(Token, Location)]
-tokenize = parse tokensTokenizer
+tokenize fp t = parse tokensTokenizer fp t
 
 tokensTokenizer :: Parser [(Token, Location)]
-tokensTokenizer = spaces *> many (tokenTokenizer <* spaces) <* eof
+tokensTokenizer = many (many space >>= tokenTokenizer) <* eof
 
-tokenTokenizer :: Parser (Token, Location)
-tokenTokenizer =
+tokenTokenizer :: [a] -> Parser (Token, Location)
+tokenTokenizer prespaces =
   choice
     [ atom If "if"
     , atom Then "then"
@@ -57,20 +57,28 @@ tokenTokenizer =
     , atom Let "let"
     , atom In "in"
     , atom Comma ","
-    , parsing
-        Operator
-        (fmap
-           T.pack
-           (choice
-              [ string "*"
-              , string "+"
-              , try (string ">=")
-              , try (string "<=")
-              , string ">"
-              , string "<"
-              , string "/"
-              ]))
-        "operator (e.g. *, <, +, etc.)"
+    , do tok <-
+           parsing
+             Operator
+             (fmap
+                T.pack
+                (choice
+                   [ string "*"
+                   , string "+"
+                   , try (string ">=")
+                   , try (string "<=")
+                   , string ">"
+                   , string "<"
+                   , string "/"
+                   ]))
+             "operator (e.g. *, <, +, etc.)"
+         when
+           (null prespaces)
+           (unexpected
+              (tokenString tok ++
+               ", there should be spaces before and after operators."))
+         lookAhead spaces1 <?> ("space after " ++ tokenString tok)
+         pure tok
     , specialParsing
         Character
         (do _ <- string "'"
@@ -116,8 +124,9 @@ tokenTokenizer =
                  pure (start ++ end)
             pure (T.pack variable))
         "variable (e.g. “elephant”, “age”, “t2”, etc.)"
-    , parseNumbers
+    , parseNumbers prespaces
     ]
+  where spaces1 = space >> spaces
 
 ellipsis :: Int -> [Char] -> [Char]
 ellipsis n text =
@@ -196,8 +205,8 @@ parsing constructor parser description = do
       where
         ext = "but you could use this instead: " ++ T.unpack word ++ "_"
 
-parseNumbers :: Parser (Token, Location)
-parseNumbers = parser <?> "number (e.g. 42, 3.141, etc.)"
+parseNumbers :: [a] -> Parser (Token, Location)
+parseNumbers prespaces = parser <?> "number (e.g. 42, 3.141, etc.)"
   where
     parser = do
       start <- getPosition
@@ -211,7 +220,10 @@ parseNumbers = parser <?> "number (e.g. 42, 3.141, etc.)"
                   (sourceColumn start)
                   (sourceLine end)
                   (sourceColumn end))
-          number :: (forall a. (Num a) => a -> a) -> Parser (Token, Location)
+          number
+            :: (forall a. (Num a) =>
+                            a -> a)
+            -> Parser (Token, Location)
           number f = do
             x <- many1 digit
             (do _ <- char '.'
@@ -234,7 +246,13 @@ parseNumbers = parser <?> "number (e.g. 42, 3.141, etc.)"
                         (sourceColumn end)))
       case neg of
         Nothing -> number id
-        Just {} -> number (* (-1)) <|> operator
+        Just {} -> do
+          when
+            (null prespaces)
+            (unexpected
+               (curlyQuotes "-" ++ ", there should be a space before it."))
+          (number (* (-1)) <?> "number (e.g. 123)") <|>
+            operator <* (space <?> ("space after operator " ++ curlyQuotes "-"))
 
 smartQuotes :: [Char] -> [Char]
 smartQuotes t = "“" <> t <> "”"

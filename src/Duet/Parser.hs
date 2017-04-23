@@ -57,8 +57,7 @@ expParser = ifParser <|> infix' <|> app <|> atomic
                 (\op ->
                    unexpected
                      (concat
-                        [ "operator " ++
-                          tokenString op ++
+                        [ tokenString op ++
                           ". When more than one operator is used\n"
                         , "in the same expression, use parentheses, like this:\n"
                         , "(" ++
@@ -84,15 +83,16 @@ expParser = ifParser <|> infix' <|> app <|> atomic
       "infix expression (e.g. x * y)"
       where
         operator =
-          (satisfyToken
-             (\case
-                Operator {} -> True
-                _ -> False))
+          satisfyToken
+            (\case
+               Operator {} -> True
+               _ -> False)
     unambiguous = parensExpr <|> atomic
     parensExpr = parens expParser
 
+
 atomic :: TokenParser (Expression Location)
-atomic = varParser <|> charParser
+atomic = varParser <|> charParser <|> integerParser
   where
     charParser = go <?> "character (e.g. 'a')"
       where
@@ -103,6 +103,15 @@ atomic = varParser <|> charParser
                  Character c -> Just c
                  _ -> Nothing)
           pure (LiteralExpression loc (CharacterLiteral c))
+    integerParser = go <?> "integer (e.g. 42, 123)"
+      where
+        go = do
+          (c, loc) <-
+            consumeToken
+              (\case
+                 Integer c -> Just c
+                 _ -> Nothing)
+          pure (LiteralExpression loc (IntegerLiteral c))
 
 parens :: TokenParser a -> TokenParser a
 parens p = go <?> "parens e.g. (x)"
