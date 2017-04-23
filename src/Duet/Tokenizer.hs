@@ -23,8 +23,10 @@ data Token
   | Then
   | Else
   | Case
+  | Backslash
   | Let
   | In
+  | Arrow
   | OpenParen
   | CloseParen
   | Equals
@@ -51,9 +53,11 @@ tokenTokenizer prespaces =
     , atom Then "then"
     , atom Else "else"
     , atom Case "case"
+    , atom Backslash "\\"
     , atom OpenParen "("
     , atom CloseParen ")"
     , atom Equals "="
+    , atom Arrow "->"
     , atom Let "let"
     , atom In "in"
     , atom Comma ","
@@ -287,10 +291,12 @@ tokenString (tok, _) =
   case tok of
     If -> curlyQuotes "if"
     Then -> curlyQuotes "then"
+    Arrow -> curlyQuotes "->"
     Else -> curlyQuotes "else"
     Case -> curlyQuotes "case"
     Let -> curlyQuotes "let"
     In -> curlyQuotes "in"
+    Backslash -> curlyQuotes ("backslash " ++ curlyQuotes "\\")
     OpenParen -> "opening parenthesis " ++ curlyQuotes "("
     CloseParen -> "closing parenthesis " ++ curlyQuotes ")"
     Equals -> curlyQuotes "="

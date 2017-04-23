@@ -27,10 +27,10 @@ tokensParser :: TokenParser (Expression Location)
 tokensParser = expParser <* endOfTokens
 
 expParser :: TokenParser (Expression Location)
-expParser = ifParser <|> infix' <|> app <|> atomic
+expParser = lambda <|> ifParser <|> infix' <|> app <|> atomic
   where
     app = do
-      left <- unambiguous <?> "function expression"
+      left <- funcOp <?> "function expression"
       right <- many unambiguous <?> "function arguments"
       case right of
         [] -> pure left
@@ -87,12 +87,35 @@ expParser = ifParser <|> infix' <|> app <|> atomic
             (\case
                Operator {} -> True
                _ -> False)
+    funcOp = varParser <|> parensExpr
     unambiguous = parensExpr <|> atomic
     parensExpr = parens expParser
 
+lambda :: TokenParser (Expression Location)
+lambda = do
+  (_, loc) <-
+    satisfyToken (== Backslash) <?> "lambda expression (e.g. \\x -> x)"
+  args <- many1 funcParam <?> "lambda parameters"
+  _ <- satisfyToken (== Arrow)
+  e <- expParser
+  pure
+    (LambdaExpression
+       loc
+       (Alternative loc args e))
+
+funcParam :: TokenParser Pattern
+funcParam = go <?> "function parameter (e.g. ‘x’, ‘limit’, etc.)"
+  where
+    go = do
+      (v, loc) <-
+        consumeToken
+          (\case
+             Variable i -> Just i
+             _ -> Nothing)
+      pure (VariablePattern (Identifier (T.unpack v)))
 
 atomic :: TokenParser (Expression Location)
-atomic = varParser <|> charParser <|> integerParser
+atomic = varParser <|> charParser <|> integerParser <|> decimalParser
   where
     charParser = go <?> "character (e.g. 'a')"
       where
@@ -112,6 +135,15 @@ atomic = varParser <|> charParser <|> integerParser
                  Integer c -> Just c
                  _ -> Nothing)
           pure (LiteralExpression loc (IntegerLiteral c))
+    decimalParser = go <?> "decimal (e.g. 42, 123)"
+      where
+        go = do
+          (c, loc) <-
+            consumeToken
+              (\case
+                 Decimal c -> Just c
+                 _ -> Nothing)
+          pure (LiteralExpression loc (RationalLiteral (realToFrac c)))
 
 parens :: TokenParser a -> TokenParser a
 parens p = go <?> "parens e.g. (x)"

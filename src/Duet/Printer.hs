@@ -6,6 +6,7 @@ module Duet.Printer where
 
 import Data.List
 import Duet.Types
+import Text.Printf
 
 printIdentifier :: Identifier -> String
 printIdentifier (Identifier i) = i
@@ -43,6 +44,8 @@ printExpression =
     VariableExpression _ i -> printIdentifier i
     ApplicationExpression _ f x ->
       printExpressionAppOp f ++ " " ++ printExpressionAppArg x
+    LambdaExpression _ (Alternative _ args e) ->
+      "\\" ++ unwords (map printPattern args) ++ " -> " ++ printExpression e
     IfExpression _ a b c ->
       "if " ++
       printExpression a ++
@@ -58,16 +61,19 @@ printExpressionAppArg =
     e@(ApplicationExpression {}) -> paren (printExpression e)
     e@(IfExpression {}) -> paren (printExpression e)
     e@(InfixExpression {}) -> paren (printExpression e)
+    e@(LambdaExpression {}) -> paren (printExpression e)
     e -> printExpression e
 printExpressionAppOp =
   \case
     e@(IfExpression {}) -> paren (printExpression e)
+    e@(LambdaExpression {}) -> paren (printExpression e)
     e -> printExpression e
 
 paren e = "("  ++ e ++ ")"
 
 printLiteral :: Literal -> String
 printLiteral (IntegerLiteral i) = show i
+printLiteral (RationalLiteral i) = printf "%f" (fromRational i :: Double)
 printLiteral (StringLiteral x) = show x
 printLiteral (CharacterLiteral x) = show x
 printLiteral l = "<TODO: literal>"
