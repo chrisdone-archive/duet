@@ -5,10 +5,12 @@
 module Main where
 
 import           Control.Monad
+import           Control.Monad.Fix
 import qualified Data.Text.IO as T
 import           Duet
 import           Duet.Parser
 import           Duet.Printer
+import           Duet.Stepper
 import           System.Environment
 
 main :: IO ()
@@ -16,22 +18,34 @@ main = do
   env <- setupEnv mempty
   args <- getArgs
   case args of
-    [file] -> do
+    [file, i] -> do
       text <- T.readFile file
       case parseText file text of
         Left e -> error (show e)
         Right bindings -> do
+          putStrLn "-- Type checking ..."
           bindGroups <-
             typeCheckModule env builtInSignatures defaultSpecialTypes bindings
+          putStrLn "-- Source: "
           mapM_
-           (\(BindGroup _ is) ->
-              mapM_
-                (mapM_
-                   (putStrLn .
-                    printImplicitlyTypedBinding
-                      (\x -> Just (defaultSpecialTypes, fmap (const ()) x))))
-                is)
-           bindGroups
+            (\(BindGroup _ is) ->
+               mapM_
+                 (mapM_
+                    (putStrLn .
+                     printImplicitlyTypedBinding
+                       (\x -> Just (defaultSpecialTypes, fmap (const ()) x))))
+                 is)
+            bindGroups
+          putStrLn "-- Stepping ..."
+          e0 <- lookupIdentifier (Identifier i) bindGroups
+          fix
+            (\loop e -> do
+               e' <- expand e bindGroups
+               putStrLn (printExpression (const Nothing) e)
+               if e' /= e
+                 then loop e'
+                 else pure ())
+            e0
     _ -> error "usage: duet <file>"
 
 builtInSignatures :: [TypeSignature Identifier]

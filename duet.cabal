@@ -27,6 +27,7 @@ library
     Duet.Parser
     Duet.Printer
     Duet.Tokenizer
+    Duet.Stepper
 
 executable duet
   hs-source-dirs:

@@ -67,18 +67,18 @@ instance Exception InferException
 data TypeSignature a = TypeSignature
   { typeSignatureA :: a
   , typeSignatureScheme :: Scheme
-  } deriving (Show, Functor, Traversable, Foldable)
+  } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 data BindGroup l = BindGroup
   { bindGroupExplicitlyTypedBindings :: ![(ExplicitlyTypedBinding l)]
   , bindGroupImplicitlyTypedBindings :: ![[(ImplicitlyTypedBinding l)]]
-  } deriving (Show, Functor, Traversable, Foldable)
+  } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 data ImplicitlyTypedBinding l = ImplicitlyTypedBinding
   { implicitlyTypedBindingLabel :: l
   , implicitlyTypedBindingId :: !Identifier
   , implicitlyTypedBindingAlternatives :: ![Alternative l]
-  } deriving (Show, Functor, Traversable, Foldable)
+  } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | The simplest case is for explicitly typed bindings, each of which
 -- is described by the name of the function that is being defined, the
@@ -92,7 +92,7 @@ data ExplicitlyTypedBinding l = ExplicitlyTypedBinding
   { explicitlyTypedBindingId :: !Identifier
   , explicitlyTypedBindingScheme :: !Scheme
   , explicitlyTypedBindingAlternatives :: ![(Alternative l)]
-  } deriving (Show, Functor, Traversable, Foldable)
+  } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | Suppose, for example, that we are about to qualify a type with a
 -- list of predicates ps and that vs lists all known variables, both
@@ -115,7 +115,7 @@ data Alternative l = Alternative
   { alternativeLabel :: l
   , alternativePatterns :: ![Pattern]
   , alternativeExpression :: !(Expression l)
-  } deriving (Show, Functor, Traversable, Foldable)
+  } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | Substitutions-finite functions, mapping type variables to
 -- types-play a major role in type inference.
@@ -167,7 +167,7 @@ data Location = Location
   , locationStartColumn :: !Int
   , locationEndLine :: !Int
   , locationEndColumn :: !Int
-  } deriving (Show)
+  } deriving (Show, Eq)
 
 -- | A Haskell expression.
 data Expression l
@@ -180,7 +180,7 @@ data Expression l
   | LambdaExpression l (Alternative l)
   | IfExpression l (Expression l) (Expression l) (Expression l)
   | CaseExpression l (Expression l) [(Pattern, (Expression l))]
-  deriving (Show, Functor, Traversable, Foldable)
+  deriving (Show, Functor, Traversable, Foldable, Eq)
 
 expressionLabel :: Expression l -> l
 expressionLabel =
@@ -203,14 +203,14 @@ data Pattern
   | LiteralPattern Literal
   | ConstructorPattern (TypeSignature Identifier) [Pattern]
 --  | LazyPattern Pattern
-  deriving (Show)
+  deriving (Show , Eq)
 
 data Literal
   = IntegerLiteral Integer
   | CharacterLiteral Char
   | RationalLiteral Rational
   | StringLiteral String
-  deriving (Show)
+  deriving (Show , Eq)
 
 -- | A class environment.
 data ClassEnvironment = ClassEnvironment
