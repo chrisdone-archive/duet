@@ -8,8 +8,8 @@ import           Control.Monad
 import qualified Data.Text.IO as T
 import           Duet
 import           Duet.Parser
+import           Duet.Printer
 import           System.Environment
-import           Text.Parsec
 
 main :: IO ()
 main = do
@@ -22,25 +22,17 @@ main = do
         Left e -> error (show e)
         Right bindings -> do
           bindGroups <-
-            typeCheckModule
-              env
-              builtInSignatures
-              defaultSpecialTypes
-              bindings
-          print bindGroups
-    [] -> do
-      text <- T.getContents
-      case parseText "<interactive>" text of
-        Left e -> error (show e)
-        Right bindings -> do
-          bindGroups <-
-            typeCheckModule
-              env
-              builtInSignatures
-              defaultSpecialTypes
-              bindings
-          print bindGroups
-    _ -> error "usage: duet <file> or pipe a module into duet"
+            typeCheckModule env builtInSignatures defaultSpecialTypes bindings
+          mapM_
+           (\(BindGroup _ is) ->
+              mapM_
+                (mapM_
+                   (putStrLn .
+                    printImplicitlyTypedBinding
+                      (\x -> Just (defaultSpecialTypes, fmap (const ()) x))))
+                is)
+           bindGroups
+    _ -> error "usage: duet <file>"
 
 builtInSignatures :: [TypeSignature Identifier]
 builtInSignatures =

@@ -79,18 +79,18 @@ expParser = lambda <|> ifParser <|> infix' <|> app <|> atomic
                           ". When more than one operator is used\n"
                         , "in the same expression, use parentheses, like this:\n"
                         , "(" ++
-                          printExpression infixexp ++
+                          printExpression (const Nothing) infixexp ++
                           ") " ++
                           (case op of
                              (Operator i, _) -> T.unpack i ++ " ..."
                              _ -> "* ...") ++
                           "\n"
                         , "Or like this:\n"
-                        , printExpressionAppArg left ++
+                        , printExpressionAppArg (const Nothing) left ++
                           " " ++
                           T.unpack t ++
                           " (" ++
-                          printExpressionAppArg right ++
+                          printExpressionAppArg (const Nothing) right ++
                           " " ++
                           case op of
                             (Operator i, _) -> T.unpack i ++ " ...)"

@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
 
 -- |
@@ -11,13 +13,16 @@ import Text.Printf
 printIdentifier :: Identifier -> String
 printIdentifier (Identifier i) = i
 
-printImplicitlyTypedBinding :: ImplicitlyTypedBinding l -> String
-printImplicitlyTypedBinding (ImplicitlyTypedBinding _ i [alt]) =
-  printIdentifier i ++ " " ++ printAlternative alt
+printImplicitlyTypedBinding
+  :: (l -> (Maybe (SpecialTypes, TypeSignature ())))
+  -> ImplicitlyTypedBinding l
+  -> String
+printImplicitlyTypedBinding getType (ImplicitlyTypedBinding _ i [alt]) =
+  printIdentifier i ++ " " ++ printAlternative getType alt
 
-printAlternative :: Alternative l -> [Char]
-printAlternative (Alternative _ patterns expression) =
-  unwords (map printPattern patterns) ++ " = " ++ printExpression expression
+printAlternative :: (forall a. l -> Maybe (SpecialTypes, TypeSignature ())) -> Alternative l -> [Char]
+printAlternative getType (Alternative _ patterns expression) =
+  concat (map (\p->printPattern p ++ " ") patterns) ++ "= " ++ printExpression getType expression
 
 printPattern :: Pattern -> [Char]
 printPattern =
@@ -29,38 +34,52 @@ printPattern =
     ConstructorPattern (TypeSignature i _) pats ->
       printIdentifier i ++ " " ++ unwords (map printPattern pats)
 
-printExpression :: (Expression l) -> String
-printExpression =
-  \case
-    LiteralExpression _ l -> printLiteral l
-    VariableExpression _ i -> printIdentifier i
-    ApplicationExpression _ f x ->
-      printExpressionAppOp f ++ " " ++ printExpressionAppArg x
-    LambdaExpression _ (Alternative _ args e) ->
-      "\\" ++ unwords (map printPattern args) ++ " -> " ++ printExpression e
-    IfExpression _ a b c ->
-      "if " ++
-      printExpression a ++
-      " then " ++ printExpression b ++ " else " ++ printExpression c
-    InfixExpression _ f o x ->
-      printExpressionAppArg f ++
-      " " ++ printIdentifier o ++ " " ++ printExpressionAppArg x
-    e -> "<TODO>"
+printExpression :: (forall a. l -> Maybe (SpecialTypes, TypeSignature ())) -> (Expression l) -> String
+printExpression getType e =
+  wrapType
+    (case e of
+       LiteralExpression _ l -> printLiteral l
+       VariableExpression _ i -> printIdentifier i
+       ApplicationExpression _ f x ->
+         printExpressionAppOp getType f ++
+         " " ++ printExpressionAppArg getType x
+       LambdaExpression _ (Alternative _ args e) ->
+         "\\" ++
+         concat (map (\x -> printPattern x ++ " ") args) ++ "-> " ++ printExpression getType e
+       IfExpression _ a b c ->
+         "if " ++
+         printExpression getType a ++
+         " then " ++
+         printExpression getType b ++ " else " ++ printExpression getType c
+       InfixExpression _ f o x ->
+         printExpressionAppArg getType f ++
+         " " ++ printIdentifier o ++ " " ++ printExpressionAppArg getType x
+       _ -> "<TODO>")
   where
+    wrapType = id
+    {-wrapType x =
+      case getType (expressionLabel e) of
+        (Nothing) -> x
+        (Just (specialTypes, TypeSignature _ ty)) ->
+          "(" ++ x ++ " :: " ++ printScheme specialTypes ty ++ ")"-}
 
-printExpressionAppArg =
+printExpressionAppArg :: (forall a. l -> Maybe (SpecialTypes, TypeSignature ())) -> (Expression l) -> String
+printExpressionAppArg getType=
   \case
-    e@(ApplicationExpression {}) -> paren (printExpression e)
-    e@(IfExpression {}) -> paren (printExpression e)
-    e@(InfixExpression {}) -> paren (printExpression e)
-    e@(LambdaExpression {}) -> paren (printExpression e)
-    e -> printExpression e
-printExpressionAppOp =
-  \case
-    e@(IfExpression {}) -> paren (printExpression e)
-    e@(LambdaExpression {}) -> paren (printExpression e)
-    e -> printExpression e
+    e@(ApplicationExpression {}) -> paren (printExpression getType e)
+    e@(IfExpression {}) -> paren (printExpression getType e)
+    e@(InfixExpression {}) -> paren (printExpression getType e)
+    e@(LambdaExpression {}) -> paren (printExpression getType e)
+    e -> printExpression getType e
 
+printExpressionAppOp :: (forall a. l -> Maybe (SpecialTypes, TypeSignature ())) -> (Expression l) -> String
+printExpressionAppOp getType=
+  \case
+    e@(IfExpression {}) -> paren (printExpression getType e)
+    e@(LambdaExpression {}) -> paren (printExpression getType e)
+    e -> printExpression getType e
+
+paren :: [Char] -> [Char]
 paren e = "("  ++ e ++ ")"
 
 printLiteral :: Literal -> String

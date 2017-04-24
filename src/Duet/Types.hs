@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -66,7 +67,7 @@ instance Exception InferException
 data TypeSignature a = TypeSignature
   { typeSignatureA :: a
   , typeSignatureScheme :: Scheme
-  } deriving (Show)
+  } deriving (Show, Functor, Traversable, Foldable)
 
 data BindGroup l = BindGroup
   { bindGroupExplicitlyTypedBindings :: ![(ExplicitlyTypedBinding l)]
@@ -180,6 +181,19 @@ data Expression l
   | IfExpression l (Expression l) (Expression l) (Expression l)
   | CaseExpression l (Expression l) [(Pattern, (Expression l))]
   deriving (Show, Functor, Traversable, Foldable)
+
+expressionLabel :: Expression l -> l
+expressionLabel =
+  \case
+     LiteralExpression l _ -> l
+     ConstantExpression l _ -> l
+     ApplicationExpression l _ _ -> l
+     InfixExpression l _ _ _ -> l
+     LetExpression l _ _ -> l
+     LambdaExpression l _ -> l
+     IfExpression l _ _ _ -> l
+     CaseExpression l _ _ -> l
+     VariableExpression l _ -> l
 
 -- | A pattern match.
 data Pattern
