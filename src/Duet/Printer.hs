@@ -29,14 +29,6 @@ printPattern =
     ConstructorPattern (TypeSignature i _) pats ->
       printIdentifier i ++ " " ++ unwords (map printPattern pats)
 
--- printTypeSignatureIdent :: SpecialTypes -> (TypeSignature Identifier) -> String
--- printTypeSignatureIdent specialTypes (TypeSignature identifier scheme) =
---   "binding " ++ printIdentifier identifier ++ " :: " ++ printScheme specialTypes scheme
-
--- printTypeSignatureIdent :: SpecialTypes -> (TypeSignature ) -> String
--- printTypeSignatureExp specialTypes (TypeSignature expression scheme) =
---    "expression " ++ printExpression expression ++ " :: " ++ printScheme specialTypes scheme
-
 printExpression :: (Expression l) -> String
 printExpression =
   \case

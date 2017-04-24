@@ -101,7 +101,7 @@ tokenTokenizer prespaces =
     , specialParsing
         Character
         (do _ <- string "'"
-            chars <- many1 (satisfy (/= '\'')) <?> "character e.g. 'a'"
+            chars <- many1 (satisfy (\c->c/='\n' &&c/= '\'')) <?> "character e.g. 'a'"
             when
               (length chars > 1)
               (unexpected
@@ -124,6 +124,9 @@ tokenTokenizer prespaces =
             when
               (any (== '\\') chars)
               (unexpected "\\ character, not allowed inside a string.")
+            when
+              (any (== '\n') chars)
+              (unexpected "newline character, not allowed inside a string.")
             _ <- string "\"" <?> "double quotes (\") to close the string"
             pure (T.pack chars))
         "string (e.g. \"hello\", \"123\", etc.)"
