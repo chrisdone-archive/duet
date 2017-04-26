@@ -16,7 +16,8 @@ library
     mtl,
     exceptions,
     parsec,
-    text
+    text,
+    monad-supply
   ghc-options:
     -Wall
   default-language:
@@ -27,6 +28,7 @@ library
     Duet.Parser
     Duet.Printer
     Duet.Tokenizer
+    Duet.Renamer
     Duet.Stepper
 
 executable duet
@@ -38,6 +40,9 @@ executable duet
     duet,
     base,
     parsec,
-    text
+    text,
+    exceptions,
+    monad-supply,
+    mtl
   default-language:
     Haskell2010

@@ -5,7 +5,10 @@
 module Main where
 
 import           Control.Monad
+import           Control.Monad.Catch
 import           Control.Monad.Fix
+import           Control.Monad.Supply
+import           Control.Monad.Trans
 import qualified Data.Text.IO as T
 import           Duet
 import           Duet.Parser
@@ -17,7 +20,6 @@ import           System.Environment
 
 main :: IO ()
 main = do
-  env <- setupEnv mempty
   args <- getArgs
   case args of
     [file, i] -> do
@@ -26,8 +28,22 @@ main = do
         Left e -> error (show e)
         Right bindings -> do
           putStrLn "-- Type checking ..."
-          bindGroups <-
-            typeCheckModule env builtInSignatures defaultSpecialTypes (rename bindings)
+          (specialTypes, bindGroups) <-
+            evalSupplyT
+              (do specialTypes <- defaultSpecialTypes
+                  theShow <- supplyName "Show"
+                  signatures <- builtInSignatures theShow specialTypes
+                  renamedBindings <- rename bindings
+                  env <- setupEnv theShow specialTypes mempty
+                  bindGroups <-
+                    lift
+                      (typeCheckModule
+                         env
+                         signatures
+                         specialTypes
+                         renamedBindings)
+                  return (specialTypes, bindGroups))
+              [0 ..]
           putStrLn "-- Source: "
           mapM_
             (\(BindGroup _ is) ->
@@ -35,7 +51,7 @@ main = do
                  (mapM_
                     (putStrLn .
                      printImplicitlyTypedBinding
-                       (\x -> Just (defaultSpecialTypes, fmap (const ()) x))))
+                       (\x -> Just (specialTypes, fmap (const ()) x))))
                  is)
             bindGroups
           putStrLn "-- Stepping ..."
@@ -50,55 +66,69 @@ main = do
             e0
     _ -> error "usage: duet <file>"
 
-builtInSignatures :: [TypeSignature Name Name]
-builtInSignatures =
-  [ {-TypeSignature
-      "show"
-      (Forall
-         [StarKind]
-         (Qualified
-            [IsIn "Show" [(GenericType 0)]]
-            (GenericType 0 --> stringType)))-}
-  ]
+-- | Built-in pre-defined functions.
+builtInSignatures
+  :: Monad m
+  => Name -> SpecialTypes Name -> SupplyT Int m [TypeSignature Name Name]
+builtInSignatures theShow specialTypes = do
+  the_show <- supplyName "show"
+  return [ TypeSignature
+             the_show
+             (Forall
+                [StarKind]
+                (Qualified
+                   [IsIn theShow [(GenericType 0)]]
+                   (GenericType 0 --> specialTypesString specialTypes)))
+         ]
+  where (-->) :: Type Name -> Type Name -> Type Name
+        a --> b =
+          ApplicationType
+            (ApplicationType (specialTypesFunction specialTypes) a)
+            b
 
-setupEnv :: ClassEnvironment Name -> IO (ClassEnvironment Name)
-setupEnv = undefined
-  -- addClass "Num" [TypeVariable "a" StarKind] [] >=>
-  -- addInstance [] (IsIn "Num" [specialTypesInteger defaultSpecialTypes]) >=>
-  -- addClass "Show" [TypeVariable "a" StarKind] [] >=>
-  -- addInstance [] (IsIn "Show" [specialTypesChar defaultSpecialTypes]) >=>
-  -- addInstance [] (IsIn "Show" [specialTypesInteger defaultSpecialTypes])
-
-(-->) :: Type Name -> Type Name -> Type Name
-a --> b =
-  ApplicationType
-    (ApplicationType (specialTypesFunction defaultSpecialTypes) a)
-    b
+-- | Setup the class environment.
+setupEnv
+  :: MonadThrow m
+  => Name
+  -> SpecialTypes Name
+  -> ClassEnvironment Name
+  -> SupplyT Int m (ClassEnvironment Name)
+setupEnv theShow specialTypes env =
+  do theNum <- supplyName "Num"
+     num_a <- supplyName "a"
+     show_a <- supplyName "a"
+     let update = addClass theNum [TypeVariable num_a StarKind] [] >=>
+                  addInstance [] (IsIn theNum [specialTypesInteger specialTypes]) >=>
+                  addClass theShow [TypeVariable show_a StarKind] [] >=>
+                  addInstance [] (IsIn theShow [specialTypesChar specialTypes]) >=>
+                  addInstance [] (IsIn theShow [specialTypesInteger specialTypes])
+     lift (update env)
 
 --------------------------------------------------------------------------------
 -- Built-in types
 
-stringType :: Type Name
-stringType = undefined -- ConstructorType (TypeConstructor "String" StarKind)
-
 -- | Special types that Haskell uses for pattern matching and literals.
-defaultSpecialTypes :: SpecialTypes Name
-defaultSpecialTypes = undefined
-  -- SpecialTypes
-  -- { specialTypesBool = ConstructorType (TypeConstructor "Bool" StarKind)
-  -- , specialTypesChar = ConstructorType (TypeConstructor "Char" StarKind)
-  -- , specialTypesString = makeListType (specialTypesChar defaultSpecialTypes)
-  -- , specialTypesFunction =
-  --     ConstructorType
-  --       (TypeConstructor
-  --          "(->)"
-  --          (FunctionKind StarKind (FunctionKind StarKind StarKind)))
-  -- , specialTypesList = listType
-  -- , specialTypesInteger = ConstructorType (TypeConstructor "Integer" StarKind)
-  -- }
-  -- where
-  --   makeListType :: Type -> Type
-  --   makeListType t = ApplicationType listType t
-  --   listType :: Type
-  --   listType =
-  --     ConstructorType (TypeConstructor "[]" (FunctionKind StarKind StarKind))
+defaultSpecialTypes :: Monad m => SupplyT Int m (SpecialTypes Name)
+defaultSpecialTypes = do
+  theBool <- supplyName "Bool"
+  theArrow <- supplyName "(->)"
+  theChar <- supplyName "Char"
+  theString <- supplyName "String"
+  theInteger <- supplyName "Integer"
+  theNum <- supplyName "Num"
+  theFractional <- supplyName "Fractional"
+  return
+    (SpecialTypes
+     { specialTypesBool = ConstructorType (TypeConstructor theBool StarKind)
+     , specialTypesChar = ConstructorType (TypeConstructor theChar StarKind)
+     , specialTypesString = ConstructorType (TypeConstructor theString StarKind)
+     , specialTypesFunction =
+         ConstructorType
+           (TypeConstructor
+              theArrow
+              (FunctionKind StarKind (FunctionKind StarKind StarKind)))
+     , specialTypesInteger =
+         ConstructorType (TypeConstructor theInteger StarKind)
+     , specialTypesNum = theNum
+     , specialTypesFractional = theFractional
+     })

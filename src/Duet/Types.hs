@@ -22,7 +22,6 @@ data SpecialTypes i = SpecialTypes
   , specialTypesChar       :: Type i
   , specialTypesString     :: Type i
   , specialTypesFunction   :: Type i
-  , specialTypesList       :: Type i
   , specialTypesInteger    :: Type i
   , specialTypesNum        :: i
   , specialTypesFractional :: i

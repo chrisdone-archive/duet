@@ -149,8 +149,8 @@ printType specialTypes =
     ConstructorType tyCon -> printTypeConstructor tyCon
     ApplicationType (ApplicationType func x') y | func == specialTypesFunction specialTypes ->
       "(" ++ printType specialTypes x' ++ " -> " ++ printTypeSansParens specialTypes y ++ ")"
-    ApplicationType list ty | list == specialTypesList specialTypes ->
-      "[" ++ printTypeSansParens specialTypes ty ++ "]"
+    -- ApplicationType list ty | list == specialTypesList specialTypes ->
+    --   "[" ++ printTypeSansParens specialTypes ty ++ "]"
     ApplicationType x' y -> "(" ++ printType specialTypes x' ++ " " ++ printType specialTypes y ++ ")"
     GenericType int -> "g" ++ show int
   where printTypeConstructor (TypeConstructor identifier kind) =
