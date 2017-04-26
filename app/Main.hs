@@ -33,7 +33,7 @@ main = do
               (do specialTypes <- defaultSpecialTypes
                   theShow <- supplyName "Show"
                   signatures <- builtInSignatures theShow specialTypes
-                  renamedBindings <- rename bindings
+                  renamedBindings <- mapM renameBindGroup bindings
                   env <- setupEnv theShow specialTypes mempty
                   bindGroups <-
                     lift
