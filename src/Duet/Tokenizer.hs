@@ -11,7 +11,6 @@ module Duet.Tokenizer where
 import           Control.Monad
 import           Data.Char
 import           Data.List
-import           Data.Maybe
 import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T

@@ -10,21 +10,35 @@ import Data.List
 import Duet.Types
 import Text.Printf
 
-printIdentifier :: Identifier -> String
-printIdentifier (Identifier i) = i
+class Printable a where
+  printit :: a -> String
+
+instance Printable Name where
+  printit =
+    \case
+      NameFromSource _ string -> string
+      NameForall i -> "v" ++ show i
+
+instance Printable Identifier where
+  printit =
+    \case
+      Identifier string -> string
+
+printIdentifier :: Printable i => i -> String
+printIdentifier = printit
 
 printImplicitlyTypedBinding
-  :: (l -> (Maybe (SpecialTypes, TypeSignature ())))
-  -> ImplicitlyTypedBinding l
+  :: Printable i => (l -> (Maybe (SpecialTypes i, TypeSignature i ())))
+  -> ImplicitlyTypedBinding i l
   -> String
 printImplicitlyTypedBinding getType (ImplicitlyTypedBinding _ i [alt]) =
   printIdentifier i ++ " " ++ printAlternative getType alt
 
-printAlternative :: (forall a. l -> Maybe (SpecialTypes, TypeSignature ())) -> Alternative l -> [Char]
+printAlternative :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> Alternative i l -> [Char]
 printAlternative getType (Alternative _ patterns expression) =
   concat (map (\p->printPattern p ++ " ") patterns) ++ "= " ++ printExpression getType expression
 
-printPattern :: Pattern -> [Char]
+printPattern :: Printable i => Pattern i -> [Char]
 printPattern =
   \case
     VariablePattern i -> printIdentifier i
@@ -34,7 +48,7 @@ printPattern =
     ConstructorPattern (TypeSignature i _) pats ->
       printIdentifier i ++ " " ++ unwords (map printPattern pats)
 
-printExpression :: (forall a. l -> Maybe (SpecialTypes, TypeSignature ())) -> (Expression l) -> String
+printExpression :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> (Expression i l) -> String
 printExpression getType e =
   wrapType
     (case e of
@@ -63,7 +77,7 @@ printExpression getType e =
         (Just (specialTypes, TypeSignature _ ty)) ->
           "(" ++ x ++ " :: " ++ printScheme specialTypes ty ++ ")"-}
 
-printExpressionAppArg :: (forall a. l -> Maybe (SpecialTypes, TypeSignature ())) -> (Expression l) -> String
+printExpressionAppArg :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> (Expression i l) -> String
 printExpressionAppArg getType=
   \case
     e@(ApplicationExpression {}) -> paren (printExpression getType e)
@@ -72,7 +86,7 @@ printExpressionAppArg getType=
     e@(LambdaExpression {}) -> paren (printExpression getType e)
     e -> printExpression getType e
 
-printExpressionAppOp :: (forall a. l -> Maybe (SpecialTypes, TypeSignature ())) -> (Expression l) -> String
+printExpressionAppOp :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> (Expression i l) -> String
 printExpressionAppOp getType=
   \case
     e@(IfExpression {}) -> paren (printExpression getType e)
@@ -87,9 +101,9 @@ printLiteral (IntegerLiteral i) = show i
 printLiteral (RationalLiteral i) = printf "%f" (fromRational i :: Double)
 printLiteral (StringLiteral x) = show x
 printLiteral (CharacterLiteral x) = show x
-printLiteral l = "<TODO: literal>"
+printLiteral _l = "<TODO: literal>"
 
-printScheme :: SpecialTypes -> Scheme -> [Char]
+printScheme :: (Printable i, Eq i) => SpecialTypes i -> Scheme i -> [Char]
 printScheme specialTypes (Forall kinds qualifiedType') =
   (if null kinds
      then ""
@@ -98,7 +112,7 @@ printScheme specialTypes (Forall kinds qualifiedType') =
             (zipWith
                (\i k ->
                   printTypeVariable
-                    (TypeVariable (Identifier ("g" ++ show i)) k))
+                    (TypeVariable (NameForall i) k))
                [0 :: Int ..]
                kinds) ++
           ". ") ++
@@ -121,14 +135,14 @@ printKind =
     StarKind -> "*"
     FunctionKind x' y -> printKind x' ++ " -> " ++ printKind y
 
-printTypeSansParens :: SpecialTypes -> Type -> [Char]
+printTypeSansParens :: (Printable i, Eq i) => SpecialTypes i -> Type i -> [Char]
 printTypeSansParens specialTypes =
   \case
     ApplicationType (ApplicationType func x') y' | func == specialTypesFunction specialTypes ->
       printType specialTypes x' ++ " -> " ++ printTypeSansParens specialTypes y'
     o -> printType specialTypes o
 
-printType :: SpecialTypes -> Type -> [Char]
+printType :: (Printable i, Eq i) => SpecialTypes i -> Type i -> [Char]
 printType specialTypes =
   \case
     VariableType v -> printTypeVariable v
@@ -144,7 +158,7 @@ printType specialTypes =
             StarKind -> printIdentifier identifier
             _ -> "(" ++ printIdentifier identifier ++ " :: " ++ printKind kind ++ ")"
 
-printTypeVariable :: TypeVariable -> String
+printTypeVariable :: Printable i => TypeVariable i -> String
 printTypeVariable (TypeVariable identifier kind) =
   case kind of
     StarKind -> printIdentifier identifier

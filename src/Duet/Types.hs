@@ -15,13 +15,17 @@ import           Data.Monoid
 import           Data.String
 import           Data.Typeable
 
-data SpecialTypes = SpecialTypes
-  { specialTypesBool :: Type
-  , specialTypesChar :: Type
-  , specialTypesString :: Type
-  , specialTypesFunction :: Type
-  , specialTypesList :: Type
-  , specialTypesInteger :: Type
+-- | Special built-in types you need for type-checking patterns and
+-- literals.
+data SpecialTypes i = SpecialTypes
+  { specialTypesBool       :: Type i
+  , specialTypesChar       :: Type i
+  , specialTypesString     :: Type i
+  , specialTypesFunction   :: Type i
+  , specialTypesList       :: Type i
+  , specialTypesInteger    :: Type i
+  , specialTypesNum        :: i
+  , specialTypesFractional :: i
   } deriving (Show)
 
 -- | Type inference monad.
@@ -29,11 +33,22 @@ newtype InferT m a = InferT
   { runInferT :: StateT InferState m a
   } deriving (Monad, Applicative, Functor, MonadThrow)
 
+-- | Name is a globally unique identifier for any thing. No claim
+-- about "existence", but definitely uniquness. A name names one thing
+-- and one thing only.
+--
+-- So this comes /after/ the parsing step, and /before/ the
+-- type-checking step. The renamer's job is to go from Identifier -> Name.
+data Name
+  = NameFromSource !Int !String
+  | NameForall !Int
+  deriving (Show, Eq, Ord)
+
 -- | State of inferring.
 data InferState = InferState
-  { inferStateSubstitutions :: ![Substitution]
+  { inferStateSubstitutions :: ![Substitution Name]
   , inferStateCounter :: !Int
-  , inferStateSpecialTypes :: !SpecialTypes
+  , inferStateSpecialTypes :: !(SpecialTypes Name)
   -- , inferStateExpressionTypes :: ![(Expression (), Scheme)]
   } deriving (Show)
 
@@ -64,20 +79,20 @@ data InferException
 instance Exception InferException
 
 -- | Specify the type of @a@.
-data TypeSignature a = TypeSignature
+data TypeSignature i a = TypeSignature
   { typeSignatureA :: a
-  , typeSignatureScheme :: Scheme
+  , typeSignatureScheme :: Scheme i
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
-data BindGroup l = BindGroup
-  { bindGroupExplicitlyTypedBindings :: ![(ExplicitlyTypedBinding l)]
-  , bindGroupImplicitlyTypedBindings :: ![[(ImplicitlyTypedBinding l)]]
+data BindGroup i l = BindGroup
+  { bindGroupExplicitlyTypedBindings :: ![(ExplicitlyTypedBinding i l)]
+  , bindGroupImplicitlyTypedBindings :: ![[(ImplicitlyTypedBinding i l)]]
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
-data ImplicitlyTypedBinding l = ImplicitlyTypedBinding
+data ImplicitlyTypedBinding i l = ImplicitlyTypedBinding
   { implicitlyTypedBindingLabel :: l
-  , implicitlyTypedBindingId :: !Identifier
-  , implicitlyTypedBindingAlternatives :: ![Alternative l]
+  , implicitlyTypedBindingId :: !i
+  , implicitlyTypedBindingAlternatives :: ![Alternative i l]
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | The simplest case is for explicitly typed bindings, each of which
@@ -88,10 +103,10 @@ data ImplicitlyTypedBinding l = ImplicitlyTypedBinding
 -- Haskell requires that each Alt in the definition of a given
 -- identifier has the same number of left-hand side arguments, but we
 -- do not need to enforce that here.
-data ExplicitlyTypedBinding l = ExplicitlyTypedBinding
-  { explicitlyTypedBindingId :: !Identifier
-  , explicitlyTypedBindingScheme :: !Scheme
-  , explicitlyTypedBindingAlternatives :: ![(Alternative l)]
+data ExplicitlyTypedBinding i l = ExplicitlyTypedBinding
+  { explicitlyTypedBindingId :: !i
+  , explicitlyTypedBindingScheme :: !(Scheme i)
+  , explicitlyTypedBindingAlternatives :: ![(Alternative i l)]
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | Suppose, for example, that we are about to qualify a type with a
@@ -102,31 +117,31 @@ data ExplicitlyTypedBinding l = ExplicitlyTypedBinding
 -- v to a monotype t. The type t must be chosen so that all of the
 -- predicates in ps that involve v will be satisfied once t has been
 -- substituted for v.
-data Ambiguity = Ambiguity
-  { ambiguityTypeVariable :: !TypeVariable
-  , ambiguityPredicates :: ![Predicate]
+data Ambiguity i = Ambiguity
+  { ambiguityTypeVariable :: !(TypeVariable i)
+  , ambiguityPredicates :: ![Predicate i]
   } deriving (Show)
 
 -- | An Alt specifies the left and right hand sides of a function
 -- definition. With a more complete syntax for Expr, values of type
 -- Alt might also be used in the representation of lambda and case
 -- expressions.
-data Alternative l = Alternative
+data Alternative i l = Alternative
   { alternativeLabel :: l
-  , alternativePatterns :: ![Pattern]
-  , alternativeExpression :: !(Expression l)
+  , alternativePatterns :: ![Pattern i]
+  , alternativeExpression :: !(Expression i l)
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | Substitutions-finite functions, mapping type variables to
 -- types-play a major role in type inference.
-data Substitution = Substitution
-  { substitutionTypeVariable :: !TypeVariable
-  , substitutionType :: !Type
+data Substitution i = Substitution
+  { substitutionTypeVariable :: !(TypeVariable i)
+  , substitutionType :: !(Type i)
   } deriving (Show)
 
 -- | A type variable.
-data TypeVariable = TypeVariable
-  { typeVariableIdentifier :: !Identifier
+data TypeVariable i = TypeVariable
+  { typeVariableIdentifier :: !i
   , typeVariableKind :: !Kind
   } deriving (Eq, Show)
 
@@ -138,21 +153,21 @@ newtype Identifier = Identifier
 -- | Haskell types can be qualified by adding a (possibly empty) list
 -- of predicates, or class constraints, to restrict the ways in which
 -- type variables are instantiated.
-data Qualified typ = Qualified
-  { qualifiedPredicates :: ![Predicate]
+data Qualified i typ = Qualified
+  { qualifiedPredicates :: ![Predicate i]
   , qualifiedType :: !typ
   } deriving (Eq, Show)
 
 -- | One of potentially many predicates.
-data Predicate =
-  IsIn Identifier [Type]
+data Predicate i =
+  IsIn i [Type i]
   deriving (Eq, Show)
 
 -- | A simple Haskell type.
-data Type
-  = VariableType TypeVariable
-  | ConstructorType TypeConstructor
-  | ApplicationType Type Type
+data Type i
+  = VariableType (TypeVariable i)
+  | ConstructorType (TypeConstructor i)
+  | ApplicationType (Type i) (Type i)
   | GenericType Int
   deriving (Eq, Show)
 
@@ -170,19 +185,19 @@ data Location = Location
   } deriving (Show, Eq)
 
 -- | A Haskell expression.
-data Expression l
-  = VariableExpression l Identifier
+data Expression i l
+  = VariableExpression l i
   | LiteralExpression l Literal
-  | ConstantExpression l (TypeSignature Identifier)
-  | ApplicationExpression l (Expression l) (Expression l)
-  | InfixExpression l (Expression l) Identifier (Expression l)
-  | LetExpression l (BindGroup l) (Expression l)
-  | LambdaExpression l (Alternative l)
-  | IfExpression l (Expression l) (Expression l) (Expression l)
-  | CaseExpression l (Expression l) [(Pattern, (Expression l))]
+  | ConstantExpression l (TypeSignature i i)
+  | ApplicationExpression l (Expression i l) (Expression i l)
+  | InfixExpression l (Expression i l) i (Expression i l)
+  | LetExpression l (BindGroup i l) (Expression i l)
+  | LambdaExpression l (Alternative i l)
+  | IfExpression l (Expression i l) (Expression i l) (Expression i l)
+  | CaseExpression l (Expression i l) [(Pattern i, (Expression i l))]
   deriving (Show, Functor, Traversable, Foldable, Eq)
 
-expressionLabel :: Expression l -> l
+expressionLabel :: Expression i l -> l
 expressionLabel =
   \case
      LiteralExpression l _ -> l
@@ -196,12 +211,12 @@ expressionLabel =
      VariableExpression l _ -> l
 
 -- | A pattern match.
-data Pattern
-  = VariablePattern Identifier
+data Pattern i
+  = VariablePattern i
   | WildcardPattern
-  | AsPattern Identifier Pattern
+  | AsPattern i (Pattern i)
   | LiteralPattern Literal
-  | ConstructorPattern (TypeSignature Identifier) [Pattern]
+  | ConstructorPattern (TypeSignature i i) [Pattern i]
 --  | LazyPattern Pattern
   deriving (Show , Eq)
 
@@ -213,33 +228,32 @@ data Literal
   deriving (Show , Eq)
 
 -- | A class environment.
-data ClassEnvironment = ClassEnvironment
-  { classEnvironmentClasses :: !(Map Identifier Class)
+data ClassEnvironment i = ClassEnvironment
+  { classEnvironmentClasses :: !(Map i (Class i))
   -- , classEnvironmentDefaults :: ![Type]--Disabling for now because
   -- I don't understand how it works.
   } deriving (Show)
 
-instance Monoid ClassEnvironment where
-  mempty = ClassEnvironment mempty {-mempty-}
+instance (Ord i) => Monoid (ClassEnvironment i) where
+  mempty = ClassEnvironment mempty
   mappend x y =
     ClassEnvironment
       (on (<>) classEnvironmentClasses x y)
-      {-(on (<>) classEnvironmentDefaults x y)-}
 
 -- | A class.
-data Class = Class
-  { classTypeVariables :: ![TypeVariable]
-  , classPredicates :: ![Predicate]
-  , classQualifiedPredicates :: ![Qualified Predicate]
+data Class i = Class
+  { classTypeVariables :: ![TypeVariable i]
+  , classPredicates :: ![Predicate i]
+  , classQualifiedPredicates :: ![Qualified i (Predicate i)]
   } deriving (Show)
 
 -- | A type constructor.
-data TypeConstructor = TypeConstructor
-  { typeConstructorIdentifier :: !Identifier
+data TypeConstructor i = TypeConstructor
+  { typeConstructorIdentifier :: !i
   , typeConstructorKind :: !Kind
   } deriving (Eq, Show)
 
 -- | A type scheme.
-data Scheme =
-  Forall [Kind] (Qualified Type)
+data Scheme i =
+  Forall [Kind] (Qualified i (Type i))
   deriving (Eq, Show)

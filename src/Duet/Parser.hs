@@ -14,7 +14,7 @@ import           Duet.Tokenizer
 import           Duet.Types
 import           Text.Parsec hiding (satisfy, anyToken)
 
-parseText :: SourceName -> Text -> Either ParseError [BindGroup Location]
+parseText :: SourceName -> Text -> Either ParseError [BindGroup Identifier Location]
 parseText fp inp =
   case parse tokensTokenizer fp (inp) of
     Left e -> Left e
@@ -23,13 +23,13 @@ parseText fp inp =
         Left e -> Left e
         Right ast -> Right ast
 
-tokensParser :: TokenParser [BindGroup Location]
+tokensParser :: TokenParser [BindGroup Identifier Location]
 tokensParser = moduleParser <* endOfTokens
 
-moduleParser :: TokenParser [BindGroup Location]
+moduleParser :: TokenParser [BindGroup Identifier Location]
 moduleParser = fmap (map (\x -> BindGroup [] [[x]])) (many varfundecl)
 
-varfundecl :: TokenParser (ImplicitlyTypedBinding Location)
+varfundecl :: TokenParser (ImplicitlyTypedBinding Identifier Location)
 varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
   where
     go = do
@@ -44,7 +44,7 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
       _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> eof
       pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [Alternative loc [] e])
 
-expParser :: TokenParser (Expression Location)
+expParser :: TokenParser (Expression Identifier Location)
 expParser = lambda <|> ifParser <|> infix' <|> app <|> atomic
   where
     app = do
@@ -109,7 +109,7 @@ expParser = lambda <|> ifParser <|> infix' <|> app <|> atomic
     unambiguous = parensExpr <|> atomic
     parensExpr = parens expParser
 
-lambda :: TokenParser (Expression Location)
+lambda :: TokenParser (Expression Identifier Location)
 lambda = do
   (_, loc) <-
     satisfyToken (== Backslash) <?> "lambda expression (e.g. \\x -> x)"
@@ -121,7 +121,7 @@ lambda = do
        loc
        (Alternative loc args e))
 
-funcParam :: TokenParser Pattern
+funcParam :: TokenParser (Pattern Identifier)
 funcParam = go <?> "function parameter (e.g. ‘x’, ‘limit’, etc.)"
   where
     go = do
@@ -132,7 +132,7 @@ funcParam = go <?> "function parameter (e.g. ‘x’, ‘limit’, etc.)"
              _ -> Nothing)
       pure (VariablePattern (Identifier (T.unpack v)))
 
-atomic :: TokenParser (Expression Location)
+atomic :: TokenParser (Expression Identifier Location)
 atomic = varParser <|> charParser <|> stringParser <|> integerParser <|> decimalParser
   where
     charParser = go <?> "character (e.g. 'a')"
@@ -180,7 +180,7 @@ parens p = go <?> "parens e.g. (x)"
          _ <- satisfyToken (== CloseParen)<?> "closing parenthesis ‘)’"
          pure e
 
-varParser :: TokenParser (Expression Location)
+varParser :: TokenParser (Expression Identifier Location)
 varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
   where
     go = do
@@ -191,7 +191,7 @@ varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
              _ -> Nothing)
       pure (VariableExpression loc (Identifier (T.unpack v)))
 
-ifParser :: TokenParser (Expression Location)
+ifParser :: TokenParser (Expression Identifier Location)
 ifParser = go <?> "if expression (e.g. ‘if p then x else y’)"
   where
     go = do
