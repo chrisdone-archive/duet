@@ -84,7 +84,7 @@ data InferException
   | NotInScope ![TypeSignature Name Name] !Name
   | ClassMismatch
   | MergeFail
-  | AmbiguousInstance
+  | AmbiguousInstance [Ambiguity Name]
   deriving (Show, Typeable)
 instance Exception InferException
 

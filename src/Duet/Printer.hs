@@ -131,9 +131,11 @@ printScheme specialTypes (Forall kinds qualifiedType') =
           "(" ++
           intercalate ", " (map (printPredicate specialTypes) predicates) ++
           ") => " ++ printTypeSansParens specialTypes typ
-    printPredicate specialTypes (IsIn identifier types) =
-      printIdentifier identifier ++
-      " " ++ unwords (map (printType specialTypes) types)
+
+printPredicate :: (Eq i, Printable i) => SpecialTypes i -> Predicate i -> [Char]
+printPredicate specialTypes (IsIn identifier types) =
+  printIdentifier identifier ++
+  " " ++ unwords (map (printType specialTypes) types)
 
 printKind :: Kind -> [Char]
 printKind =

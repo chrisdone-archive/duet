@@ -12,14 +12,15 @@ import           Control.Monad.Catch
 import           Control.Monad.Fix
 import           Control.Monad.Supply
 import           Control.Monad.Trans
+import           Data.List
 import qualified Data.Map.Strict as M
 import qualified Data.Text.IO as T
 import           Duet.Infer
 import           Duet.Parser
 import           Duet.Printer
 import           Duet.Renamer
-import           Duet.Tokenizer
 import           Duet.Stepper
+import           Duet.Tokenizer
 import           Duet.Types
 import           System.Environment
 import           System.Exit
@@ -61,8 +62,18 @@ displayInferException :: SpecialTypes Name -> InferException -> [Char]
 displayInferException specialTypes =
   \case
     NotInScope scope name ->
-      "Not in scope " ++ curlyQuotes (printit name) ++ "\n" ++
-      "Current scope:\n\n" ++ unlines (map (printTypeSignature specialTypes) scope)
+      "Not in scope " ++
+      curlyQuotes (printit name) ++
+      "\n" ++
+      "Current scope:\n\n" ++
+      unlines (map (printTypeSignature specialTypes) scope)
+    AmbiguousInstance ambiguities ->
+      "Couldn't infer which instances to use for\n" ++
+      unlines
+        (map
+           (\(Ambiguity t ps) ->
+              intercalate ", " (map (printPredicate specialTypes) ps))
+           ambiguities)
     e -> show e
 
 displayRenamerException :: SpecialTypes Name -> RenamerException -> [Char]

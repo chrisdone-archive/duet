@@ -711,7 +711,7 @@ withDefaults
   :: MonadThrow m
   => String->([Ambiguity Name] -> [Type Name] -> a) -> ClassEnvironment Name -> [TypeVariable Name] -> [Predicate Name] -> m a
 withDefaults _label f ce vs ps
-  | any null tss = throwM AmbiguousInstance
+  | any null tss = throwM (AmbiguousInstance vps)
   | otherwise = do
     return (f vps (map head tss))
   where
