@@ -11,6 +11,7 @@ module Snappy where
 import           Control.Concurrent
 import           Control.Monad
 import           Data.IORef
+import           Data.IORef
 import           Data.Maybe
 import qualified Data.Text as T
 import qualified Snap
@@ -217,8 +218,20 @@ changeEvent d = do
   Snap.change
     d
     (\text -> do
-      subscribers <- readIORef subscribersRef
-      mapM_ (\subscriber -> subscriber text) subscribers)
+       subscribers <- readIORef subscribersRef
+       mapM_ (\subscriber -> subscriber text) subscribers)
+  threadRef <- newIORef Nothing
+  Snap.keyup
+    d
+    (\k text -> do
+       mthreadId <- readIORef threadRef
+       maybe (return ()) killThread mthreadId
+       threadId <-
+         forkIO
+           (do threadDelay (1000 * 50)
+               subscribers <- readIORef subscribersRef
+               mapM_ (\subscriber -> subscriber (T.unpack text)) subscribers)
+       atomicWriteIORef threadRef (Just threadId))
   st <- newIORef ()
   pure
     (Event

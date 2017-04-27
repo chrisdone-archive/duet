@@ -430,6 +430,16 @@ val (Textbox j) = do
     Nothing -> return ""
     Just x -> return x
 
+keyup :: Textbox -> (Int -> T.Text -> IO ()) -> IO ()
+keyup (Textbox j) cont = do
+  callback <-
+    asyncCallback2
+      (\key val' -> do
+         Just v <- fromJSVal val'
+         Just k <- fromJSVal key
+         cont k (T.pack v))
+  js_keyup j callback
+
 keydown :: Textbox -> (Int -> T.Text -> IO ()) -> IO ()
 keydown (Textbox j) cont = do
   callback <-
@@ -707,6 +717,15 @@ foreign import javascript unsafe
 #else
 js_keydown :: JSVal -> Callback (JSVal -> JSVal -> IO ()) -> IO ()
 js_keydown = undefined
+#endif
+
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "$1.keyup(function(e){ $2(e.which, $1.val()); })"
+  js_keyup :: JSVal -> Callback (JSVal -> JSVal -> IO ()) -> IO ()
+#else
+js_keyup :: JSVal -> Callback (JSVal -> JSVal -> IO ()) -> IO ()
+js_keyup = undefined
 #endif
 
 #ifdef __GHCJS__
