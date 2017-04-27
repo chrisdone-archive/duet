@@ -10,7 +10,7 @@
 -- type checker adapted from Typing Haskell In Haskell, by Mark
 -- P. Jones.
 
-module Duet
+module Duet.Infer
   (
   -- * Type checker
   -- $type-checker
