@@ -16,10 +16,12 @@ main = do
           (Snappy.draggable c 45 Snappy.dragDY)
           (pure 20)
   _ <-
-    Snappy.text
+    Snappy.textbox
       snap
       (pure 10)
       (pure 20)
+      (pure 50)
+      (pure 50)
       (Snappy.zipDynamics
          (\x y -> "(x,y) = " ++ show (x,y))
          (Snappy.circleX c)

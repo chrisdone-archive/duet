@@ -4,6 +4,29 @@
     <title>Snappy demonstration</title>
     <meta charset="utf-8">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/snap.svg/0.5.1/snap.svg-min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <script>
+function snap_textbox(svg, x, y, w, h, val){
+  var $svg = $(svg);
+  var $parent = $svg.parent();
+  var $t = $('<input type="text" class="canvas-textbox">');
+  setTimeout(function(){
+    $t.focus();
+  });
+  $t.val(val);
+  $parent.append($t);
+  $t.css({
+    "font-family": "Chicago, cursive",
+    "font-size": "14px",
+    top: ($svg.position().top + y) + 'px',
+    left: x + 'px',
+    width: w+ 'px',
+    height: h+ 'px',
+    position: 'absolute'
+  });
+  return $t;
+}
+    </script>
   </head>
   <body>
     <p>
