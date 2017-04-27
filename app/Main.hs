@@ -126,9 +126,9 @@ builtInSignatures theShow specialTypes = do
       , TypeSignature
           the_True
           (Forall [] (Qualified [] (specialTypesBool specialTypes)))
-      ,  TypeSignature
-           the_False
-           (Forall [] (Qualified [] (specialTypesBool specialTypes)))
+      , TypeSignature
+          the_False
+          (Forall [] (Qualified [] (specialTypesBool specialTypes)))
       ])
   where
     (-->) :: Type Name -> Type Name -> Type Name

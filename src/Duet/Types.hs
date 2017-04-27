@@ -78,7 +78,7 @@ data InferException
   | ContextTooWeak
   | OccursCheckFails
   | KindMismatch
-  | TypeMismatch
+  | TypeMismatch (Type Name) (Type Name)
   | ListsDoNotUnify
   | TypeMismatchOneWay
   | NotInScope ![TypeSignature Name Name] !Name

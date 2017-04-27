@@ -63,17 +63,17 @@ tokenTokenizer prespaces =
                 (sourceLine pos)
                 (sourceColumn pos))
         else unexpected "indented newline"
-    , atom If "if"
-    , atom Then "then"
-    , atom Else "else"
-    , atom Case "case"
+    , atomThenSpace If "if"
+    , atomThenSpace Then "then"
+    , atomThenSpace Else "else"
+    , atomThenSpace Case "case"
     , atom Backslash "\\"
     , atom OpenParen "("
     , atom CloseParen ")"
     , atom Equals "="
     , atom Arrow "->"
-    , atom Let "let"
-    , atom In "in"
+    , atomThenSpace Let "let"
+    , atomThenSpace In "in"
     , atom Comma ","
     , do tok <-
            parsing
@@ -148,7 +148,8 @@ tokenTokenizer prespaces =
     , parseNumbers prespaces
     ]
   where
-    spaces1 = space >> spaces
+
+spaces1 = space >> spaces
 
 ellipsis :: Int -> [Char] -> [Char]
 ellipsis n text =
@@ -173,6 +174,22 @@ atom ::  t -> String -> Parser  (t, Location)
 atom constructor text = do
   start <- getPosition
   _ <- try (string text) <?> smartQuotes text
+  end <- getPosition
+  pure
+    ( constructor
+    , Location
+        (sourceLine start)
+        (sourceColumn start)
+        (sourceLine end)
+        (sourceColumn end))
+
+atomThenSpace :: t -> String -> Parser (t, Location)
+atomThenSpace constructor text = do
+  start <- getPosition
+  _ <-
+    try
+      (string text <* lookAhead spaces1 <?> ("space after " ++ smartQuotes text)) <?>
+    smartQuotes text
   end <- getPosition
   pure
     ( constructor

@@ -351,7 +351,7 @@ unifyTypes (VariableType u) t = unifyTypeVariable u t
 unifyTypes t (VariableType u) = unifyTypeVariable u t
 unifyTypes (ConstructorType tc1) (ConstructorType tc2)
               | tc1 == tc2 = return nullSubst
-unifyTypes _ _ = throwM TypeMismatch
+unifyTypes a b = throwM (TypeMismatch a b)
 
 unifyTypeList :: MonadThrow m => [Type Name] -> [Type Name] -> m [Substitution Name]
 unifyTypeList (x:xs) (y:ys) = do

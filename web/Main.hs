@@ -5,6 +5,7 @@ module Main where
 
 import           Control.Monad
 import           Control.Monad.Catch.Pure
+import           Control.Monad.Fix
 import           Control.Monad.Supply
 import           Control.Monad.Trans
 import           Data.Map.Strict (Map)
@@ -43,7 +44,15 @@ main = do
                  case runCatch
                         (do (specialSigs, specialTypes, bindGroups) <-
                               runTypeChecker bindings
-                            pure ()) of
+                            e0 <- lookupNameByString "main" bindGroups
+                            fix
+                              (\loop e xs -> do
+                                 e' <- expand specialSigs e bindGroups
+                                 if e' /= e || length xs > 100
+                                   then loop e' (e : xs)
+                                   else pure (reverse (e : xs)))
+                              e0
+                              []) of
                    Left e -> Left (displayException e)
                    Right v -> Right v)
           (Snappy.eventToDynamic defaultSource (Snappy.textboxChange source))
@@ -56,7 +65,7 @@ main = do
     (fmap
        (\case
           Left err -> err
-          Right r -> show r)
+          Right steps -> unlines (map (printExpression (const Nothing)) steps))
        result)
   pure ()
 
@@ -77,8 +86,19 @@ displayInferException :: SpecialTypes Name -> InferException -> [Char]
 displayInferException specialTypes =
   \case
     NotInScope scope name ->
-      "Not in scope " ++ curlyQuotes (printit name) ++ "\n" ++
-      "Current scope:\n\n" ++ unlines (map (printTypeSignature specialTypes) scope)
+      "Not in scope " ++
+      curlyQuotes (printit name) ++
+      "\n" ++
+      "Current scope:\n\n" ++
+      unlines (map (printTypeSignature specialTypes) scope)
+    TypeMismatch t1 t2 ->
+      "Couldn't match type " ++
+      curlyQuotes (printType specialTypes t1) ++
+      "\n" ++
+      "against inferred type " ++ curlyQuotes (printType specialTypes t2)
+    OccursCheckFails ->
+      "Infinite type (occurs check failed). \nYou \
+                        \probably have a self-referential value!"
     e -> show e
 
 displayRenamerException :: SpecialTypes Name -> RenamerException -> [Char]
@@ -126,7 +146,7 @@ defaultSource =
   unlines
     [ "compose = \\f g x -> f (g x)"
     , "id = \\x -> x"
-    , "demo = id (if id True"
+    , "main = id (if id True"
     , "              then \"Yay!\""
     , "              else id id \"Nay!\")"
     ]
