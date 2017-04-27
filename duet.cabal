@@ -16,8 +16,7 @@ library
     mtl,
     exceptions,
     parsec,
-    text,
-    monad-supply
+    text
   ghc-options:
     -Wall
   default-language:
@@ -30,6 +29,7 @@ library
     Duet.Tokenizer
     Duet.Renamer
     Duet.Stepper
+    Control.Monad.Supply
 
 executable duet
   hs-source-dirs:
@@ -42,7 +42,6 @@ executable duet
     parsec,
     text,
     exceptions,
-    monad-supply,
     mtl,
     containers
   default-language:

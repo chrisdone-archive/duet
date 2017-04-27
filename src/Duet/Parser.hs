@@ -133,7 +133,9 @@ funcParam = go <?> "function parameter (e.g. ‘x’, ‘limit’, etc.)"
       pure (VariablePattern (Identifier (T.unpack v)))
 
 atomic :: TokenParser (Expression Identifier Location)
-atomic = varParser <|> charParser <|> stringParser <|> integerParser <|> decimalParser
+atomic =
+  varParser <|> charParser <|> stringParser <|> integerParser <|> decimalParser <|>
+  constructorParser
   where
     charParser = go <?> "character (e.g. 'a')"
       where
@@ -153,6 +155,16 @@ atomic = varParser <|> charParser <|> stringParser <|> integerParser <|> decimal
                  String c -> Just c
                  _ -> Nothing)
           pure (LiteralExpression loc (StringLiteral (T.unpack c)))
+    constructorParser = go <?> "constructor (e.g. Just)"
+      where
+        go = do
+          (c, loc) <-
+            consumeToken
+              (\case
+                 Constructor c -> Just c
+                 _ -> Nothing)
+          pure
+            (VariableExpression loc (Identifier (T.unpack c)))
     integerParser = go <?> "integer (e.g. 42, 123)"
       where
         go = do

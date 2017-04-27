@@ -28,9 +28,6 @@ import           Duet.Types
 --------------------------------------------------------------------------------
 -- Perform renaming
 
-instance MonadThrow m => MonadThrow (SupplyT Int m) where
-  throwM = lift . throwM
-
 renameBindGroups
   :: (MonadSupply Int m, MonadThrow m)
   => Map Identifier Name

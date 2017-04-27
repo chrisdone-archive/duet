@@ -65,6 +65,13 @@ displayInferException specialTypes =
       "Current scope:\n\n" ++ unlines (map (printTypeSignature specialTypes) scope)
     e -> show e
 
+displayRenamerException :: SpecialTypes Name -> RenamerException -> [Char]
+displayRenamerException _specialTypes =
+  \case
+    IdentifierNotInScope scope name ->
+      "Not in scope " ++ curlyQuotes (printit name) ++ "\n" ++
+      "Current scope:\n\n" ++ unlines (map printit (M.keys scope))
+
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
   => [BindGroup Identifier l]
@@ -80,7 +87,13 @@ runTypeChecker bindings =
                    (\(TypeSignature name@(NameFromSource _ ident) _) ->
                       (Identifier ident, name))
                    signatures)
-        (renamedBindings, _) <- renameBindGroups signatureSubs bindings
+        (renamedBindings, _) <-
+          catch
+            (renameBindGroups signatureSubs bindings)
+            (\e ->
+               liftIO
+                 (do putStrLn (displayRenamerException specialTypes e)
+                     exitFailure))
         env <- setupEnv theShow specialTypes mempty
         bindGroups <-
           lift
