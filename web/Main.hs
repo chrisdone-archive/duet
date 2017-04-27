@@ -8,6 +8,7 @@ import           Control.Monad.Catch.Pure
 import           Control.Monad.Fix
 import           Control.Monad.Supply
 import           Control.Monad.Trans
+import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Text (Text)
@@ -99,6 +100,13 @@ displayInferException specialTypes =
     OccursCheckFails ->
       "Infinite type (occurs check failed). \nYou \
                         \probably have a self-referential value!"
+    AmbiguousInstance ambiguities ->
+      "Couldn't infer which instances to use for\n" ++
+      unlines
+        (map
+           (\(Ambiguity t ps) ->
+              intercalate ", " (map (printPredicate specialTypes) ps))
+           ambiguities)
     e -> show e
 
 displayRenamerException :: SpecialTypes Name -> RenamerException -> [Char]
@@ -146,7 +154,12 @@ defaultSource =
   unlines
     [ "compose = \\f g x -> f (g x)"
     , "id = \\x -> x"
-    , "main = id (if id True"
+    , "and = \\x y -> if x\n\
+       \                 then if y\n\
+       \                         then True\n\
+       \                         else False\n\
+       \                 else False"
+    , "main = id (if and True False"
     , "              then \"Yay!\""
     , "              else id id \"Nay!\")"
     ]

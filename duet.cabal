@@ -18,7 +18,7 @@ library
     parsec,
     text
   ghc-options:
-    -Wall
+    -Wall -O2
   default-language:
     Haskell2010
   exposed-modules:
@@ -63,7 +63,7 @@ executable duet-web
   main-is:
     Main.hs
   ghc-options:
-    -threaded
+    -threaded -O2
   other-modules:
     Snappy
     Snap

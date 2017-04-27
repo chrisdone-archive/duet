@@ -13,6 +13,7 @@ import           Control.Monad.Fix
 import           Control.Monad.Supply
 import           Control.Monad.Trans
 import           Data.List
+import           Data.List
 import qualified Data.Map.Strict as M
 import qualified Data.Text.IO as T
 import           Duet.Infer

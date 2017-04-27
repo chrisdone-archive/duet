@@ -26,8 +26,10 @@ expand specialSigs e b = go e
     go x =
       case x of
         VariableExpression _ i -> do
-          e' <- lookupName i b
-          pure e'
+          if specialVar specialSigs i
+             then pure x
+             else do e' <- lookupName i b
+                     pure e'
         LiteralExpression {} -> return x
         ConstantExpression {} -> return x
         ApplicationExpression l func arg ->
@@ -55,6 +57,8 @@ expand specialSigs e b = go e
         LetExpression {} -> return x
         LambdaExpression {} -> return x
         CaseExpression {} -> return x
+
+specialVar specialSigs i = i `elem` [specialSigsFalse specialSigs, specialSigsTrue specialSigs]
 
 substitute :: Name -> Expression Name l -> Expression Name l -> Expression Name l
 substitute i arg =
