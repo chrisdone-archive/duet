@@ -27,6 +27,12 @@ data SpecialTypes i = SpecialTypes
   , specialTypesFractional :: i
   } deriving (Show)
 
+-- | Special built-in signatures.
+data SpecialSigs i = SpecialSigs
+  { specialSigsTrue :: i
+  , specialSigsFalse :: i
+  }
+
 -- | Type inference monad.
 newtype InferT m a = InferT
   { runInferT :: StateT InferState m a

@@ -15,21 +15,13 @@ data StepException
   deriving (Typeable, Show)
 instance Exception StepException
 
-stepper
-  :: MonadThrow m
-  => [BindGroup Name (TypeSignature Name Duet.Types.Location)]
-  -> String
-  -> m (Expression Name (TypeSignature Name Location))
-stepper binds string =
-  do e <- lookupNameByString string binds
-     expand e binds
-
 expand
   :: MonadThrow m
-  => Expression Name (TypeSignature Name Location)
+  => SpecialSigs Name
+  -> Expression Name (TypeSignature Name Location)
   -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
   -> m (Expression Name (TypeSignature Name Location))
-expand e b = go e
+expand specialSigs e b = go e
   where
     go x =
       case x of
@@ -46,15 +38,22 @@ expand e b = go e
                   let body' = substitute param arg body
                   in case params' of
                        [] -> pure body'
-                       _ -> pure (LambdaExpression l0 (Alternative l' params' body'))
+                       _ ->
+                         pure
+                           (LambdaExpression l0 (Alternative l' params' body'))
                 [] -> error "Unsupported lambda."
             _ -> do
-              func' <- expand func b
+              func' <- expand specialSigs func b
               pure (ApplicationExpression l func' arg)
+        IfExpression l pr th el ->
+          case pr of
+            VariableExpression _ n
+              | n == specialSigsTrue specialSigs -> pure th
+              | n == specialSigsFalse specialSigs -> pure el
+            _ -> IfExpression l <$> go pr <*> pure th <*> pure el
         InfixExpression {} -> return x
         LetExpression {} -> return x
         LambdaExpression {} -> return x
-        IfExpression {} -> return x
         CaseExpression {} -> return x
 
 substitute :: Name -> Expression Name l -> Expression Name l -> Expression Name l

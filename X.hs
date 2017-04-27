@@ -1,3 +1,5 @@
 compose = \f g x -> f (g x)
 id = \x -> x
-main = id ((compose id id) "a")
+demo = id (if id True
+              then "true"
+              else id id "false")

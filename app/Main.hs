@@ -34,7 +34,7 @@ main = do
         Left e -> error (show e)
         Right bindings -> do
           putStrLn "-- Type checking ..."
-          (specialTypes, bindGroups) <- runTypeChecker bindings
+          (specialSigs, specialTypes, bindGroups) <- runTypeChecker bindings
           putStrLn "-- Source: "
           mapM_
             (\(BindGroup _ is) ->
@@ -49,7 +49,7 @@ main = do
           e0 <- lookupNameByString i bindGroups
           fix
             (\loop e -> do
-               e' <- expand e bindGroups
+               e' <- expand specialSigs e bindGroups
                putStrLn (printExpression (const Nothing) e)
                if e' /= e
                  then loop e'
@@ -75,12 +75,12 @@ displayRenamerException _specialTypes =
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
   => [BindGroup Identifier l]
-  -> m (SpecialTypes Name, [BindGroup Name (TypeSignature Name l)])
+  -> m (SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)])
 runTypeChecker bindings =
   evalSupplyT
     (do specialTypes <- defaultSpecialTypes
         theShow <- supplyName "Show"
-        signatures <- builtInSignatures theShow specialTypes
+        (specialSigs, signatures) <- builtInSignatures theShow specialTypes
         let signatureSubs =
               M.fromList
                 (map
@@ -103,28 +103,37 @@ runTypeChecker bindings =
                   liftIO
                     (do putStrLn (displayInferException specialTypes e)
                         exitFailure)))
-        return (specialTypes, bindGroups))
+        return (specialSigs, specialTypes, bindGroups))
     [0 ..]
 
 -- | Built-in pre-defined functions.
 builtInSignatures
   :: Monad m
-  => Name -> SpecialTypes Name -> SupplyT Int m [TypeSignature Name Name]
+  => Name -> SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Name Name])
 builtInSignatures theShow specialTypes = do
   the_show <- supplyName "show"
-  return [ TypeSignature
-             the_show
-             (Forall
-                [StarKind]
-                (Qualified
-                   [IsIn theShow [(GenericType 0)]]
-                   (GenericType 0 --> specialTypesString specialTypes)))
-         ]
-  where (-->) :: Type Name -> Type Name -> Type Name
-        a --> b =
-          ApplicationType
-            (ApplicationType (specialTypesFunction specialTypes) a)
-            b
+  the_True <- supplyName "True"
+  the_False <- supplyName "False"
+  return
+    ( SpecialSigs {specialSigsTrue = the_True, specialSigsFalse = the_False}
+    , [ TypeSignature
+          the_show
+          (Forall
+             [StarKind]
+             (Qualified
+                [IsIn theShow [(GenericType 0)]]
+                (GenericType 0 --> specialTypesString specialTypes)))
+      , TypeSignature
+          the_True
+          (Forall [] (Qualified [] (specialTypesBool specialTypes)))
+      ,  TypeSignature
+           the_False
+           (Forall [] (Qualified [] (specialTypesBool specialTypes)))
+      ])
+  where
+    (-->) :: Type Name -> Type Name -> Type Name
+    a --> b =
+      ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
 
 -- | Setup the class environment.
 setupEnv
