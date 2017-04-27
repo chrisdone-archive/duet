@@ -383,11 +383,12 @@ oneWayMatchLists ts ts' = do
 lookupName
   :: MonadThrow m
   => Name -> [(TypeSignature Name Name)] -> m (Scheme Name)
-lookupName _ [] = throwM NotInScope
-lookupName i ((TypeSignature i'  sc):as) =
-  if i == i'
-    then return sc
-    else lookupName i as
+lookupName name candidates = go name candidates where
+  go n [] = throwM (NotInScope candidates n)
+  go i ((TypeSignature i'  sc):as) =
+    if i == i'
+      then return sc
+      else go i as
 
 enumId :: Int -> Name
 enumId n = NameForall n

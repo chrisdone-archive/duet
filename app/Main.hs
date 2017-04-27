@@ -1,3 +1,6 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE Strict #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |
@@ -9,14 +12,17 @@ import           Control.Monad.Catch
 import           Control.Monad.Fix
 import           Control.Monad.Supply
 import           Control.Monad.Trans
+import qualified Data.Map.Strict as M
 import qualified Data.Text.IO as T
-import           Duet
+import           Duet.Infer
 import           Duet.Parser
 import           Duet.Printer
 import           Duet.Renamer
+import           Duet.Tokenizer
 import           Duet.Stepper
 import           Duet.Types
 import           System.Environment
+import           System.Exit
 
 main :: IO ()
 main = do
@@ -28,22 +34,7 @@ main = do
         Left e -> error (show e)
         Right bindings -> do
           putStrLn "-- Type checking ..."
-          (specialTypes, bindGroups) <-
-            evalSupplyT
-              (do specialTypes <- defaultSpecialTypes
-                  theShow <- supplyName "Show"
-                  signatures <- builtInSignatures theShow specialTypes
-                  renamedBindings <- mapM renameBindGroup bindings
-                  env <- setupEnv theShow specialTypes mempty
-                  bindGroups <-
-                    lift
-                      (typeCheckModule
-                         env
-                         signatures
-                         specialTypes
-                         renamedBindings)
-                  return (specialTypes, bindGroups))
-              [0 ..]
+          (specialTypes, bindGroups) <- runTypeChecker bindings
           putStrLn "-- Source: "
           mapM_
             (\(BindGroup _ is) ->
@@ -65,6 +56,42 @@ main = do
                  else pure ())
             e0
     _ -> error "usage: duet <file>"
+
+displayInferException :: SpecialTypes Name -> InferException -> [Char]
+displayInferException specialTypes =
+  \case
+    NotInScope scope name ->
+      "Not in scope " ++ curlyQuotes (printit name) ++ "\n" ++
+      "Current scope:\n\n" ++ unlines (map (printTypeSignature specialTypes) scope)
+    e -> show e
+
+runTypeChecker
+  :: (MonadThrow m, MonadCatch m, MonadIO m)
+  => [BindGroup Identifier l]
+  -> m (SpecialTypes Name, [BindGroup Name (TypeSignature Name l)])
+runTypeChecker bindings =
+  evalSupplyT
+    (do specialTypes <- defaultSpecialTypes
+        theShow <- supplyName "Show"
+        signatures <- builtInSignatures theShow specialTypes
+        let signatureSubs =
+              M.fromList
+                (map
+                   (\(TypeSignature name@(NameFromSource _ ident) _) ->
+                      (Identifier ident, name))
+                   signatures)
+        (renamedBindings, _) <- renameBindGroups signatureSubs bindings
+        env <- setupEnv theShow specialTypes mempty
+        bindGroups <-
+          lift
+            (catch
+               (typeCheckModule env signatures specialTypes renamedBindings)
+               (\e ->
+                  liftIO
+                    (do putStrLn (displayInferException specialTypes e)
+                        exitFailure)))
+        return (specialTypes, bindGroups))
+    [0 ..]
 
 -- | Built-in pre-defined functions.
 builtInSignatures

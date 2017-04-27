@@ -23,7 +23,7 @@ library
   default-language:
     Haskell2010
   exposed-modules:
-    Duet
+    Duet.Infer
     Duet.Types
     Duet.Parser
     Duet.Printer
@@ -43,6 +43,7 @@ executable duet
     text,
     exceptions,
     monad-supply,
-    mtl
+    mtl,
+    containers
   default-language:
     Haskell2010

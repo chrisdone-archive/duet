@@ -51,6 +51,11 @@ data InferState = InferState
   -- , inferStateExpressionTypes :: ![(Expression (), Scheme)]
   } deriving (Show)
 
+data RenamerException =
+  IdentifierNotInScope !(Map Identifier Name) !Identifier
+  deriving (Show, Typeable)
+instance Exception RenamerException
+
 -- | An exception that may be thrown when reading in source code,
 -- before we do any type-checking.
 data ReadException
@@ -70,7 +75,7 @@ data InferException
   | TypeMismatch
   | ListsDoNotUnify
   | TypeMismatchOneWay
-  | NotInScope
+  | NotInScope ![TypeSignature Name Name] !Name
   | ClassMismatch
   | MergeFail
   | AmbiguousInstance

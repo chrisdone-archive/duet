@@ -16,13 +16,19 @@ class Printable a where
 instance Printable Name where
   printit =
     \case
-      NameFromSource _ string -> string
-      NameForall i -> "v" ++ show i
+      NameFromSource i string -> string -- ++ "[" ++ show i ++ "]"
+      NameForall i -> "g" ++ show i
 
 instance Printable Identifier where
   printit =
     \case
       Identifier string -> string
+
+printTypeSignature
+  :: (Printable i, Printable j, Eq i)
+  => SpecialTypes i -> TypeSignature i j -> String
+printTypeSignature specialTypes (TypeSignature thing scheme) =
+  printit thing ++ " :: " ++ printScheme specialTypes scheme
 
 printIdentifier :: Printable i => i -> String
 printIdentifier = printit
