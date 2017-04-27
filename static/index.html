@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html style="width:100%;height:100%;">
   <head>
     <title>Snappy demonstration</title>
     <meta charset="utf-8">
@@ -28,15 +28,8 @@ function snap_textbox(svg, x, y, w, h, val){
 }
     </script>
   </head>
-  <body>
-    <p>
-      This app demonstrations dragging a circle around and updating a
-      text element to reflect the circle's X, Y position
-      automatically. You can also select an area of the canvas which
-      shows a kind of selection square. Source code
-      here: <a href="https://github.com/chrisdone/snappy/">https://github.com/chrisdone/snappy</a>
-    </p>
-    <svg id="app" width="800" height="500"></svg>
+  <body style="width:100%;height:100%;margin:0;overflow: hidden">
+    <svg id="app" width="100%" height="100%"></svg>
     <script language="javascript" src="all.js"></script>
   </body>
 </html>
