@@ -69,11 +69,13 @@ executable duet-web
     Snap
   build-depends:
     duet,
-    base,
-    parsec,
-    text,
-    exceptions,
-    mtl,
-    containers,
-    ghcjs-base,
-    aeson
+    base
+  if impl(ghcjs)
+    build-depends:
+      parsec,
+      text,
+      exceptions,
+      mtl,
+      containers,
+      aeson,
+      ghcjs-base
