@@ -49,7 +49,7 @@ main = do
                             fix
                               (\loop e xs -> do
                                  e' <- expand specialSigs e bindGroups
-                                 if e' /= e || length xs > 100
+                                 if e' /= e && length xs < 100
                                    then loop e' (e : xs)
                                    else pure (reverse (e : xs)))
                               e0
