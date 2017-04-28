@@ -86,6 +86,19 @@ renameConstructor arities subs (DataTypeConstructor name fields) =
 -- data P x m a = P (StateT x m a)
 --
 
+-- WORKAROUND:
+--
+-- Demand explicit kind signatures: all kinds are *, unless a
+-- signature e.g. (m :: * -> *) is provided.
+--
+-- data StateT s (m :: * -> *) a = StateT (s -> m a)
+-- data P x m a = P (StateT x m a)
+--
+-- Checker can demand that (m::*) and (m::*->*) match, requiring:
+
+-- data P x (m :: * -> *) a = ..
+
+
 renameFieldType
   :: MonadThrow m
   => [(Name,Int)] -> Map Identifier Name -> FieldType Identifier -> m (Type Name)
