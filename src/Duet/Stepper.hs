@@ -115,7 +115,7 @@ lookupNameByString identifier binds =
       listToMaybe
         (mapMaybe
            (\case
-              ImplicitlyTypedBinding _ (NameFromSource _ i) [Alternative _ [] e]
+              ImplicitlyTypedBinding _ (ValueName _ i) [Alternative _ [] e]
                 | i == identifier -> Just e
               _ -> Nothing)
            (concat is))

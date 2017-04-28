@@ -26,7 +26,57 @@ import qualified Data.Map.Strict as M
 import           Duet.Types
 
 --------------------------------------------------------------------------------
--- Perform renaming
+-- Data type renaming
+
+renameDataTypes
+  :: (MonadSupply Int m, MonadThrow m)
+  => Map Identifier Name
+  -> [DataType FieldType Identifier]
+  -> m [DataType Type Name]
+renameDataTypes subs types = do
+  subs' <-
+    fmap
+      (M.fromList)
+      (mapM
+         (\(DataType name vars cons) -> fmap (name, ) (supplyTypeName name))
+         types)
+  undefined
+
+boolDataType :: DataType FieldType Identifier
+boolDataType =
+  DataType
+    (Identifier "Bool")
+    []
+    [ DataTypeConstructor (Identifier "True") []
+    , DataTypeConstructor (Identifier "False") []
+    ]
+
+maybeDataType :: DataType FieldType Identifier
+maybeDataType =
+  DataType
+    (Identifier "Maybe")
+    [Identifier "a"]
+    [ DataTypeConstructor (Identifier "Nothing") []
+    , DataTypeConstructor
+        (Identifier "Just")
+        [FieldTypeVariable (Identifier "a")]
+    ]
+
+eitherDataType :: DataType FieldType Identifier
+eitherDataType =
+  DataType
+    (Identifier "Either")
+    [Identifier "a", Identifier "b"]
+    [ DataTypeConstructor
+        (Identifier "Left")
+        [FieldTypeVariable (Identifier "a")]
+    , DataTypeConstructor
+        (Identifier "Right")
+        [FieldTypeVariable (Identifier "b")]
+    ]
+
+--------------------------------------------------------------------------------
+-- Value renaming
 
 renameBindGroups
   :: (MonadSupply Int m, MonadThrow m)
@@ -60,7 +110,7 @@ getImplicitSubs subs implicit =
   fmap
     ((<> subs) . M.fromList)
     (mapM
-       (\(ImplicitlyTypedBinding _ i _) -> fmap (i, ) (supplyName i))
+       (\(ImplicitlyTypedBinding _ i _) -> fmap (i, ) (supplyValueName i))
        (concat implicit))
 
 renameExplicit :: Applicative f => t2 -> t1 -> f [t]
@@ -90,12 +140,12 @@ renamePattern
 renamePattern =
   \case
     VariablePattern i -> do
-      name <- lift (supplyName i)
+      name <- lift (supplyValueName i)
       tell [(i, name)]
       pure (VariablePattern name)
     WildcardPattern -> pure WildcardPattern
     AsPattern i p -> do
-      name <- supplyName i
+      name <- supplyValueName i
       tell [(i, name)]
       AsPattern name <$> renamePattern p
     LiteralPattern l -> pure (LiteralPattern l)
@@ -141,7 +191,12 @@ substitute subs i =
 --------------------------------------------------------------------------------
 -- Provide a new name
 
-supplyName :: (MonadSupply Int m) => Identifier -> m Name
-supplyName (Identifier s) = do
+supplyValueName :: (MonadSupply Int m) => Identifier -> m Name
+supplyValueName (Identifier s) = do
   i <- supply
-  return (NameFromSource i s)
+  return (ValueName i s)
+
+supplyTypeName :: (MonadSupply Int m) => Identifier -> m Name
+supplyTypeName (Identifier s) = do
+  i <- supply
+  return (TypeName i s)

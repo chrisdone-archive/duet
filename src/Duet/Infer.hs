@@ -391,7 +391,7 @@ lookupName name candidates = go name candidates where
       else go i as
 
 enumId :: Int -> Name
-enumId n = NameForall n
+enumId n = ForallName n
 
 inferLiteralType
   :: Monad m

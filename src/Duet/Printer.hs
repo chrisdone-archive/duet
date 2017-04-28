@@ -16,8 +16,9 @@ class Printable a where
 instance Printable Name where
   printit =
     \case
-      NameFromSource i string -> string -- ++ "[" ++ show i ++ "]"
-      NameForall i -> "g" ++ show i
+      ValueName i string -> string -- ++ "[" ++ show i ++ "]"
+      TypeName i string -> string -- ++ "[" ++ show i ++ "]"
+      ForallName i -> "g" ++ show i
 
 instance Printable Identifier where
   printit =
@@ -118,7 +119,7 @@ printScheme specialTypes (Forall kinds qualifiedType') =
             (zipWith
                (\i k ->
                   printTypeVariable
-                    (TypeVariable (NameForall i) k))
+                    (TypeVariable (ForallName i) k))
                [0 :: Int ..]
                kinds) ++
           ". ") ++

@@ -15,6 +15,25 @@ import           Data.Monoid
 import           Data.String
 import           Data.Typeable
 
+-- | Data type.
+data DataType f i = DataType
+  { dataTypeName :: i
+  , dataTypeVariables :: [i]
+  , dataTypeConstructors :: [DataTypeConstructor f i]
+  }
+
+-- | A data type constructor.
+data DataTypeConstructor f i = DataTypeConstructor
+  { dataTypeConstructorName :: i
+  , dataTypeConstructorFields :: [f i]
+  }
+
+-- | Type for a data type field.
+data FieldType i
+  = FieldTypeConstructor i
+  | FieldTypeVariable i
+  | FieldTypeApp (FieldType i) (FieldType i)
+
 -- | Special built-in types you need for type-checking patterns and
 -- literals.
 data SpecialTypes i = SpecialTypes
@@ -45,8 +64,9 @@ newtype InferT m a = InferT
 -- So this comes /after/ the parsing step, and /before/ the
 -- type-checking step. The renamer's job is to go from Identifier -> Name.
 data Name
-  = NameFromSource !Int !String
-  | NameForall !Int
+  = ValueName !Int !String
+  | TypeName !Int !String
+  | ForallName !Int
   deriving (Show, Eq, Ord)
 
 -- | State of inferring.

@@ -123,12 +123,12 @@ runTypeChecker
 runTypeChecker bindings =
   evalSupplyT
     (do specialTypes <- defaultSpecialTypes
-        theShow <- supplyName "Show"
+        theShow <- supplyTypeName "Show"
         (specialSigs, signatures) <- builtInSignatures theShow specialTypes
         let signatureSubs =
               M.fromList
                 (map
-                   (\(TypeSignature name@(NameFromSource _ ident) _) ->
+                   (\(TypeSignature name@(ValueName _ ident) _) ->
                       (Identifier ident, name))
                    signatures)
         (renamedBindings, _) <-
@@ -169,9 +169,9 @@ builtInSignatures
   :: Monad m
   => Name -> SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Name Name])
 builtInSignatures theShow specialTypes = do
-  the_show <- supplyName "show"
-  the_True <- supplyName "True"
-  the_False <- supplyName "False"
+  the_show <- supplyValueName "show"
+  the_True <- supplyValueName "True"
+  the_False <- supplyValueName "False"
   return
     ( SpecialSigs {specialSigsTrue = the_True, specialSigsFalse = the_False}
     , [ TypeSignature
@@ -201,9 +201,9 @@ setupEnv
   -> ClassEnvironment Name
   -> SupplyT Int m (ClassEnvironment Name)
 setupEnv theShow specialTypes env =
-  do theNum <- supplyName "Num"
-     num_a <- supplyName "a"
-     show_a <- supplyName "a"
+  do theNum <- supplyTypeName "Num"
+     num_a <- supplyTypeName "a"
+     show_a <- supplyTypeName "a"
      let update = addClass theNum [TypeVariable num_a StarKind] [] >=>
                   addInstance [] (IsIn theNum [specialTypesInteger specialTypes]) >=>
                   addClass theShow [TypeVariable show_a StarKind] [] >=>
@@ -214,13 +214,13 @@ setupEnv theShow specialTypes env =
 -- | Special types that Haskell uses for pattern matching and literals.
 defaultSpecialTypes :: Monad m => SupplyT Int m (SpecialTypes Name)
 defaultSpecialTypes = do
-  theBool <- supplyName "Bool"
-  theArrow <- supplyName "(->)"
-  theChar <- supplyName "Char"
-  theString <- supplyName "String"
-  theInteger <- supplyName "Integer"
-  theNum <- supplyName "Num"
-  theFractional <- supplyName "Fractional"
+  theBool <- supplyTypeName "Bool"
+  theArrow <- supplyTypeName "(->)"
+  theChar <- supplyTypeName "Char"
+  theString <- supplyTypeName "String"
+  theInteger <- supplyTypeName "Integer"
+  theNum <- supplyTypeName "Num"
+  theFractional <- supplyTypeName "Fractional"
   return
     (SpecialTypes
      { specialTypesBool = ConstructorType (TypeConstructor theBool StarKind)
