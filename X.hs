@@ -1,5 +1,8 @@
 compose = \f g x -> f (g x)
 id = \x -> x
-demo = id (if id True
-              then "true"
-              else id id "false")
+and = \x y -> if x
+                 then if y
+                         then True
+                         else False
+                 else False
+main = and True True
