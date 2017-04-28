@@ -77,8 +77,9 @@ data InferState = InferState
   -- , inferStateExpressionTypes :: ![(Expression (), Scheme)]
   } deriving (Show)
 
-data RenamerException =
-  IdentifierNotInScope !(Map Identifier Name) !Identifier
+data RenamerException
+  = IdentifierNotInScope !(Map Identifier Name) !Identifier
+  | TypeNotInScope ![Name] !Name
   deriving (Show, Typeable)
 instance Exception RenamerException
 

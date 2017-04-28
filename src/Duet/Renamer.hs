@@ -34,13 +34,63 @@ renameDataTypes
   -> [DataType FieldType Identifier]
   -> m [DataType Type Name]
 renameDataTypes subs types = do
+  nameidents <-
+    mapM
+      (\(DataType name vars _) ->
+         fmap (name, length vars, ) (supplyTypeName name))
+      types
+  let subs' = (<> subs) (M.fromList (map (\(x, _, z) -> (x, z)) nameidents))
+      arities = map (\(_,arity,name) -> (name,arity)) nameidents
+  mapM (renameDataType subs' arities) types
+
+renameDataType
+  :: (MonadSupply Int m, MonadThrow m)
+  => Map Identifier Name
+  -> [(Name, Int)]
+  -> DataType FieldType Identifier
+  -> m (DataType Type Name)
+renameDataType subs arities (DataType name vars cons) = do
+  name' <- substitute subs name
   subs' <-
     fmap
-      (M.fromList)
-      (mapM
-         (\(DataType name vars cons) -> fmap (name, ) (supplyTypeName name))
-         types)
-  undefined
+      ((<> subs) . M.fromList)
+      (mapM (\v -> fmap (v, ) (supplyTypeName v)) vars)
+  vars' <- mapM (substitute subs') vars
+  cons' <- mapM (renameConstructor arities subs') cons
+  return (DataType name' vars' cons')
+
+renameConstructor
+  :: (MonadSupply Int m, MonadThrow m)
+  => [(Name, Int)]
+  -> Map Identifier Name
+  -> DataTypeConstructor FieldType Identifier
+  -> m (DataTypeConstructor Type Name)
+renameConstructor arities subs (DataTypeConstructor name fields) =
+  do name' <- supplyValueName name
+     fields' <- mapM (renameFieldType arities subs) fields
+     pure (DataTypeConstructor name' [])
+
+renameFieldType
+  :: MonadThrow m
+  => [(Name,Int)] -> Map Identifier Name -> FieldType Identifier -> m (Type Name)
+renameFieldType arities subs = go
+  where
+    go  =
+      \case
+        FieldTypeConstructor i -> do
+          name <- substitute subs i
+          kind <- kindOf arities name
+          pure (ConstructorType (TypeConstructor name kind))
+        FieldTypeVariable i -> do
+          name <- substitute subs i
+          pure (VariableType (TypeVariable name StarKind))
+        FieldTypeApp f x -> do
+          f' <- go f
+          x' <- go x
+          pure (ApplicationType f' x')
+
+-- data StateT s m a = StateT (s -> m a)
+--
 
 boolDataType :: DataType FieldType Identifier
 boolDataType =
@@ -178,6 +228,15 @@ renameExpression subs = go
                e' <- renameExpression (M.fromList subs' <> subs) ex
                pure (pat', e'))
             pat_exps
+
+--------------------------------------------------------------------------------
+-- Generate a kind for a data type
+
+kindOf :: MonadThrow m => [(Name, Int)] -> Name -> m Kind
+kindOf arities name =
+  case lookup name arities of
+    Nothing -> throwM (TypeNotInScope (map fst arities) name)
+    Just arity -> pure (foldr FunctionKind StarKind (replicate arity StarKind))
 
 --------------------------------------------------------------------------------
 -- Provide a substitution
