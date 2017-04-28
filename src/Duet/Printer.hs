@@ -25,6 +25,15 @@ instance Printable Identifier where
     \case
       Identifier string -> string
 
+printDataType :: (Eq i, Printable i) => SpecialTypes i -> DataType Type i -> String
+printDataType specialTypes (DataType name vars cons) =
+  "data " ++ printit name ++ " " ++ unwords (map printTypeVariable vars) ++ "\n  = " ++
+    intercalate "\n  | " (map (printConstructor specialTypes) cons)
+
+printConstructor :: (Eq i, Printable i) => SpecialTypes i -> DataTypeConstructor Type i -> [Char]
+printConstructor specialTypes (DataTypeConstructor name fields) =
+  printit name ++ " " ++ unwords (map (printType specialTypes) fields)
+
 printTypeSignature
   :: (Printable i, Printable j, Eq i)
   => SpecialTypes i -> TypeSignature i j -> String

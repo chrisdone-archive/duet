@@ -21,8 +21,11 @@ import           Control.Monad.Catch
 import           Control.Monad.Supply
 import           Control.Monad.Trans
 import           Control.Monad.Writer
+import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+import           Duet.Infer
+import           Duet.Printer
 import           Duet.Types
 
 --------------------------------------------------------------------------------
@@ -30,94 +33,81 @@ import           Duet.Types
 
 renameDataTypes
   :: (MonadSupply Int m, MonadThrow m)
-  => Map Identifier Name
-  -> [DataType FieldType Identifier]
+  => [DataType FieldType Identifier]
   -> m [DataType Type Name]
-renameDataTypes subs types = do
-  nameidents <-
+renameDataTypes types = do
+  typeConstructors <-
     mapM
-      (\(DataType name vars _) ->
-         fmap (name, length vars, ) (supplyTypeName name))
+      (\(DataType name vars cs) -> do
+         name' <- supplyTypeName name
+         vars' <-
+           mapM
+             (\(TypeVariable i k) -> do
+                i' <- supplyTypeName i
+                pure (i, TypeVariable i' k))
+             vars
+         pure (name, name', vars', cs))
       types
-  let subs' = (<> subs) (M.fromList (map (\(x, _, z) -> (x, z)) nameidents))
-      arities = map (\(_,arity,name) -> (name,arity)) nameidents
-  mapM (renameDataType subs' arities) types
-
-renameDataType
-  :: (MonadSupply Int m, MonadThrow m)
-  => Map Identifier Name
-  -> [(Name, Int)]
-  -> DataType FieldType Identifier
-  -> m (DataType Type Name)
-renameDataType subs arities (DataType name vars cons) = do
-  name' <- substitute subs name
-  subs' <-
-    fmap
-      ((<> subs) . M.fromList)
-      (mapM (\v -> fmap (v, ) (supplyTypeName v)) vars)
-  vars' <- mapM (substitute subs') vars
-  cons' <- mapM (renameConstructor arities subs') cons
-  return (DataType name' vars' cons')
+  mapM
+    (\(_, name, vars, cs) -> do
+       cs' <- mapM (renameConstructor typeConstructors vars) cs
+       pure (DataType name (map snd vars) cs'))
+    typeConstructors
 
 renameConstructor
   :: (MonadSupply Int m, MonadThrow m)
-  => [(Name, Int)]
-  -> Map Identifier Name
+  => [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor FieldType Identifier])]
+  -> [(Identifier, TypeVariable Name)]
   -> DataTypeConstructor FieldType Identifier
   -> m (DataTypeConstructor Type Name)
-renameConstructor arities subs (DataTypeConstructor name fields) =
-  do name' <- supplyValueName name
-     fields' <- mapM (renameFieldType arities subs) fields
-     pure (DataTypeConstructor name' [])
+renameConstructor typeConstructors vars (DataTypeConstructor name fields) = do
+  name' <- supplyValueName name
+  fields' <- mapM (renameField typeConstructors vars name') fields
+  pure (DataTypeConstructor name' fields')
 
---
--- We need kind inference here:
---
--- https://www.haskell.org/onlinereport/decls.html#kindinference
---
--- The report is mildly helpful, in that if a kind is unclear, then
--- you just default to *.
---
--- The `m` below is the only thing used in type-function position, so
--- that's a * -> *. The rest is by default `*`. In the case of `P`, we
--- don't know that `m` is *->*, so we should do unification somewhere.
---
--- data StateT s m a = StateT (s -> m a)
--- data P x m a = P (StateT x m a)
---
-
--- WORKAROUND:
---
--- Demand explicit kind signatures: all kinds are *, unless a
--- signature e.g. (m :: * -> *) is provided.
---
--- data StateT s (m :: * -> *) a = StateT (s -> m a)
--- data P x m a = P (StateT x m a)
---
--- Checker can demand that (m::*) and (m::*->*) match, requiring:
-
--- data P x (m :: * -> *) a = ..
-
-
-renameFieldType
+renameField
   :: MonadThrow m
-  => [(Name,Int)] -> Map Identifier Name -> FieldType Identifier -> m (Type Name)
-renameFieldType arities subs = go
+  => [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor FieldType Identifier])]
+  -> [(Identifier, TypeVariable Name)]
+  -> Name
+  -> FieldType Identifier
+  -> m (Type Name)
+renameField typeConstructors vars name fe = do
+  ty <- go fe
+  if typeKind ty == StarKind
+    then pure ty
+    else throwM (ConstructorFieldKind name ty (typeKind ty))
   where
-    go  =
+    go =
       \case
         FieldTypeConstructor i -> do
-          name <- substitute subs i
-          kind <- kindOf arities name
-          pure (ConstructorType (TypeConstructor name kind))
-        FieldTypeVariable i -> do
-          name <- substitute subs i
-          pure (VariableType (TypeVariable name StarKind))
+          (name', vars') <- resolve i
+          pure (ConstructorType (toTypeConstructor name' (map snd vars')))
+        FieldTypeVariable v ->
+          case lookup v vars of
+            Nothing -> throwM (TypeNotInScope [] v)
+            Just tyvar -> pure (VariableType tyvar)
         FieldTypeApp f x -> do
           f' <- go f
-          x' <- go x
-          pure (ApplicationType f' x')
+          let fKind = typeKind f'
+          case fKind of
+            FunctionKind argKind _ -> do
+              x' <- go x
+              let xKind = typeKind x'
+              if xKind == argKind
+                then pure (ApplicationType f' x')
+                else throwM (RenamerKindMismatch f' fKind x' xKind)
+            StarKind -> do
+              x' <- go x
+              throwM (KindTooManyArgs f' fKind x')
+    resolve i =
+      case find ((\(j, _, _, _) -> j == i)) typeConstructors of
+        Just (_, name', vs, _) -> pure (name', vs)
+        Nothing -> throwM (TypeNotInScope [] i)
 
+toTypeConstructor :: Name -> [TypeVariable Name] -> TypeConstructor Name
+toTypeConstructor name vars =
+  TypeConstructor name (foldr FunctionKind StarKind (map typeVariableKind vars))
 
 boolDataType :: DataType FieldType Identifier
 boolDataType =
@@ -132,7 +122,7 @@ maybeDataType :: DataType FieldType Identifier
 maybeDataType =
   DataType
     (Identifier "Maybe")
-    [Identifier "a"]
+    [TypeVariable (Identifier "a") StarKind]
     [ DataTypeConstructor (Identifier "Nothing") []
     , DataTypeConstructor
         (Identifier "Just")
@@ -143,13 +133,43 @@ eitherDataType :: DataType FieldType Identifier
 eitherDataType =
   DataType
     (Identifier "Either")
-    [Identifier "a", Identifier "b"]
+    [ TypeVariable (Identifier "a") StarKind
+    , TypeVariable (Identifier "b") StarKind
+    , TypeVariable (Identifier "m") (FunctionKind StarKind StarKind)
+    ]
     [ DataTypeConstructor
         (Identifier "Left")
         [FieldTypeVariable (Identifier "a")]
     , DataTypeConstructor
         (Identifier "Right")
         [FieldTypeVariable (Identifier "b")]
+    , DataTypeConstructor
+        (Identifier "ST")
+        [ FieldTypeApp
+            (FieldTypeApp
+               (FieldTypeApp
+                  (FieldTypeConstructor (Identifier "StateT"))
+                  (FieldTypeVariable (Identifier "b")))
+               (FieldTypeVariable (Identifier "m")))
+            (FieldTypeVariable (Identifier "a"))
+        ]
+    ]
+
+statetDataType :: DataType FieldType Identifier
+statetDataType =
+  DataType
+    (Identifier "StateT")
+    [ TypeVariable (Identifier "s") StarKind
+    , TypeVariable (Identifier "m") (FunctionKind StarKind StarKind)
+    , TypeVariable (Identifier "a") StarKind
+    ]
+    [ DataTypeConstructor
+        (Identifier "StateT")
+        [ FieldTypeVariable (Identifier "s")
+        , FieldTypeApp
+            (FieldTypeVariable (Identifier "m"))
+            (FieldTypeVariable (Identifier "a"))
+        ]
     ]
 
 --------------------------------------------------------------------------------
@@ -255,15 +275,6 @@ renameExpression subs = go
                e' <- renameExpression (M.fromList subs' <> subs) ex
                pure (pat', e'))
             pat_exps
-
---------------------------------------------------------------------------------
--- Generate a kind for a data type
-
-kindOf :: MonadThrow m => [(Name, Int)] -> Name -> m Kind
-kindOf arities name =
-  case lookup name arities of
-    Nothing -> throwM (TypeNotInScope (map fst arities) name)
-    Just arity -> pure (foldr FunctionKind StarKind (replicate arity StarKind))
 
 --------------------------------------------------------------------------------
 -- Provide a substitution

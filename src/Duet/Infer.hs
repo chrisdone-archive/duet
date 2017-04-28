@@ -42,6 +42,7 @@ module Duet.Infer
   , Pattern(..)
   , BindGroup(..)
   , Alternative(..)
+  , typeKind
   ) where
 
 import           Control.Monad.Catch

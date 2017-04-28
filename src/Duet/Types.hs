@@ -18,21 +18,22 @@ import           Data.Typeable
 -- | Data type.
 data DataType f i = DataType
   { dataTypeName :: i
-  , dataTypeVariables :: [i]
+  , dataTypeVariables :: [TypeVariable i]
   , dataTypeConstructors :: [DataTypeConstructor f i]
-  }
+  } deriving (Show)
 
 -- | A data type constructor.
 data DataTypeConstructor f i = DataTypeConstructor
   { dataTypeConstructorName :: i
   , dataTypeConstructorFields :: [f i]
-  }
+  } deriving (Show)
 
 -- | Type for a data type field.
 data FieldType i
   = FieldTypeConstructor i
   | FieldTypeVariable i
   | FieldTypeApp (FieldType i) (FieldType i)
+  deriving (Show)
 
 -- | Special built-in types you need for type-checking patterns and
 -- literals.
@@ -79,7 +80,10 @@ data InferState = InferState
 
 data RenamerException
   = IdentifierNotInScope !(Map Identifier Name) !Identifier
-  | TypeNotInScope ![Name] !Name
+  | TypeNotInScope ![TypeConstructor Name] !Identifier
+  | RenamerKindMismatch (Type Name) Kind (Type Name) Kind
+  | KindTooManyArgs (Type Name) Kind (Type Name)
+  | ConstructorFieldKind Name (Type Name) Kind
   deriving (Show, Typeable)
 instance Exception RenamerException
 
