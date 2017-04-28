@@ -33,9 +33,10 @@ import           Duet.Types
 
 renameDataTypes
   :: (MonadSupply Int m, MonadThrow m)
-  => [DataType FieldType Identifier]
+  => SpecialTypes Name
+  -> [DataType FieldType Identifier]
   -> m [DataType Type Name]
-renameDataTypes types = do
+renameDataTypes specialTypes types = do
   typeConstructors <-
     mapM
       (\(DataType name vars cs) -> do
@@ -50,29 +51,30 @@ renameDataTypes types = do
       types
   mapM
     (\(_, name, vars, cs) -> do
-       cs' <- mapM (renameConstructor typeConstructors vars) cs
+       cs' <- mapM (renameConstructor specialTypes typeConstructors vars) cs
        pure (DataType name (map snd vars) cs'))
     typeConstructors
 
 renameConstructor
   :: (MonadSupply Int m, MonadThrow m)
-  => [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor FieldType Identifier])]
+  => SpecialTypes Name -> [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor FieldType Identifier])]
   -> [(Identifier, TypeVariable Name)]
   -> DataTypeConstructor FieldType Identifier
   -> m (DataTypeConstructor Type Name)
-renameConstructor typeConstructors vars (DataTypeConstructor name fields) = do
+renameConstructor specialTypes typeConstructors vars (DataTypeConstructor name fields) = do
   name' <- supplyValueName name
-  fields' <- mapM (renameField typeConstructors vars name') fields
+  fields' <- mapM (renameField specialTypes typeConstructors vars name') fields
   pure (DataTypeConstructor name' fields')
 
 renameField
   :: MonadThrow m
-  => [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor FieldType Identifier])]
+  => SpecialTypes Name
+  -> [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor FieldType Identifier])]
   -> [(Identifier, TypeVariable Name)]
   -> Name
   -> FieldType Identifier
   -> m (Type Name)
-renameField typeConstructors vars name fe = do
+renameField specialTypes typeConstructors vars name fe = do
   ty <- go fe
   if typeKind ty == StarKind
     then pure ty
@@ -103,74 +105,17 @@ renameField typeConstructors vars name fe = do
     resolve i =
       case find ((\(j, _, _, _) -> j == i)) typeConstructors of
         Just (_, name', vs, _) -> pure (name', vs)
-        Nothing -> throwM (TypeNotInScope [] i)
-
-toTypeConstructor :: Name -> [TypeVariable Name] -> TypeConstructor Name
-toTypeConstructor name vars =
-  TypeConstructor name (foldr FunctionKind StarKind (map typeVariableKind vars))
-
-boolDataType :: DataType FieldType Identifier
-boolDataType =
-  DataType
-    (Identifier "Bool")
-    []
-    [ DataTypeConstructor (Identifier "True") []
-    , DataTypeConstructor (Identifier "False") []
-    ]
-
-maybeDataType :: DataType FieldType Identifier
-maybeDataType =
-  DataType
-    (Identifier "Maybe")
-    [TypeVariable (Identifier "a") StarKind]
-    [ DataTypeConstructor (Identifier "Nothing") []
-    , DataTypeConstructor
-        (Identifier "Just")
-        [FieldTypeVariable (Identifier "a")]
-    ]
-
-eitherDataType :: DataType FieldType Identifier
-eitherDataType =
-  DataType
-    (Identifier "Either")
-    [ TypeVariable (Identifier "a") StarKind
-    , TypeVariable (Identifier "b") StarKind
-    , TypeVariable (Identifier "m") (FunctionKind StarKind StarKind)
-    ]
-    [ DataTypeConstructor
-        (Identifier "Left")
-        [FieldTypeVariable (Identifier "a")]
-    , DataTypeConstructor
-        (Identifier "Right")
-        [FieldTypeVariable (Identifier "b")]
-    , DataTypeConstructor
-        (Identifier "ST")
-        [ FieldTypeApp
-            (FieldTypeApp
-               (FieldTypeApp
-                  (FieldTypeConstructor (Identifier "StateT"))
-                  (FieldTypeVariable (Identifier "b")))
-               (FieldTypeVariable (Identifier "m")))
-            (FieldTypeVariable (Identifier "a"))
-        ]
-    ]
-
-statetDataType :: DataType FieldType Identifier
-statetDataType =
-  DataType
-    (Identifier "StateT")
-    [ TypeVariable (Identifier "s") StarKind
-    , TypeVariable (Identifier "m") (FunctionKind StarKind StarKind)
-    , TypeVariable (Identifier "a") StarKind
-    ]
-    [ DataTypeConstructor
-        (Identifier "StateT")
-        [ FieldTypeVariable (Identifier "s")
-        , FieldTypeApp
-            (FieldTypeVariable (Identifier "m"))
-            (FieldTypeVariable (Identifier "a"))
-        ]
-    ]
+        Nothing ->
+          case specialTypesBool specialTypes of
+            DataType n@(TypeName _ i') vars _
+              | Identifier i' == i ->
+                pure
+                  ( n
+                  , map
+                      (\case
+                         (TypeVariable n@(TypeName _ i) k) ->
+                           (Identifier i, TypeVariable n k))
+                      vars)
 
 --------------------------------------------------------------------------------
 -- Value renaming

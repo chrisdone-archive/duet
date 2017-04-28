@@ -16,8 +16,8 @@ class Printable a where
 instance Printable Name where
   printit =
     \case
-      ValueName i string -> string -- ++ "[" ++ show i ++ "]"
-      TypeName i string -> string -- ++ "[" ++ show i ++ "]"
+      ValueName i string -> string --  ++ "[value: " ++ show i ++ "]"
+      TypeName i string -> string  --  ++ "[type: " ++ show i ++ "]"
       ForallName i -> "g" ++ show i
 
 instance Printable Identifier where
@@ -165,16 +165,25 @@ printType specialTypes =
   \case
     VariableType v -> printTypeVariable v
     ConstructorType tyCon -> printTypeConstructor tyCon
-    ApplicationType (ApplicationType func x') y | func == specialTypesFunction specialTypes ->
-      "(" ++ printType specialTypes x' ++ " -> " ++ printTypeSansParens specialTypes y ++ ")"
+    ApplicationType (ApplicationType func x') y
+      | func == specialTypesFunction specialTypes ->
+        "(" ++
+        printType specialTypes x' ++
+        " -> " ++ printTypeSansParens specialTypes y ++ ")"
     -- ApplicationType list ty | list == specialTypesList specialTypes ->
     --   "[" ++ printTypeSansParens specialTypes ty ++ "]"
-    ApplicationType x' y -> "(" ++ printType specialTypes x' ++ " " ++ printType specialTypes y ++ ")"
+    ApplicationType x' y -> printType specialTypes x' ++ " " ++ printTypeArg y
     GenericType int -> "g" ++ show int
-  where printTypeConstructor (TypeConstructor identifier kind) =
-          case kind of
-            StarKind -> printIdentifier identifier
-            _ -> "(" ++ printIdentifier identifier ++ " :: " ++ printKind kind ++ ")"
+  where
+    printTypeArg =
+      \case
+        x@ApplicationType {} -> "(" ++ printType specialTypes x ++ ")"
+        x -> printType specialTypes x
+    printTypeConstructor (TypeConstructor identifier kind) =
+      case kind of
+        StarKind -> printIdentifier identifier
+        FunctionKind {} -> printIdentifier identifier
+            -- _ -> "(" ++ printIdentifier identifier ++ " :: " ++ printKind kind ++ ")"
 
 printTypeVariable :: Printable i => TypeVariable i -> String
 printTypeVariable (TypeVariable identifier kind) =

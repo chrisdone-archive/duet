@@ -633,7 +633,7 @@ inferExpressionType ce as (LambdaExpression l alt) = do
 inferExpressionType ce as (IfExpression l e e1 e2) = do
   (ps, t, e') <- inferExpressionType ce as e
   specialTypes <- InferT (gets inferStateSpecialTypes)
-  unify t (specialTypesBool specialTypes)
+  unify t (dataTypeConstructor (specialTypesBool specialTypes))
   (ps1, t1, e1') <- inferExpressionType ce as e1
   (ps2, t2, e2') <- inferExpressionType ce as e2
   unify t1 t2

@@ -19,6 +19,7 @@ import           Data.Typeable
 data Decl f i l
   = DataDecl (DataType f i)
   | BindGroupDecl (BindGroup i l)
+  deriving (Show)
 
 -- | Data type.
 data DataType f i = DataType
@@ -26,6 +27,14 @@ data DataType f i = DataType
   , dataTypeVariables :: [TypeVariable i]
   , dataTypeConstructors :: [DataTypeConstructor f i]
   } deriving (Show)
+
+dataTypeConstructor :: DataType Type Name -> Type Name
+dataTypeConstructor (DataType name vs _) =
+  ConstructorType (toTypeConstructor name vs)
+
+toTypeConstructor :: Name -> [TypeVariable Name] -> TypeConstructor Name
+toTypeConstructor name vars =
+  TypeConstructor name (foldr FunctionKind StarKind (map typeVariableKind vars))
 
 -- | A data type constructor.
 data DataTypeConstructor f i = DataTypeConstructor
@@ -43,7 +52,7 @@ data FieldType i
 -- | Special built-in types you need for type-checking patterns and
 -- literals.
 data SpecialTypes i = SpecialTypes
-  { specialTypesBool       :: Type i
+  { specialTypesBool       :: DataType Type i
   , specialTypesChar       :: Type i
   , specialTypesString     :: Type i
   , specialTypesFunction   :: Type i
@@ -83,12 +92,19 @@ data InferState = InferState
   -- , inferStateExpressionTypes :: ![(Expression (), Scheme)]
   } deriving (Show)
 
+data StepException
+  = CouldntFindName !Name
+  | CouldntFindNameByString !String
+  deriving (Typeable, Show)
+instance Exception StepException
+
 data RenamerException
   = IdentifierNotInScope !(Map Identifier Name) !Identifier
   | TypeNotInScope ![TypeConstructor Name] !Identifier
   | RenamerKindMismatch (Type Name) Kind (Type Name) Kind
   | KindTooManyArgs (Type Name) Kind (Type Name)
   | ConstructorFieldKind Name (Type Name) Kind
+  | BuiltinNotDefined !String
   deriving (Show, Typeable)
 instance Exception RenamerException
 

@@ -7,6 +7,7 @@
 
 module Main where
 
+import           Control.Arrow
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.Fix
@@ -14,6 +15,7 @@ import           Control.Monad.Supply
 import           Control.Monad.Trans
 import           Data.List
 import qualified Data.Map.Strict as M
+import           Data.Maybe
 import qualified Data.Text.IO as T
 import           Duet.Infer
 import           Duet.Parser
@@ -33,9 +35,9 @@ main = do
       text <- T.readFile file
       case parseText file text of
         Left e -> error (show e)
-        Right bindings -> do
+        Right decls -> do
           putStrLn "-- Type checking ..."
-          (specialSigs, specialTypes, bindGroups) <- runTypeChecker bindings
+          (specialSigs, specialTypes, bindGroups, signatures) <- runTypeChecker decls
           putStrLn "-- Source: "
           mapM_
             (\(BindGroup _ is) ->
@@ -49,11 +51,11 @@ main = do
           putStrLn "-- Stepping ..."
           e0 <- lookupNameByString i bindGroups
           fix
-            (\loop e -> do
-               e' <- expand specialSigs e bindGroups
+            (\loopy e -> do
+               e' <- expand specialSigs signatures e bindGroups
                putStrLn (printExpression (const Nothing) e)
                if e' /= e
-                 then loop e'
+                 then loopy e'
                  else pure ())
             e0
     _ -> error "usage: duet <file>"
@@ -67,6 +69,14 @@ displayInferException specialTypes =
       "\n" ++
       "Current scope:\n\n" ++
       unlines (map (printTypeSignature specialTypes) scope)
+    TypeMismatch t1 t2 ->
+      "Couldn't match type " ++
+      curlyQuotes (printType specialTypes t1) ++
+      "\n" ++
+      "against inferred type " ++ curlyQuotes (printType specialTypes t2)
+    OccursCheckFails ->
+      "Infinite type (occurs check failed). \nYou \
+                        \probably have a self-referential value!"
     AmbiguousInstance ambiguities ->
       "Couldn't infer which instances to use for\n" ++
       unlines
@@ -85,46 +95,65 @@ displayRenamerException _specialTypes =
 
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
-  => [BindGroup Identifier l]
-  -> m (SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)])
-runTypeChecker bindings =
-  evalSupplyT
-    (do specialTypes <- defaultSpecialTypes
-        theShow <- supplyTypeName "Show"
-        (specialSigs, signatures) <- builtInSignatures theShow specialTypes
-        let signatureSubs =
-              M.fromList
-                (map
-                   (\(TypeSignature name@(ValueName _ ident) _) ->
-                      (Identifier ident, name))
-                   signatures)
-        (renamedBindings, _) <-
-          catch
-            (renameBindGroups signatureSubs bindings)
-            (\e ->
-               liftIO
-                 (do putStrLn (displayRenamerException specialTypes e)
-                     exitFailure))
-        env <- setupEnv theShow specialTypes mempty
-        bindGroups <-
-          lift
-            (catch
-               (typeCheckModule env signatures specialTypes renamedBindings)
+  => [Decl FieldType Identifier l]
+  -> m (SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name])
+runTypeChecker decls =
+  let bindings =
+        mapMaybe
+          (\case
+             BindGroupDecl d -> Just d
+             _ -> Nothing)
+          decls
+      types =
+        mapMaybe
+          (\case
+             DataDecl d -> Just d
+             _ -> Nothing)
+          decls
+  in evalSupplyT
+       (do specialTypes <- defaultSpecialTypes
+           theShow <- supplyTypeName "Show"
+           (specialSigs, signatures0) <- builtInSignatures theShow specialTypes
+           sigs' <-
+             renameDataTypes specialTypes types >>=
+             mapM (dataTypeSignatures specialTypes)
+           let signatures = signatures0 ++ concat sigs'
+           liftIO
+             (mapM_ (putStrLn . printTypeSignature specialTypes) (concat sigs'))
+           let signatureSubs =
+                 M.fromList
+                   (map
+                      (\(TypeSignature name@(ValueName _ ident) _) ->
+                         (Identifier ident, name))
+                      signatures)
+           (renamedBindings, _) <-
+             catch
+               (renameBindGroups signatureSubs bindings)
                (\e ->
                   liftIO
-                    (do putStrLn (displayInferException specialTypes e)
-                        exitFailure)))
-        return (specialSigs, specialTypes, bindGroups))
-    [0 ..]
+                    (do putStrLn (displayRenamerException specialTypes e)
+                        exitFailure))
+           env <- setupEnv theShow specialTypes mempty
+           bindGroups <-
+             lift
+               (catch
+                  (typeCheckModule env signatures specialTypes renamedBindings)
+                  (\e ->
+                     liftIO
+                       (do putStrLn (displayInferException specialTypes e)
+                           exitFailure)))
+           return (specialSigs, specialTypes, bindGroups, signatures))
+       [0 ..]
 
 -- | Built-in pre-defined functions.
 builtInSignatures
-  :: Monad m
+  :: MonadThrow m
   => Name -> SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Name Name])
 builtInSignatures theShow specialTypes = do
   the_show <- supplyValueName "show"
-  the_True <- supplyValueName "True"
-  the_False <- supplyValueName "False"
+  sigs <- dataTypeSignatures specialTypes (specialTypesBool specialTypes)
+  the_True <- getSig "True" sigs
+  the_False <- getSig "False" sigs
   return
     ( SpecialSigs {specialSigsTrue = the_True, specialSigsFalse = the_False}
     , [ TypeSignature
@@ -134,17 +163,62 @@ builtInSignatures theShow specialTypes = do
              (Qualified
                 [IsIn theShow [(GenericType 0)]]
                 (GenericType 0 --> specialTypesString specialTypes)))
-      , TypeSignature
-          the_True
-          (Forall [] (Qualified [] (specialTypesBool specialTypes)))
-      , TypeSignature
-          the_False
-          (Forall [] (Qualified [] (specialTypesBool specialTypes)))
-      ])
+      ] ++
+      sigs)
   where
+    getSig ident sigs =
+      case listToMaybe
+             (mapMaybe
+                (\case
+                   tysig@(TypeSignature n@(ValueName _ i) _)
+                     | i == ident -> Just n
+                   _ -> Nothing)
+                sigs) of
+        Nothing -> throwM (BuiltinNotDefined ident)
+        Just sig -> pure sig
     (-->) :: Type Name -> Type Name -> Type Name
     a --> b =
       ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
+
+dataTypeSignatures
+  :: Monad m
+  => SpecialTypes Name -> DataType Type Name -> m [TypeSignature Name Name]
+dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
+  where
+    construct (DataTypeConstructor cname fs) =
+      pure
+        (TypeSignature
+           cname
+           (let varsGens = map (second GenericType) (zip vs [0 ..])
+            in Forall
+                 (map typeVariableKind vs)
+                 (Qualified
+                    []
+                    (foldr
+                       makeArrow
+                       (foldl
+                          ApplicationType
+                          (dataTypeConstructor dt)
+                          (map snd varsGens))
+                       (map (varsToGens varsGens) fs)))))
+      where
+        varsToGens :: [(TypeVariable Name, Type Name)] -> Type Name -> Type Name
+        varsToGens varsGens = go
+          where
+            go =
+              \case
+                v@(VariableType tyvar) ->
+                  case lookup tyvar varsGens of
+                    Just gen -> gen
+                    Nothing -> v
+                ApplicationType t1 t2 -> ApplicationType (go t1) (go t2)
+                g@GenericType {} -> g
+                c@ConstructorType {} -> c
+        makeArrow :: Type Name -> Type Name -> Type Name
+        a `makeArrow` b =
+          ApplicationType
+            (ApplicationType (specialTypesFunction specialTypes) a)
+            b
 
 -- | Setup the class environment.
 setupEnv
@@ -170,7 +244,15 @@ setupEnv theShow specialTypes env =
 -- | Special types that Haskell uses for pattern matching and literals.
 defaultSpecialTypes :: Monad m => SupplyT Int m (SpecialTypes Name)
 defaultSpecialTypes = do
-  theBool <- supplyTypeName "Bool"
+  boolDataType <-
+    do name <- supplyTypeName "Bool"
+       true <- supplyValueName "True"
+       false <- supplyValueName "False"
+       pure
+         (DataType
+            name
+            []
+            [DataTypeConstructor true [], DataTypeConstructor false []])
   theArrow <- supplyTypeName "(->)"
   theChar <- supplyTypeName "Char"
   theString <- supplyTypeName "String"
@@ -179,7 +261,7 @@ defaultSpecialTypes = do
   theFractional <- supplyTypeName "Fractional"
   return
     (SpecialTypes
-     { specialTypesBool = ConstructorType (TypeConstructor theBool StarKind)
+     { specialTypesBool = boolDataType
      , specialTypesChar = ConstructorType (TypeConstructor theChar StarKind)
      , specialTypesString = ConstructorType (TypeConstructor theString StarKind)
      , specialTypesFunction =

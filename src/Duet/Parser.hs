@@ -5,8 +5,6 @@
 
 module Duet.Parser where
 
-import           Control.Monad
-import           Data.Maybe
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Duet.Printer
@@ -14,7 +12,7 @@ import           Duet.Tokenizer
 import           Duet.Types
 import           Text.Parsec hiding (satisfy, anyToken)
 
-parseText :: SourceName -> Text -> Either ParseError [BindGroup Identifier Location]
+parseText :: SourceName -> Text -> Either ParseError [Decl FieldType Identifier Location]
 parseText fp inp =
   case parse tokensTokenizer fp (inp) of
     Left e -> Left e
@@ -23,11 +21,87 @@ parseText fp inp =
         Left e -> Left e
         Right ast -> Right ast
 
-tokensParser :: TokenParser [BindGroup Identifier Location]
+tokensParser :: TokenParser [Decl FieldType Identifier Location]
 tokensParser = moduleParser <* endOfTokens
 
-moduleParser :: TokenParser [BindGroup Identifier Location]
-moduleParser = fmap (map (\x -> BindGroup [] [[x]])) (many varfundecl)
+moduleParser :: TokenParser [Decl FieldType Identifier Location]
+moduleParser =
+  many
+    ((fmap (\x -> BindGroupDecl (BindGroup [] [[x]])) varfundecl) <|>
+     fmap DataDecl datadecl)
+
+datadecl :: TokenParser (DataType FieldType Identifier)
+datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
+  where
+    tyvar = do
+      (v, loc) <-
+        consumeToken
+          (\case
+             Variable i -> Just i
+             _ -> Nothing) <?>
+        "variable name"
+      pure (TypeVariable (Identifier (T.unpack v)) StarKind)
+    go = do
+      _ <- equalToken Data
+      (v, loc) <-
+        consumeToken
+          (\case
+             Constructor i -> Just i
+             _ -> Nothing) <?>
+        "new type name (e.g. Foo)"
+      vs <- many tyvar
+      _ <- equalToken Equals
+      cs <- sepBy1 consp (equalToken Bar)
+      _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> eof
+      pure (DataType (Identifier (T.unpack v)) vs cs)
+
+consp :: TokenParser (DataTypeConstructor FieldType Identifier)
+consp = do c <- constructorParser
+           slots <- many slot
+           pure (DataTypeConstructor c slots)
+  where constructorParser = go <?> "value constructor (e.g. Just)"
+          where
+            go = do
+              (c, loc) <-
+                consumeToken
+                  (\case
+                     Constructor c -> Just c
+                     _ -> Nothing)
+              pure
+                (Identifier (T.unpack c))
+
+slot :: TokenParser (FieldType Identifier)
+slot = constructorParser <|> varParser <|> appP
+  where
+    appP = parens go <?> "type application e.g. (Maybe Int)"
+      where
+        go = do
+          f <- slot
+          xs <- many1 slot
+          pure (foldl FieldTypeApp f xs)
+        parens p = do
+          _ <- equalToken OpenParen
+          e <- p <?> "type inside parentheses e.g. (Maybe a)"
+          _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
+          pure e
+    varParser = go <?> "type variable (e.g. ‘a’, ‘s’, etc.)"
+      where
+        go = do
+          (v, loc) <-
+            consumeToken
+              (\case
+                 Variable i -> Just i
+                 _ -> Nothing)
+          pure (FieldTypeVariable (Identifier (T.unpack v)))
+    constructorParser = go <?> "type constructor (e.g. Maybe)"
+      where
+        go = do
+          (c, loc) <-
+            consumeToken
+              (\case
+                 Constructor c -> Just c
+                 _ -> Nothing)
+          pure (FieldTypeConstructor (Identifier (T.unpack c)))
 
 varfundecl :: TokenParser (ImplicitlyTypedBinding Identifier Location)
 varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
@@ -39,7 +113,7 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
               Variable i -> Just i
               _ -> Nothing) <?>
          "variable name"
-      _ <- satisfyToken (== Equals)
+      _ <- equalToken Equals
       e <- expParser
       _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> eof
       pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [Alternative loc [] e])
@@ -57,7 +131,7 @@ expParser = lambda <|> ifParser <|> infix' <|> app <|> atomic
       (do left <- (app <|> unambiguous) <?> "left-hand side of operator"
           tok <- fmap Just (operator <?> "infix operator") <|> pure Nothing
           case tok of
-            Nothing -> pure left
+
             Just (Operator t, _) -> do
               right <-
                 (app <|> unambiguous) <?>
@@ -97,7 +171,8 @@ expParser = lambda <|> ifParser <|> infix' <|> app <|> atomic
                             _ -> "* ...)"
                         ]))
                 badop
-              pure infixexp) <?>
+              pure infixexp
+            _ -> pure left) <?>
       "infix expression (e.g. x * y)"
       where
         operator =
@@ -105,27 +180,23 @@ expParser = lambda <|> ifParser <|> infix' <|> app <|> atomic
             (\case
                Operator {} -> True
                _ -> False)
-    funcOp = varParser <|> parensExpr
+    funcOp = varParser <|> constructorParser <|> parensExpr
     unambiguous = parensExpr <|> atomic
     parensExpr = parens expParser
 
 lambda :: TokenParser (Expression Identifier Location)
 lambda = do
-  (_, loc) <-
-    satisfyToken (== Backslash) <?> "lambda expression (e.g. \\x -> x)"
+  loc <- equalToken Backslash <?> "lambda expression (e.g. \\x -> x)"
   args <- many1 funcParam <?> "lambda parameters"
-  _ <- satisfyToken (== Arrow)
+  _ <- equalToken Arrow
   e <- expParser
-  pure
-    (LambdaExpression
-       loc
-       (Alternative loc args e))
+  pure (LambdaExpression loc (Alternative loc args e))
 
 funcParam :: TokenParser (Pattern Identifier)
 funcParam = go <?> "function parameter (e.g. ‘x’, ‘limit’, etc.)"
   where
     go = do
-      (v, loc) <-
+      (v, _) <-
         consumeToken
           (\case
              Variable i -> Just i
@@ -155,16 +226,7 @@ atomic =
                  String c -> Just c
                  _ -> Nothing)
           pure (LiteralExpression loc (StringLiteral (T.unpack c)))
-    constructorParser = go <?> "constructor (e.g. Just)"
-      where
-        go = do
-          (c, loc) <-
-            consumeToken
-              (\case
-                 Constructor c -> Just c
-                 _ -> Nothing)
-          pure
-            (VariableExpression loc (Identifier (T.unpack c)))
+
     integerParser = go <?> "integer (e.g. 42, 123)"
       where
         go = do
@@ -184,12 +246,24 @@ atomic =
                  _ -> Nothing)
           pure (LiteralExpression loc (RationalLiteral (realToFrac c)))
 
+constructorParser :: TokenParser (Expression Identifier Location)
+constructorParser = go <?> "constructor (e.g. Just)"
+  where
+    go = do
+      (c, loc) <-
+        consumeToken
+          (\case
+             Constructor c -> Just c
+             _ -> Nothing)
+      pure
+        (VariableExpression loc (Identifier (T.unpack c)))
+
 parens :: TokenParser a -> TokenParser a
 parens p = go <?> "parens e.g. (x)"
   where go = do
-         _ <- satisfyToken (== OpenParen)
+         _ <- equalToken OpenParen
          e <- p <?> "expression inside parentheses e.g. (foo)"
-         _ <- satisfyToken (== CloseParen)<?> "closing parenthesis ‘)’"
+         _ <- equalToken CloseParen<?> "closing parenthesis ‘)’"
          pure e
 
 varParser :: TokenParser (Expression Identifier Location)
@@ -207,11 +281,11 @@ ifParser :: TokenParser (Expression Identifier Location)
 ifParser = go <?> "if expression (e.g. ‘if p then x else y’)"
   where
     go = do
-      (_, loc) <- satisfyToken (== If)
+      loc <- equalToken If
       p <- expParser <?> "condition expresion of if-expression"
-      _ <- satisfyToken (== Then) <?> "‘then’ keyword for if-expression"
+      _ <- equalToken Then <?> "‘then’ keyword for if-expression"
       e1 <- expParser <?> "‘then’ clause of if-expression"
-      _ <- satisfyToken (== Else)<?> "‘else’ keyword for if-expression"
+      _ <- equalToken Else <?> "‘else’ keyword for if-expression"
       e2 <- expParser <?> "‘else’ clause of if-expression"
       pure
         (IfExpression

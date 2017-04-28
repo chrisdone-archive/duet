@@ -4,32 +4,27 @@
 module Duet.Stepper where
 
 import Control.Monad.Catch
+import Data.List
 import Data.Maybe
-import Data.Typeable
 import Duet.Types
-
-
-data StepException
-  = CouldntFindName !Name
-  | CouldntFindNameByString !String
-  deriving (Typeable, Show)
-instance Exception StepException
 
 expand
   :: MonadThrow m
   => SpecialSigs Name
+  -> [TypeSignature Name Name]
   -> Expression Name (TypeSignature Name Location)
   -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
   -> m (Expression Name (TypeSignature Name Location))
-expand specialSigs e b = go e
+expand specialSigs signatures e b = go e
   where
     go x =
       case x of
-        VariableExpression _ i -> do
-          if specialVar specialSigs i
-             then pure x
-             else do e' <- lookupName i b
-                     pure e'
+        VariableExpression loc i -> do
+          case find ((== i) . typeSignatureA) signatures of
+            Nothing -> do
+              e' <- lookupName i b
+              pure e'
+            Just {} -> pure x
         LiteralExpression {} -> return x
         ConstantExpression {} -> return x
         ApplicationExpression l func arg ->
@@ -45,7 +40,7 @@ expand specialSigs e b = go e
                            (LambdaExpression l0 (Alternative l' params' body'))
                 [] -> error "Unsupported lambda."
             _ -> do
-              func' <- expand specialSigs func b
+              func' <- expand specialSigs signatures func b
               pure (ApplicationExpression l func' arg)
         IfExpression l pr th el ->
           case pr of
@@ -58,6 +53,7 @@ expand specialSigs e b = go e
         LambdaExpression {} -> return x
         CaseExpression {} -> return x
 
+specialVar :: Eq i => SpecialSigs i -> i -> Bool
 specialVar specialSigs i = i `elem` [specialSigsFalse specialSigs, specialSigsTrue specialSigs]
 
 substitute :: Name -> Expression Name l -> Expression Name l -> Expression Name l

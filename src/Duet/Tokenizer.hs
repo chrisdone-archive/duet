@@ -22,6 +22,7 @@ import           Text.Printf
 data Token
   = If
   | Then
+  | Data
   | Else
   | Case
   | Backslash
@@ -31,6 +32,7 @@ data Token
   | OpenParen
   | CloseParen
   | Equals
+  | Colons
   | Variable !Text
   | Constructor !Text
   | Character !Char
@@ -40,6 +42,7 @@ data Token
   | Integer !Integer
   | Decimal !Double
   | NonIndentedNewline
+  | Bar
   deriving (Show, Eq, Ord)
 
 tokenize :: FilePath -> Text -> Either ParseError [(Token, Location)]
@@ -65,12 +68,15 @@ tokenTokenizer prespaces =
         else unexpected "indented newline"
     , atomThenSpace If "if"
     , atomThenSpace Then "then"
+    , atomThenSpace Data "data"
     , atomThenSpace Else "else"
     , atomThenSpace Case "case"
     , atom Backslash "\\"
     , atom OpenParen "("
     , atom CloseParen ")"
     , atom Equals "="
+    , atom Bar "|"
+    , atom Colons "::"
     , atom Arrow "->"
     , atomThenSpace Let "let"
     , atomThenSpace In "in"
@@ -149,6 +155,7 @@ tokenTokenizer prespaces =
     ]
   where
 
+spaces1 :: Parser ()
 spaces1 = space >> spaces
 
 ellipsis :: Int -> [Char] -> [Char]
@@ -187,9 +194,8 @@ atomThenSpace :: t -> String -> Parser (t, Location)
 atomThenSpace constructor text = do
   start <- getPosition
   _ <-
-    try
-      (string text <* lookAhead spaces1 <?> ("space after " ++ smartQuotes text)) <?>
-    smartQuotes text
+    (try (string text <?> smartQuotes text) <*
+     (lookAhead spaces1 <?> ("space after " ++ smartQuotes text)))
   end <- getPosition
   pure
     ( constructor
@@ -217,6 +223,10 @@ parsing constructor parser description = do
     , "infixr"
     , "instance"
     , "module"
+    , "if"
+    , "then"
+    , "else"
+    , "case"
     , "newtype"
     , "qualified"
     , "type"
@@ -306,6 +316,9 @@ consumeToken f =
             tokenPosition
             (\(x,tok) -> fmap (, tok) (f x))
 
+equalToken :: Stream s m (Token, Location) => Token -> ParsecT s u m Location
+equalToken p = fmap snd (satisfyToken (==p) <?> tokenStr p)
+
 -- | Consume the given predicate from the token stream.
 satisfyToken :: Stream s m (Token, Location) => (Token -> Bool) -> ParsecT s u m (Token, Location)
 satisfyToken f =
@@ -322,12 +335,16 @@ anyToken = consumeToken Just
 
 -- | Make a string out of the token, for error message purposes.
 tokenString :: (Token, Location) -> [Char]
-tokenString (tok, _) =
+tokenString = tokenStr . fst
+
+tokenStr :: Token -> [Char]
+tokenStr tok =
   case tok of
     If -> curlyQuotes "if"
     Then -> curlyQuotes "then"
     Arrow -> curlyQuotes "->"
     Else -> curlyQuotes "else"
+    Data -> curlyQuotes "data"
     Case -> curlyQuotes "case"
     Let -> curlyQuotes "let"
     NonIndentedNewline -> "non-indented newline"
@@ -336,6 +353,7 @@ tokenString (tok, _) =
     OpenParen -> "opening parenthesis " ++ curlyQuotes "("
     CloseParen -> "closing parenthesis " ++ curlyQuotes ")"
     Equals -> curlyQuotes "="
+    Colons -> curlyQuotes "::"
     Variable t -> "variable " ++ curlyQuotes (T.unpack t)
     Constructor t -> "constructor " ++ curlyQuotes (T.unpack t)
     Character !c -> "character '" ++  (T.unpack (T.singleton c)) ++ "'"
@@ -344,6 +362,7 @@ tokenString (tok, _) =
     Comma -> curlyQuotes ","
     Integer !i -> "integer " ++ show i
     Decimal !d -> "decimal " ++ printf "%f" d
+    Bar -> curlyQuotes "|"
 
 -- | Update the position by the token.
 tokenPosition :: SourcePos -> (Token, Location) -> t -> SourcePos
