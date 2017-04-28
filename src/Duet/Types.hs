@@ -15,6 +15,11 @@ import           Data.Monoid
 import           Data.String
 import           Data.Typeable
 
+-- | A declaration.
+data Decl f i l
+  = DataDecl (DataType f i)
+  | BindGroupDecl (BindGroup i l)
+
 -- | Data type.
 data DataType f i = DataType
   { dataTypeName :: i
