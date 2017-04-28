@@ -1,0 +1,3 @@
+* TODO Parser for "data" decls
+* TODO Integrate "DataType" into type checker
+* TODO Integrate "DataType" into stepper
