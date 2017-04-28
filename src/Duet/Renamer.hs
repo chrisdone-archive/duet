@@ -70,6 +70,22 @@ renameConstructor arities subs (DataTypeConstructor name fields) =
      fields' <- mapM (renameFieldType arities subs) fields
      pure (DataTypeConstructor name' [])
 
+--
+-- We need kind inference here:
+--
+-- https://www.haskell.org/onlinereport/decls.html#kindinference
+--
+-- The report is mildly helpful, in that if a kind is unclear, then
+-- you just default to *.
+--
+-- The `m` below is the only thing used in type-function position, so
+-- that's a * -> *. The rest is by default `*`. In the case of `P`, we
+-- don't know that `m` is *->*, so we should do unification somewhere.
+--
+-- data StateT s m a = StateT (s -> m a)
+-- data P x m a = P (StateT x m a)
+--
+
 renameFieldType
   :: MonadThrow m
   => [(Name,Int)] -> Map Identifier Name -> FieldType Identifier -> m (Type Name)
@@ -89,8 +105,6 @@ renameFieldType arities subs = go
           x' <- go x
           pure (ApplicationType f' x')
 
--- data StateT s m a = StateT (s -> m a)
---
 
 boolDataType :: DataType FieldType Identifier
 boolDataType =
