@@ -591,9 +591,9 @@ inferExpressionType _ as (VariableExpression l i) = do
   qualified@(Qualified ps t) <- freshInst sc
   let scheme = (Forall [] qualified)
   return (ps, t, VariableExpression (TypeSignature l scheme) i)
-inferExpressionType _ _ (ConstantExpression l s@(TypeSignature _  sc)) = do
-  (Qualified ps t) <- freshInst sc
-  return (ps, t, (ConstantExpression (TypeSignature l sc) s))
+-- inferExpressionType _ _ (ConstantExpression l s@(TypeSignature _  sc)) = do
+--   (Qualified ps t) <- freshInst sc
+--   return (ps, t, (ConstantExpression (TypeSignature l sc) s))
 inferExpressionType _ _ (LiteralExpression l0 l) = do
   specialTypes <- InferT (gets inferStateSpecialTypes)
   (ps, t) <- inferLiteralType specialTypes l

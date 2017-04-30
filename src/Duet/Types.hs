@@ -244,7 +244,7 @@ data Location = Location
 data Expression i l
   = VariableExpression l i
   | LiteralExpression l Literal
-  | ConstantExpression l (TypeSignature i i)
+  -- | ConstantExpression l (TypeSignature i i)
   | ApplicationExpression l (Expression i l) (Expression i l)
   | InfixExpression l (Expression i l) i (Expression i l)
   | LetExpression l (BindGroup i l) (Expression i l)
@@ -257,7 +257,7 @@ expressionLabel :: Expression i l -> l
 expressionLabel =
   \case
      LiteralExpression l _ -> l
-     ConstantExpression l _ -> l
+     -- ConstantExpression l _ -> l
      ApplicationExpression l _ _ -> l
      InfixExpression l _ _ _ -> l
      LetExpression l _ _ -> l

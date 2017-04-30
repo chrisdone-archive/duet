@@ -26,7 +26,7 @@ expand specialSigs signatures e b = go e
               pure e'
             Just {} -> pure x
         LiteralExpression {} -> return x
-        ConstantExpression {} -> return x
+        {-ConstantExpression {} -> return x-}
         ApplicationExpression l func arg ->
           case func of
             LambdaExpression l0 (Alternative l' params body) ->
