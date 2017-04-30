@@ -7,6 +7,7 @@
 
 module Duet.Parser where
 
+import           Control.Monad
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -131,26 +132,40 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
               Variable i -> Just i
               _ -> Nothing) <?>
          "variable name"
-      _ <- equalToken Equals <?> curlyQuotes "="
+      _ <- equalToken Equals
       e <- expParser
       _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
       pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [Alternative loc [] e])
 
 case' :: TokenParser (Expression Identifier Location)
-case' = do loc <- equalToken Case
-           setState (locationStartColumn loc)
-           e <- expParser <?> "expression to do case analysis e.g. case e of ..."
-           equalToken Of
-           {-p <- altPatG-}
-           alt<- do
-                    altParser e
-           pure (CaseExpression loc e [alt])
+case' = do
+  u <- getState
+  loc <- equalToken Case
+  setState (locationStartColumn loc)
+  e <- expParser <?> "expression to do case analysis e.g. case e of ..."
+  _ <-  equalToken Of
+  p <- lookAhead altPat
+  alts <- many (altParser e (locationStartColumn (patternLabel p)))
+  setState u
+  pure (CaseExpression loc e [])
 
-altParser :: Expression Identifier Location -> TokenParser (Pattern Identifier Location, Expression Identifier Location)
-altParser e' =
-  (do p <- altPat
-      equalToken Arrow <?> curlyQuotes "->"
+altParser
+  :: Expression Identifier Location
+  -> Int
+  -> TokenParser (Pattern Identifier Location, Expression Identifier Location)
+altParser e' startCol =
+  (do u <- getState
+      p <- altPat
+      when
+        (locationStartColumn (patternLabel p) /= startCol)
+        (unexpected
+           ("pattern at column " ++
+            show (locationStartColumn (patternLabel p)) ++
+            ", it should start at column " ++ show startCol))
+      setState startCol
+      _ <- equalToken Arrow
       e <- expParser
+      setState u
       pure (p, e)) <?>
   "indented case alternative e.g.\n\n\
   \case " ++
@@ -159,7 +174,7 @@ altParser e' =
   \  Just bar -> bar"
 
 altPat :: TokenParser (Pattern Identifier Location)
-altPat = constructorParser <|> varp
+altPat = varp <|> constructorParser
   where
     patInner = parenpat <|> varp
     parenpat = go
