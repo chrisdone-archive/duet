@@ -71,6 +71,7 @@ printExpression getType e =
     (case e of
        LiteralExpression _ l -> printLiteral l
        VariableExpression _ i -> printIdentifier i
+       ConstructorExpression _ i -> printIdentifier i
        ApplicationExpression _ f x ->
          printExpressionAppOp getType f ++
          " " ++ printExpressionAppArg getType x

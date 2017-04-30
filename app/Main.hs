@@ -89,9 +89,12 @@ displayInferException specialTypes =
 displayRenamerException :: SpecialTypes Name -> RenamerException -> [Char]
 displayRenamerException _specialTypes =
   \case
-    IdentifierNotInScope scope name ->
-      "Not in scope " ++ curlyQuotes (printit name) ++ "\n" ++
-      "Current scope:\n\n" ++ unlines (map printit (M.keys scope))
+    IdentifierNotInVarScope scope name ->
+      "Not in variable scope " ++ curlyQuotes (printit name) ++ "\n" ++
+      "Current scope:\n\n" ++ unlines (map show (M.elems scope))
+    IdentifierNotInConScope scope name ->
+      "Not in constructors scope " ++ curlyQuotes (printit name) ++ "\n" ++
+      "Current scope:\n\n" ++ unlines (map show (M.elems scope))
 
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
@@ -172,7 +175,9 @@ builtInSignatures theShow specialTypes = do
       case listToMaybe
              (mapMaybe
                 (\case
-                   tysig@(TypeSignature n@(ValueName _ i) _)
+                   (TypeSignature n@(ValueName _ i) _)
+                     | i == ident -> Just n
+                   (TypeSignature n@(ConstructorName _ i) _)
                      | i == ident -> Just n
                    _ -> Nothing)
                 sigs) of
@@ -248,8 +253,8 @@ defaultSpecialTypes :: Monad m => SupplyT Int m (SpecialTypes Name)
 defaultSpecialTypes = do
   boolDataType <-
     do name <- supplyTypeName "Bool"
-       true <- supplyValueName "True"
-       false <- supplyValueName "False"
+       true <- supplyConstructorName "True"
+       false <- supplyConstructorName "False"
        pure
          (DataType
             name

@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE LambdaCase #-}
@@ -25,7 +26,6 @@ import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Duet.Infer
-import           Duet.Printer
 import           Duet.Types
 
 --------------------------------------------------------------------------------
@@ -164,7 +164,7 @@ renameImplicit
   -> ImplicitlyTypedBinding Identifier t
   -> m (ImplicitlyTypedBinding Name t)
 renameImplicit subs (ImplicitlyTypedBinding l id' alts) =
-  do name <- substitute subs id'
+  do name <- substituteVar subs id'
      ImplicitlyTypedBinding l name <$> mapM (renameAlt subs) alts
 
 renameAlt
@@ -200,11 +200,12 @@ renameExpression subs = go
   where
     go =
       \case
-        VariableExpression l i -> VariableExpression l <$> substitute subs i
+        VariableExpression l i -> VariableExpression l <$> substituteVar subs i
+        ConstructorExpression l i -> ConstructorExpression l <$> substituteCons subs i
         LiteralExpression l i -> pure (LiteralExpression l i)
         ApplicationExpression l f x -> ApplicationExpression l <$> go f <*> go x
         InfixExpression l x i y ->
-          InfixExpression l <$> go x <*> substitute subs i <*> go y
+          InfixExpression l <$> go x <*> substituteVar subs i <*> go y
         LetExpression l bindGroup@(BindGroup ex implicit) e -> do
           subs' <- getImplicitSubs subs implicit
           (bindGroup', subs'') <- renameBindGroup subs' bindGroup
@@ -223,11 +224,17 @@ renameExpression subs = go
 --------------------------------------------------------------------------------
 -- Provide a substitution
 
-substitute :: MonadThrow m => Map Identifier Name -> Identifier -> m Name
-substitute subs i =
+substituteVar :: MonadThrow m => Map Identifier Name -> Identifier -> m Name
+substituteVar subs i =
   case M.lookup i subs of
-    Nothing -> throwM (IdentifierNotInScope subs i)
-    Just name -> pure name
+    Just name@ValueName{} -> pure name
+    _ -> throwM (IdentifierNotInVarScope subs i)
+
+substituteCons :: MonadThrow m => Map Identifier Name -> Identifier -> m Name
+substituteCons subs i =
+  case M.lookup i subs of
+    Just name@ConstructorName{} -> pure name
+    _ -> throwM (IdentifierNotInConScope subs i)
 
 --------------------------------------------------------------------------------
 -- Provide a new name

@@ -256,7 +256,7 @@ constructorParser = go <?> "constructor (e.g. Just)"
              Constructor c -> Just c
              _ -> Nothing)
       pure
-        (VariableExpression loc (Identifier (T.unpack c)))
+        (ConstructorExpression loc (Identifier (T.unpack c)))
 
 parens :: TokenParser a -> TokenParser a
 parens p = go <?> "parens e.g. (x)"

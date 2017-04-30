@@ -591,6 +591,11 @@ inferExpressionType _ as (VariableExpression l i) = do
   qualified@(Qualified ps t) <- freshInst sc
   let scheme = (Forall [] qualified)
   return (ps, t, VariableExpression (TypeSignature l scheme) i)
+inferExpressionType _ as (ConstructorExpression l i) = do
+  sc <- lookupName i as
+  qualified@(Qualified ps t) <- freshInst sc
+  let scheme = (Forall [] qualified)
+  return (ps, t, ConstructorExpression (TypeSignature l scheme) i)
 -- inferExpressionType _ _ (ConstantExpression l s@(TypeSignature _  sc)) = do
 --   (Qualified ps t) <- freshInst sc
 --   return (ps, t, (ConstantExpression (TypeSignature l sc) s))

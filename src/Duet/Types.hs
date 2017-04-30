@@ -100,7 +100,8 @@ data StepException
 instance Exception StepException
 
 data RenamerException
-  = IdentifierNotInScope !(Map Identifier Name) !Identifier
+  = IdentifierNotInVarScope !(Map Identifier Name) !Identifier
+  | IdentifierNotInConScope !(Map Identifier Name) !Identifier
   | TypeNotInScope ![TypeConstructor Name] !Identifier
   | RenamerKindMismatch (Type Name) Kind (Type Name) Kind
   | KindTooManyArgs (Type Name) Kind (Type Name)
@@ -244,8 +245,8 @@ data Location = Location
 -- | A Haskell expression.
 data Expression i l
   = VariableExpression l i
+  | ConstructorExpression l i
   | LiteralExpression l Literal
-  -- | ConstantExpression l (TypeSignature i i)
   | ApplicationExpression l (Expression i l) (Expression i l)
   | InfixExpression l (Expression i l) i (Expression i l)
   | LetExpression l (BindGroup i l) (Expression i l)
