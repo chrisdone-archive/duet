@@ -65,6 +65,7 @@ substitute i arg =
     VariableExpression l i'
       | i == i' -> arg
       | otherwise -> VariableExpression l i'
+    x@ConstructorExpression {} -> x
     ApplicationExpression l f x ->
       ApplicationExpression l (substitute i arg f) (substitute i arg x)
     InfixExpression l x f y ->
