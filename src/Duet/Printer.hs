@@ -80,7 +80,7 @@ printExpression getType e =
          concat (map (\x -> printPattern x ++ " ") args) ++ "-> " ++ printExpression getType e
        IfExpression _ a b c ->
          "if " ++
-         printExpression getType a ++
+         printExpressionIfPred getType a ++
          " then " ++
          printExpression getType b ++ " else " ++ printExpression getType c
        InfixExpression _ f o x ->
@@ -101,6 +101,13 @@ printExpressionAppArg getType=
     e@(ApplicationExpression {}) -> paren (printExpression getType e)
     e@(IfExpression {}) -> paren (printExpression getType e)
     e@(InfixExpression {}) -> paren (printExpression getType e)
+    e@(LambdaExpression {}) -> paren (printExpression getType e)
+    e -> printExpression getType e
+
+printExpressionIfPred :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> (Expression i l) -> String
+printExpressionIfPred getType=
+  \case
+    e@(IfExpression {}) -> paren (printExpression getType e)
     e@(LambdaExpression {}) -> paren (printExpression getType e)
     e -> printExpression getType e
 
