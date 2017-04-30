@@ -62,7 +62,7 @@ renameConstructor
   -> DataTypeConstructor FieldType Identifier
   -> m (DataTypeConstructor Type Name)
 renameConstructor specialTypes typeConstructors vars (DataTypeConstructor name fields) = do
-  name' <- supplyValueName name
+  name' <- supplyConstructorName name
   fields' <- mapM (renameField specialTypes typeConstructors vars name') fields
   pure (DataTypeConstructor name' fields')
 
@@ -237,6 +237,11 @@ supplyValueName :: (MonadSupply Int m) => Identifier -> m Name
 supplyValueName (Identifier s) = do
   i <- supply
   return (ValueName i s)
+
+supplyConstructorName :: (MonadSupply Int m) => Identifier -> m Name
+supplyConstructorName (Identifier s) = do
+  i <- supply
+  return (ConstructorName i s)
 
 supplyTypeName :: (MonadSupply Int m) => Identifier -> m Name
 supplyTypeName (Identifier s) = do

@@ -18,6 +18,7 @@ instance Printable Name where
     \case
       ValueName i string -> string --  ++ "[value: " ++ show i ++ "]"
       TypeName i string -> string  --  ++ "[type: " ++ show i ++ "]"
+      ConstructorName i string -> string
       ForallName i -> "g" ++ show i
 
 instance Printable Identifier where

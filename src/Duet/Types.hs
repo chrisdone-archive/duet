@@ -80,6 +80,7 @@ newtype InferT m a = InferT
 -- type-checking step. The renamer's job is to go from Identifier -> Name.
 data Name
   = ValueName !Int !String
+  | ConstructorName !Int !String
   | TypeName !Int !String
   | ForallName !Int
   deriving (Show, Eq, Ord)

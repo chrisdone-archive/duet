@@ -123,8 +123,10 @@ runTypeChecker decls =
            let signatureSubs =
                  M.fromList
                    (map
-                      (\(TypeSignature name@(ValueName _ ident) _) ->
-                         (Identifier ident, name))
+                      (\(TypeSignature name _) ->
+                         case name of
+                           ValueName _ ident -> (Identifier ident, name)
+                           ConstructorName _ ident -> (Identifier ident, name))
                       signatures)
            (renamedBindings, _) <-
              catch
