@@ -171,15 +171,16 @@ renameAlt
   :: (MonadSupply Int m, MonadThrow m)
   => Map Identifier Name -> Alternative Identifier l -> m (Alternative Name l)
 renameAlt subs (Alternative l ps e) =
-  do (ps', subs') <- runWriterT (mapM renamePattern ps)
+  do (ps', subs') <- runWriterT (mapM (renamePattern subs) ps)
      let subs'' = M.fromList subs' <> subs
      Alternative l <$> pure ps' <*> renameExpression subs'' e
 
 renamePattern
-  :: MonadSupply Int m
-  => Pattern Identifier l
+  :: (MonadSupply Int m, MonadThrow m)
+  => Map Identifier Name
+  -> Pattern Identifier l
   -> WriterT [(Identifier, Name)] m (Pattern Name l)
-renamePattern =
+renamePattern subs =
   \case
     VariablePattern l i -> do
       name <- lift (supplyValueName i)
@@ -189,9 +190,11 @@ renamePattern =
     AsPattern l i p -> do
       name <- supplyValueName i
       tell [(i, name)]
-      AsPattern l name <$> renamePattern p
+      AsPattern l name <$> renamePattern subs p
     LiteralPattern l0 l -> pure (LiteralPattern l0 l)
-    ConstructorPattern {} -> error "TODO: ConstructorPattern"
+    ConstructorPattern l i pats ->
+      ConstructorPattern l <$> substituteCons subs i <*>
+      mapM (renamePattern subs) pats
 
 renameExpression
   :: (MonadThrow m, MonadSupply Int m)
@@ -216,7 +219,7 @@ renameExpression subs = go
           CaseExpression l <$> go e <*>
           mapM
             (\(pat, ex) -> do
-               (pat', subs') <- runWriterT (renamePattern pat)
+               (pat', subs') <- runWriterT (renamePattern subs pat)
                e' <- renameExpression (M.fromList subs' <> subs) ex
                pure (pat', e'))
             pat_exps
