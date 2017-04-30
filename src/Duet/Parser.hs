@@ -176,7 +176,7 @@ altParser e' startCol =
 altPat :: TokenParser (Pattern Identifier Location)
 altPat = varp <|> constructorParser
   where
-    patInner = parenpat <|> varp
+    patInner = parenpat <|> varp <|> unaryConstructor
     parenpat = go
       where
         go = do
@@ -193,6 +193,15 @@ altPat = varp <|> constructorParser
                  Variable i -> Just i
                  _ -> Nothing)
           pure (VariablePattern loc (Identifier (T.unpack v)))
+    unaryConstructor = go <?> "unary constructor (e.g. Nothing)"
+      where
+        go = do
+          (c, loc) <-
+            consumeToken
+              (\case
+                 Constructor c -> Just c
+                 _ -> Nothing)
+          pure (ConstructorPattern loc (Identifier (T.unpack c)) [])
     constructorParser = go <?> "constructor pattern (e.g. Just x)"
       where
         go = do

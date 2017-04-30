@@ -116,8 +116,10 @@ printPat =
     inner =
       \case
         VariablePattern _ i -> printit i
-        ConstructorPattern _ i ps ->
-          "(" ++ printit i ++ " " ++ unwords (map inner ps) ++ ")"
+        ConstructorPattern _ i ps
+          | null ps -> printit i
+          | otherwise ->
+            "(" ++ printit i ++ " " ++ unwords (map inner ps) ++ ")"
 
 printExpressionAppArg :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> (Expression i l) -> String
 printExpressionAppArg getType=
