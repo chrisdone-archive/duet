@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -15,6 +17,18 @@ import           Text.Parsec hiding (satisfy, anyToken)
 
 parseFile fp = do t <- T.readFile fp
                   return (parseText fp t)
+
+demo (i :: String) =
+  runParser
+    (do d <-
+          do putState 123
+             ((do putState 1
+                  digit) <|> pure '0')
+        u <- getState
+        pure u)
+    0
+    ""
+    i
 
 parseText :: SourceName -> Text -> Either ParseError [Decl FieldType Identifier Location]
 parseText fp inp =
