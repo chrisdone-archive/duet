@@ -14,7 +14,7 @@ import           Duet.Types
 import           Text.Parsec hiding (satisfy, anyToken)
 
 parseFile fp = do t <- T.readFile fp
-                  print (parseText fp t)
+                  return (parseText fp t)
 
 parseText :: SourceName -> Text -> Either ParseError [Decl FieldType Identifier Location]
 parseText fp inp =
@@ -126,16 +126,46 @@ case' :: TokenParser (Expression Identifier Location)
 case' = do loc <- equalToken Case
            e <- expParser <?> "expression to do case analysis on"
            equalToken Of
-           alt <- altP
+           alt <- altParser
            pure (CaseExpression loc e [alt])
 
-altP :: TokenParser (Pattern Identifier Location, Expression Identifier Location)
-altP = do p <- patP
-          e <- expParser
-          pure (p, e)
+altParser :: TokenParser (Pattern Identifier Location, Expression Identifier Location)
+altParser = do
+  p <- altPat
+  equalToken Arrow
+  e <- expParser
+  pure (p, e)
 
-patP :: TokenParser (Pattern Identifier Location)
-patP = undefined
+altPat :: TokenParser (Pattern Identifier Location)
+altPat = constructorParser <|> varp
+  where
+    patInner = parenpat <|> varp
+    parenpat = go
+      where
+        go = do
+          _ <- equalToken OpenParen
+          e <- varp <|> altPat
+          _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
+          pure e
+    varp = go <?> "variable pattern (e.g. x)"
+      where
+        go = do
+          (v, loc) <-
+            consumeToken
+              (\case
+                 Variable i -> Just i
+                 _ -> Nothing)
+          pure (VariablePattern loc (Identifier (T.unpack v)))
+    constructorParser = go <?> "constructor pattern (e.g. Just x)"
+      where
+        go = do
+          (c, loc) <-
+            consumeToken
+              (\case
+                 Constructor c -> Just c
+                 _ -> Nothing)
+          args <- many patInner
+          pure (ConstructorPattern loc (Identifier (T.unpack c)) args)
 
 expParser :: TokenParser (Expression Identifier Location)
 expParser = case' <|> lambda <|> ifParser <|> infix' <|> app <|> atomic

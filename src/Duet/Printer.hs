@@ -72,12 +72,23 @@ printExpression getType e =
        LiteralExpression _ l -> printLiteral l
        VariableExpression _ i -> printIdentifier i
        ConstructorExpression _ i -> printIdentifier i
+       CaseExpression _ e alts ->
+         "case " ++
+         printExpressionIfPred getType e ++
+         " of\n" ++
+         unlines
+           (map
+              ("  " ++)
+              (map
+                 (\(p, e') -> printPat p ++ " -> " ++ printExpression getType e')
+                 alts))
        ApplicationExpression _ f x ->
          printExpressionAppOp getType f ++
          " " ++ printExpressionAppArg getType x
        LambdaExpression _ (Alternative _ args e) ->
          "\\" ++
-         concat (map (\x -> printPattern x ++ " ") args) ++ "-> " ++ printExpression getType e
+         concat (map (\x -> printPattern x ++ " ") args) ++
+         "-> " ++ printExpression getType e
        IfExpression _ a b c ->
          "if " ++
          printExpressionIfPred getType a ++
@@ -94,6 +105,18 @@ printExpression getType e =
         (Nothing) -> x
         (Just (specialTypes, TypeSignature _ ty)) ->
           "(" ++ x ++ " :: " ++ printScheme specialTypes ty ++ ")"-}
+
+printPat :: Printable i => Pattern i l -> String
+printPat =
+  \case
+    VariablePattern _ i -> printit i
+    ConstructorPattern _ i ps -> printit i ++ " " ++ unwords (map inner ps)
+  where
+    inner =
+      \case
+        VariablePattern _ i -> printit i
+        ConstructorPattern _ i ps ->
+          "(" ++ printit i ++ " " ++ unwords (map inner ps) ++ ")"
 
 printExpressionAppArg :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> (Expression i l) -> String
 printExpressionAppArg getType=
