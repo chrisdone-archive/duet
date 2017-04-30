@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 -- |
 
@@ -71,7 +72,11 @@ substitute i arg =
     InfixExpression l x f y ->
       InfixExpression l (substitute i arg x) f (substitute i arg y)
     LetExpression {} -> error "let expressions unsupported."
-    CaseExpression {} -> error "case expressions unsupported."
+    CaseExpression l e cases ->
+      CaseExpression
+        l
+        (substitute i arg e)
+        (map (\(pat, e') -> (pat, substitute i arg e')) cases)
     IfExpression l a b c ->
       IfExpression
         l

@@ -76,7 +76,8 @@ printExpression getType e =
          "case " ++
          printExpressionIfPred getType e ++
          " of\n" ++
-         unlines
+         intercalate
+           "\n"
            (map
               ("  " ++)
               (map
