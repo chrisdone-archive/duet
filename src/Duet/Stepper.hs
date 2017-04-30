@@ -39,6 +39,9 @@ expand specialSigs signatures e b = go e
                          pure
                            (LambdaExpression l0 (Alternative l' params' body'))
                 [] -> error "Unsupported lambda."
+            VariableExpression _ ConstructorName {} -> do
+              arg' <- expand specialSigs signatures arg b
+              pure (ApplicationExpression l func arg')
             _ -> do
               func' <- expand specialSigs signatures func b
               pure (ApplicationExpression l func' arg)

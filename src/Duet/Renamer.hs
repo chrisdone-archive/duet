@@ -202,7 +202,6 @@ renameExpression subs = go
       \case
         VariableExpression l i -> VariableExpression l <$> substitute subs i
         LiteralExpression l i -> pure (LiteralExpression l i)
-        -- ConstantExpression {} -> error "TODO: ConstantExpression"
         ApplicationExpression l f x -> ApplicationExpression l <$> go f <*> go x
         InfixExpression l x i y ->
           InfixExpression l <$> go x <*> substitute subs i <*> go y
