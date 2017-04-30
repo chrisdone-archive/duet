@@ -70,7 +70,7 @@ datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
       vs <- many tyvar
       _ <- equalToken Equals
       cs <- sepBy1 consp (equalToken Bar)
-      _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> eof
+      _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
       pure (DataType (Identifier (T.unpack v)) vs cs)
 
 consp :: TokenParser (DataTypeConstructor FieldType Identifier)
@@ -131,24 +131,32 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
               Variable i -> Just i
               _ -> Nothing) <?>
          "variable name"
-      _ <- equalToken Equals
+      _ <- equalToken Equals <?> curlyQuotes "="
       e <- expParser
-      _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> eof
+      _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
       pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [Alternative loc [] e])
 
 case' :: TokenParser (Expression Identifier Location)
 case' = do loc <- equalToken Case
-           e <- expParser <?> "expression to do case analysis on"
+           setState (locationStartColumn loc)
+           e <- expParser <?> "expression to do case analysis e.g. case e of ..."
            equalToken Of
-           alt <- altParser
+           {-p <- altPatG-}
+           alt<- do
+                    altParser e
            pure (CaseExpression loc e [alt])
 
-altParser :: TokenParser (Pattern Identifier Location, Expression Identifier Location)
-altParser = do
-  p <- altPat
-  equalToken Arrow
-  e <- expParser
-  pure (p, e)
+altParser :: Expression Identifier Location -> TokenParser (Pattern Identifier Location, Expression Identifier Location)
+altParser e' =
+  (do p <- altPat
+      equalToken Arrow <?> curlyQuotes "->"
+      e <- expParser
+      pure (p, e)) <?>
+  "indented case alternative e.g.\n\n\
+  \case " ++
+  printExpression (const Nothing) e' ++
+  " of\n\
+  \  Just bar -> bar"
 
 altPat :: TokenParser (Pattern Identifier Location)
 altPat = constructorParser <|> varp

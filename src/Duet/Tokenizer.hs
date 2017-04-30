@@ -44,7 +44,7 @@ data Token
   | Decimal !Double
   | NonIndentedNewline
   | Bar
-  deriving (Show, Eq, Ord)
+  deriving (Eq, Ord)
 
 tokenize :: FilePath -> Text -> Either ParseError [(Token, Location)]
 tokenize fp t = parse tokensTokenizer fp t
@@ -311,13 +311,6 @@ smartQuotes t = "“" <> t <> "”"
 curlyQuotes :: [Char] -> [Char]
 curlyQuotes t = "‘" <> t <> "’"
 
--- | Consume the given predicate from the token stream.
-consumeToken :: (Token -> Maybe a) -> TokenParser (a, Location)
-consumeToken f =
-  tokenPrim tokenString
-            tokenPosition
-            (\(x,tok) -> fmap (, tok) (f x))
-
 equalToken :: Token -> TokenParser Location
 equalToken p = fmap snd (satisfyToken (==p) <?> tokenStr p)
 
@@ -332,6 +325,18 @@ satisfyToken p =
 -- used to implement 'eof'. Returns the accepted token.
 anyToken :: TokenParser (Token, Location)
 anyToken = consumeToken Just
+
+-- | Consume the given predicate from the token stream.
+consumeToken :: (Token -> Maybe a) -> TokenParser (a, Location)
+consumeToken f = do
+  u <- getState
+  tokenPrim
+    tokenString
+    tokenPosition
+    (\(tok, loc) ->
+       if locationStartColumn loc > u
+         then fmap (, loc) (f tok)
+         else Nothing)
 
 -- | Make a string out of the token, for error message purposes.
 tokenString :: (Token, Location) -> [Char]

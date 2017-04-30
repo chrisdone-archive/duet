@@ -280,6 +280,9 @@ data Pattern i l
 --  | LazyPattern Pattern
   deriving (Show , Eq , Functor, Traversable, Foldable)
 
+patternLabel (VariablePattern loc _) = loc
+patternLabel (ConstructorPattern loc _ _) = loc
+
 data Literal
   = IntegerLiteral Integer
   | CharacterLiteral Char
