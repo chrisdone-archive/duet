@@ -312,17 +312,17 @@ curlyQuotes :: [Char] -> [Char]
 curlyQuotes t = "‘" <> t <> "’"
 
 -- | Consume the given predicate from the token stream.
-consumeToken :: Stream s m (Token, Location) => (Token -> Maybe a) -> ParsecT s u m (a, Location)
+consumeToken :: (Token -> Maybe a) -> TokenParser (a, Location)
 consumeToken f =
   tokenPrim tokenString
             tokenPosition
             (\(x,tok) -> fmap (, tok) (f x))
 
-equalToken :: Stream s m (Token, Location) => Token -> ParsecT s u m Location
+equalToken :: Token -> TokenParser Location
 equalToken p = fmap snd (satisfyToken (==p) <?> tokenStr p)
 
 -- | Consume the given predicate from the token stream.
-satisfyToken :: Stream s m (Token, Location) => (Token -> Bool) -> ParsecT s u m (Token, Location)
+satisfyToken :: (Token -> Bool) -> TokenParser (Token, Location)
 satisfyToken p =
   consumeToken (\tok -> if p tok
                            then Just tok
@@ -330,7 +330,7 @@ satisfyToken p =
 
 -- | The parser @anyToken@ accepts any kind of token. It is for example
 -- used to implement 'eof'. Returns the accepted token.
-anyToken :: (Stream s m (Token, Location)) => ParsecT s u m (Token, Location)
+anyToken :: TokenParser (Token, Location)
 anyToken = consumeToken Just
 
 -- | Make a string out of the token, for error message purposes.
@@ -371,7 +371,7 @@ tokenPosition pos (_, l) _ =
   setSourceColumn (setSourceLine pos line) col
   where (line,col) = (locationStartLine l, locationStartColumn l)
 
-type TokenParser e = forall s m u. Stream s m (Token, Location) => ParsecT s u m e
+type TokenParser e = forall s m. Stream s m (Token, Location) => ParsecT s Int m e
 
 -- | @notFollowedBy p@ only succeeds when parser @p@ fails. This parser
 -- does not consume any input. This parser can be used to implement the

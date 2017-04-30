@@ -21,7 +21,7 @@ parseText fp inp =
   case parse tokensTokenizer fp (inp) of
     Left e -> Left e
     Right tokens' ->
-      case parse tokensParser fp tokens' of
+      case runParser tokensParser 0 fp tokens' of
         Left e -> Left e
         Right ast -> Right ast
 
