@@ -7,10 +7,14 @@ module Duet.Parser where
 
 import           Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import           Duet.Printer
 import           Duet.Tokenizer
 import           Duet.Types
 import           Text.Parsec hiding (satisfy, anyToken)
+
+parseFile fp = do t <- T.readFile fp
+                  print (parseText fp t)
 
 parseText :: SourceName -> Text -> Either ParseError [Decl FieldType Identifier Location]
 parseText fp inp =
@@ -118,8 +122,23 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
       _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> eof
       pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [Alternative loc [] e])
 
+case' :: TokenParser (Expression Identifier Location)
+case' = do loc <- equalToken Case
+           e <- expParser <?> "expression to do case analysis on"
+           equalToken Of
+           alt <- altP
+           pure (CaseExpression loc e [alt])
+
+altP :: TokenParser (Pattern Identifier, Expression Identifier Location)
+altP = do p <- patP
+          e <- expParser
+          pure (p, e)
+
+patP :: TokenParser (Pattern Identifier)
+patP = undefined
+
 expParser :: TokenParser (Expression Identifier Location)
-expParser = lambda <|> ifParser <|> infix' <|> app <|> atomic
+expParser = case' <|> lambda <|> ifParser <|> infix' <|> app <|> atomic
   where
     app = do
       left <- funcOp <?> "function expression"
