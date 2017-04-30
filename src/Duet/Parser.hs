@@ -147,7 +147,7 @@ case' = do
   p <- lookAhead altPat
   alts <- many (altParser e (locationStartColumn (patternLabel p)))
   setState u
-  pure (CaseExpression loc e [])
+  pure (CaseExpression loc e alts)
 
 altParser
   :: Expression Identifier Location

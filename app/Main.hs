@@ -37,7 +37,8 @@ main = do
         Left e -> error (show e)
         Right decls -> do
           putStrLn "-- Type checking ..."
-          (specialSigs, specialTypes, bindGroups, signatures) <- runTypeChecker decls
+          (specialSigs, specialTypes, bindGroups, signatures) <-
+            runTypeChecker decls
           putStrLn "-- Source: "
           mapM_
             (\(BindGroup _ is) ->
@@ -49,16 +50,30 @@ main = do
                  is)
             bindGroups
           putStrLn "-- Stepping ..."
-          e0 <- lookupNameByString i bindGroups
-          fix
-            (\loopy e -> do
-               e' <- expand specialSigs signatures e bindGroups
-               putStrLn (printExpression (const Nothing) e)
-               if e' /= e
-                 then loopy e'
-                 else pure ())
-            e0
+          catch
+            (do e0 <- (lookupNameByString i bindGroups)
+                fix
+                  (\loopy e -> do
+                     e' <- expand specialSigs signatures e bindGroups
+                     putStrLn (printExpression (const Nothing) e)
+                     if e' /= e
+                       then loopy e'
+                       else pure ())
+                  e0)
+            (\e ->
+               liftIO
+                 (do putStrLn (displayStepperException specialTypes e)
+                     exitFailure))
     _ -> error "usage: duet <file>"
+
+displayStepperException :: a -> StepException -> String
+displayStepperException _ =
+  \case
+    CouldntFindName n -> "Not in scope: " ++ curlyQuotes (printit n)
+    CouldntFindNameByString n ->
+      "The starter variable isn't defined: " ++
+      curlyQuotes n ++
+      "\nPlease define a variable called " ++ curlyQuotes n
 
 displayInferException :: SpecialTypes Name -> InferException -> [Char]
 displayInferException specialTypes =
@@ -91,10 +106,10 @@ displayRenamerException _specialTypes =
   \case
     IdentifierNotInVarScope scope name ->
       "Not in variable scope " ++ curlyQuotes (printit name) ++ "\n" ++
-      "Current scope:\n\n" ++ unlines (map show (M.elems scope))
+      "Current scope:\n\n" ++ unlines (map printit (M.elems scope))
     IdentifierNotInConScope scope name ->
       "Not in constructors scope " ++ curlyQuotes (printit name) ++ "\n" ++
-      "Current scope:\n\n" ++ unlines (map show (M.elems scope))
+      "Current scope:\n\n" ++ unlines (map printit (M.elems scope))
 
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
