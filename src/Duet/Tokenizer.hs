@@ -25,6 +25,7 @@ data Token
   | Data
   | Else
   | Case
+  | Of
   | Backslash
   | Let
   | In
@@ -71,6 +72,7 @@ tokenTokenizer prespaces =
     , atomThenSpace Data "data"
     , atomThenSpace Else "else"
     , atomThenSpace Case "case"
+    , atomThenSpace Of "of"
     , atom Backslash "\\"
     , atom OpenParen "("
     , atom CloseParen ")"
@@ -346,6 +348,7 @@ tokenStr tok =
     Else -> curlyQuotes "else"
     Data -> curlyQuotes "data"
     Case -> curlyQuotes "case"
+    Of -> curlyQuotes "of"
     Let -> curlyQuotes "let"
     NonIndentedNewline -> "non-indented newline"
     In -> curlyQuotes "in"
