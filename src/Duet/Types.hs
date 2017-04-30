@@ -102,6 +102,7 @@ instance Exception StepException
 data RenamerException
   = IdentifierNotInVarScope !(Map Identifier Name) !Identifier
   | IdentifierNotInConScope !(Map Identifier Name) !Identifier
+  | NameNotInConScope ![TypeSignature Name Name] !Name
   | TypeNotInScope ![TypeConstructor Name] !Identifier
   | RenamerKindMismatch (Type Name) Kind (Type Name) Kind
   | KindTooManyArgs (Type Name) Kind (Type Name)
