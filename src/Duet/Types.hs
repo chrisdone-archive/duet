@@ -271,11 +271,11 @@ expressionLabel =
 
 -- | A pattern match.
 data Pattern i l
-  = VariablePattern i l
+  = VariablePattern l i
   | WildcardPattern l
-  | AsPattern i l (Pattern i l)
+  | AsPattern l i (Pattern i l)
   | LiteralPattern l Literal
-  | ConstructorPattern l [Pattern i l]
+  | ConstructorPattern l i [Pattern i l]
 --  | LazyPattern Pattern
   deriving (Show , Eq , Functor, Traversable, Foldable)
 

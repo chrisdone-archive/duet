@@ -129,12 +129,12 @@ case' = do loc <- equalToken Case
            alt <- altP
            pure (CaseExpression loc e [alt])
 
-altP :: TokenParser (Pattern Identifier, Expression Identifier Location)
+altP :: TokenParser (Pattern Identifier Location, Expression Identifier Location)
 altP = do p <- patP
           e <- expParser
           pure (p, e)
 
-patP :: TokenParser (Pattern Identifier)
+patP :: TokenParser (Pattern Identifier Location)
 patP = undefined
 
 expParser :: TokenParser (Expression Identifier Location)
@@ -211,16 +211,16 @@ lambda = do
   e <- expParser
   pure (LambdaExpression loc (Alternative loc args e))
 
-funcParam :: TokenParser (Pattern Identifier)
+funcParam :: TokenParser (Pattern Identifier Location)
 funcParam = go <?> "function parameter (e.g. ‘x’, ‘limit’, etc.)"
   where
     go = do
-      (v, _) <-
+      (v, loc) <-
         consumeToken
           (\case
              Variable i -> Just i
              _ -> Nothing)
-      pure (VariablePattern (Identifier (T.unpack v)))
+      pure (VariablePattern loc (Identifier (T.unpack v)))
 
 atomic :: TokenParser (Expression Identifier Location)
 atomic =

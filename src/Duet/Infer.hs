@@ -410,40 +410,47 @@ inferLiteralType specialTypes (RationalLiteral _) = do
 
 inferPattern
   :: MonadThrow m
-  => Pattern Name -> InferT m ([Predicate Name], [(TypeSignature Name Name)], Type Name)
-inferPattern (VariablePattern i) = do
+  => Pattern Name l
+  -> InferT m (Pattern Name (TypeSignature Name l), [Predicate Name], [(TypeSignature Name Name)], Type Name)
+inferPattern (VariablePattern l i) = do
   v <- newVariableType StarKind
-  return ([], [TypeSignature i (toScheme v)], v)
-inferPattern WildcardPattern = do
+  return
+    ( VariablePattern (TypeSignature l (toScheme v)) i
+    , []
+    , [TypeSignature i (toScheme v)]
+    , v)
+inferPattern (WildcardPattern l) = do
   v <- newVariableType StarKind
-  return ([], [], v)
-inferPattern (AsPattern i pat) = do
-  (ps, as, t) <- inferPattern pat
-  return (ps, (TypeSignature i (toScheme t)) : as, t)
-inferPattern (LiteralPattern l) = do
+  return (WildcardPattern (TypeSignature l (toScheme v)), [], [], v)
+inferPattern (AsPattern l i pat) = do
+  (pat', ps, as, t) <- inferPattern pat
+  return (AsPattern (TypeSignature l (toScheme t)) i pat', ps, (TypeSignature i (toScheme t)) : as, t)
+inferPattern (LiteralPattern l0 l) = do
   specialTypes <- InferT (gets inferStateSpecialTypes)
   (ps, t) <- inferLiteralType specialTypes l
-  return (ps, [], t)
-inferPattern (ConstructorPattern (TypeSignature _  sc) pats) = do
-  (ps, as, ts) <- inferPatterns pats
+  return (LiteralPattern (TypeSignature l0 (toScheme t)) l, ps, [], t)
+inferPattern (ConstructorPattern l i pats) = do
+  let sc = undefined -- Lookup in sigs list
+  (pats', ps, as, ts) <- inferPatterns pats
   t' <- newVariableType StarKind
   (Qualified qs t) <- freshInst sc
   specialTypes <- InferT (gets inferStateSpecialTypes)
   let makeArrow :: Type Name -> Type Name -> Type Name
       a `makeArrow` b = ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
   unify t (foldr makeArrow t' ts)
-  return (ps ++ qs, as, t')
+  return (ConstructorPattern (TypeSignature l (toScheme t')) i pats',ps ++ qs, as, t')
 -- inferPattern (LazyPattern pat) = inferPattern pat
 
 inferPatterns
   :: MonadThrow m
-  => [Pattern Name] -> InferT m ([Predicate Name], [(TypeSignature Name Name)], [Type Name])
+  => [Pattern Name l] -> InferT m ([Pattern Name (TypeSignature Name l)], [Predicate Name], [(TypeSignature Name Name)], [Type Name])
 inferPatterns pats = do
   psasts <- mapM inferPattern pats
-  let ps = concat [ps' | (ps', _, _) <- psasts]
-      as = concat [as' | (_, as', _) <- psasts]
-      ts = [t | (_, _, t) <- psasts]
-  return (ps, as, ts)
+  let ps = concat [ps' | (_,ps', _, _) <- psasts]
+      as = concat [as' | (_,_, as', _) <- psasts]
+      ts = [t | (_, _, _, t) <- psasts]
+      pats' = [ p | (p,_,_,_) <- psasts]
+  return (pats', ps, as, ts)
 
 predHead :: Predicate Name -> Name
 predHead (IsIn i _) = i
@@ -648,11 +655,11 @@ inferExpressionType ce as (CaseExpression l e branches) = do
   (ps0, t, e') <- inferExpressionType ce as e
   v <- newVariableType StarKind
   let tiBr (pat, f) = do
-        (ps, as', t') <- inferPattern pat
+        (pat', ps, as', t') <- inferPattern pat
         unify t t'
         (qs, t'', f') <- inferExpressionType ce (as' ++ as) f
         unify v t''
-        return (ps ++ qs, (pat, f'))
+        return (ps ++ qs, (pat', f'))
   branches <- mapM tiBr branches
   let pss = map fst branches
       branches' = map snd branches
@@ -666,13 +673,13 @@ inferAltType
   -> Alternative Name l
   -> InferT m ([Predicate Name], Type Name, Alternative Name (TypeSignature Name l))
 inferAltType ce as (Alternative l pats e) = do
-  (ps, as', ts) <- inferPatterns pats
+  (pats', ps, as', ts) <- inferPatterns pats
   (qs, t, e') <- inferExpressionType ce (as' ++ as) e
   specialTypes <- InferT (gets inferStateSpecialTypes)
   let makeArrow :: Type Name -> Type Name -> Type Name
       a `makeArrow` b = ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
   let scheme = (Forall [] (Qualified (ps ++ qs) (foldr makeArrow t ts)))
-  return (ps ++ qs, foldr makeArrow t ts, Alternative (TypeSignature l scheme) pats e')
+  return (ps ++ qs, foldr makeArrow t ts, Alternative (TypeSignature l scheme) pats' e')
 
 inferAltTypes
   :: MonadThrow m

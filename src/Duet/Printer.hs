@@ -55,14 +55,14 @@ printAlternative :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i 
 printAlternative getType (Alternative _ patterns expression) =
   concat (map (\p->printPattern p ++ " ") patterns) ++ "= " ++ printExpression getType expression
 
-printPattern :: Printable i => Pattern i -> [Char]
+printPattern :: Printable i => Pattern i l -> [Char]
 printPattern =
   \case
-    VariablePattern i -> printIdentifier i
-    WildcardPattern -> "_"
-    AsPattern i p -> printIdentifier i ++ "@" ++ printPattern p
-    LiteralPattern l -> printLiteral l
-    ConstructorPattern (TypeSignature i _) pats ->
+    VariablePattern _ i -> printIdentifier i
+    WildcardPattern _ -> "_"
+    AsPattern _ i p -> printIdentifier i ++ "@" ++ printPattern p
+    LiteralPattern _ l -> printLiteral l
+    ConstructorPattern _ i pats ->
       printIdentifier i ++ " " ++ unwords (map printPattern pats)
 
 printExpression :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> (Expression i l) -> String

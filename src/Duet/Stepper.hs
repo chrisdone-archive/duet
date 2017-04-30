@@ -31,7 +31,7 @@ expand specialSigs signatures e b = go e
           case func of
             LambdaExpression l0 (Alternative l' params body) ->
               case params of
-                (VariablePattern param:params') ->
+                (VariablePattern _ param:params') ->
                   let body' = substitute param arg body
                   in case params' of
                        [] -> pure body'

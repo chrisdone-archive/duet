@@ -177,20 +177,20 @@ renameAlt subs (Alternative l ps e) =
 
 renamePattern
   :: MonadSupply Int m
-  => Pattern Identifier
-  -> WriterT [(Identifier, Name)] m (Pattern Name)
+  => Pattern Identifier l
+  -> WriterT [(Identifier, Name)] m (Pattern Name l)
 renamePattern =
   \case
-    VariablePattern i -> do
+    VariablePattern l i -> do
       name <- lift (supplyValueName i)
       tell [(i, name)]
-      pure (VariablePattern name)
-    WildcardPattern -> pure WildcardPattern
-    AsPattern i p -> do
+      pure (VariablePattern l name)
+    WildcardPattern l -> pure (WildcardPattern l)
+    AsPattern l i p -> do
       name <- supplyValueName i
       tell [(i, name)]
-      AsPattern name <$> renamePattern p
-    LiteralPattern l -> pure (LiteralPattern l)
+      AsPattern l name <$> renamePattern p
+    LiteralPattern l0 l -> pure (LiteralPattern l0 l)
     ConstructorPattern {} -> error "TODO: ConstructorPattern"
 
 renameExpression

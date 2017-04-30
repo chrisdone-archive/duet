@@ -323,12 +323,10 @@ equalToken p = fmap snd (satisfyToken (==p) <?> tokenStr p)
 
 -- | Consume the given predicate from the token stream.
 satisfyToken :: Stream s m (Token, Location) => (Token -> Bool) -> ParsecT s u m (Token, Location)
-satisfyToken f =
-  tokenPrim tokenString
-            tokenPosition
-            (\(tok, l) -> if f tok
-                             then Just (tok, l)
-                             else Nothing)
+satisfyToken p =
+  consumeToken (\tok -> if p tok
+                           then Just tok
+                           else Nothing)
 
 -- | The parser @anyToken@ accepts any kind of token. It is for example
 -- used to implement 'eof'. Returns the accepted token.
