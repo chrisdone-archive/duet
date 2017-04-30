@@ -111,7 +111,11 @@ printPat :: Printable i => Pattern i l -> String
 printPat =
   \case
     VariablePattern _ i -> printit i
-    ConstructorPattern _ i ps -> printit i ++ " " ++ unwords (map inner ps)
+    ConstructorPattern _ i ps ->
+      printit i ++
+      (if null ps
+         then ""
+         else " " ++ unwords (map inner ps))
   where
     inner =
       \case
@@ -128,6 +132,7 @@ printExpressionAppArg getType=
     e@(IfExpression {}) -> paren (printExpression getType e)
     e@(InfixExpression {}) -> paren (printExpression getType e)
     e@(LambdaExpression {}) -> paren (printExpression getType e)
+    e@(CaseExpression {}) -> paren (printExpression getType e)
     e -> printExpression getType e
 
 printExpressionIfPred :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> (Expression i l) -> String
@@ -135,6 +140,7 @@ printExpressionIfPred getType=
   \case
     e@(IfExpression {}) -> paren (printExpression getType e)
     e@(LambdaExpression {}) -> paren (printExpression getType e)
+    e@(CaseExpression {}) -> paren (printExpression getType e)
     e -> printExpression getType e
 
 printExpressionAppOp :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> (Expression i l) -> String
@@ -142,6 +148,7 @@ printExpressionAppOp getType=
   \case
     e@(IfExpression {}) -> paren (printExpression getType e)
     e@(LambdaExpression {}) -> paren (printExpression getType e)
+    e@(CaseExpression {}) -> paren (printExpression getType e)
     e -> printExpression getType e
 
 paren :: [Char] -> [Char]

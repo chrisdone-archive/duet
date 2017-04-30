@@ -4,11 +4,35 @@
 
 module Duet.Stepper where
 
-import Data.Maybe
 import Control.Monad.Catch
+import Control.Monad.State
 import Data.List
 import Data.Maybe
 import Duet.Types
+
+expandDeepSeq
+  :: MonadThrow m
+  => SpecialSigs Name
+  -> [TypeSignature Name Name]
+  -> Expression Name (TypeSignature Name Location)
+  -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
+  -> m (Expression Name (TypeSignature Name Location))
+expandDeepSeq specialSigs signatures e b = evalStateT (go e) False
+  where
+    go =
+      \case
+        e0
+          | (ce@(ConstructorExpression l n), args) <- fargs e0 -> do
+            args' <- mapM go args
+            pure (foldl (ApplicationExpression l) ce args')
+          | otherwise -> do
+            alreadyExpanded <- get
+            if alreadyExpanded
+              then pure e0
+              else do
+                e <- lift (expandWhnf specialSigs signatures e0 b)
+                put True
+                pure e
 
 expandWhnf
   :: MonadThrow m
@@ -42,7 +66,7 @@ expandWhnf specialSigs signatures e b = go e
                            (LambdaExpression l0 (Alternative l' params' body'))
                 [] -> error "Unsupported lambda."
             _ -> do
-              func' <- expandWhnf specialSigs signatures func b
+              func' <- go func
               pure (ApplicationExpression l func' arg)
         IfExpression l pr th el ->
           case pr of
