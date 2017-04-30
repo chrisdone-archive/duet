@@ -186,7 +186,7 @@ data Ambiguity i = Ambiguity
 -- expressions.
 data Alternative i l = Alternative
   { alternativeLabel :: l
-  , alternativePatterns :: ![Pattern i]
+  , alternativePatterns :: ![Pattern i l]
   , alternativeExpression :: !(Expression i l)
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
@@ -252,7 +252,7 @@ data Expression i l
   | LetExpression l (BindGroup i l) (Expression i l)
   | LambdaExpression l (Alternative i l)
   | IfExpression l (Expression i l) (Expression i l) (Expression i l)
-  | CaseExpression l (Expression i l) [(Pattern i, (Expression i l))]
+  | CaseExpression l (Expression i l) [(Pattern i l, (Expression i l))]
   deriving (Show, Functor, Traversable, Foldable, Eq)
 
 expressionLabel :: Expression i l -> l
@@ -267,16 +267,17 @@ expressionLabel =
      IfExpression l _ _ _ -> l
      CaseExpression l _ _ -> l
      VariableExpression l _ -> l
+     ConstructorExpression l _ -> l
 
 -- | A pattern match.
-data Pattern i
-  = VariablePattern i
-  | WildcardPattern
-  | AsPattern i (Pattern i)
-  | LiteralPattern Literal
-  | ConstructorPattern (TypeSignature i i) [Pattern i]
+data Pattern i l
+  = VariablePattern i l
+  | WildcardPattern l
+  | AsPattern i l (Pattern i l)
+  | LiteralPattern l Literal
+  | ConstructorPattern l [Pattern i l]
 --  | LazyPattern Pattern
-  deriving (Show , Eq)
+  deriving (Show , Eq , Functor, Traversable, Foldable)
 
 data Literal
   = IntegerLiteral Integer
