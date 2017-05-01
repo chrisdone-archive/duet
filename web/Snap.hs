@@ -416,6 +416,15 @@ transform a (Matrix m) = do
 
 newtype Textbox = Textbox JSVal
 
+class Removable a where
+  remove :: a -> IO ()
+
+instance Removable Textbox where
+  remove (Textbox j) = js_remove j
+
+instance Removable Text where
+  remove (Text j) = js_remove j
+
 -- | Create a text box for the user to write into.
 textbox :: Snap -> Double -> Double -> Double -> Double -> String -> IO Textbox
 textbox (Snap _ e) x y w h t = do
@@ -460,13 +469,13 @@ change (Textbox j) cont = do
   js_change j callback
 
 setAttrInt :: Textbox -> String -> Double -> IO ()
-setAttrInt (Textbox j) key val = do
+setAttrInt (Textbox j) key val' = do
   k' <- toJSVal key
-  js_setAttrInt j k' val
+  js_setAttrInt j k' val'
 
 setAttrStr :: Textbox -> String -> IO ()
-setAttrStr (Textbox j) val = do
-  val' <- toJSVal val
+setAttrStr (Textbox j) val0 = do
+  val' <- toJSVal val0
   js_setAttrStr j val'
 
 #ifdef __GHCJS__
@@ -476,6 +485,15 @@ foreign import javascript unsafe
 #else
 js_textbox :: JSVal -> Double -> Double -> Double -> Double -> JSVal -> IO JSVal
 js_textbox = undefined
+#endif
+
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "$1.remove()"
+  js_remove :: JSVal -> IO ()
+#else
+js_remove :: JSVal -> IO ()
+js_remove = undefined
 #endif
 
 --------------------------------------------------------------------------------

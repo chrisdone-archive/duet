@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -11,9 +11,11 @@ module Snappy where
 import           Control.Concurrent
 import           Control.Monad
 import           Data.IORef
-import           Data.IORef
+import           Data.List
 import           Data.Maybe
+import           Data.String
 import qualified Data.Text as T
+import           Data.Tuple
 import qualified Snap
 import           System.IO.Unsafe
 
@@ -22,7 +24,7 @@ import           System.IO.Unsafe
 
 data Event a = forall origin s. Event
   { eventSubscribers :: IORef [origin -> IO ()]
-  , eventFromOrigin :: s -> origin -> (Maybe a,s)
+  , eventFromOrigin :: s -> origin -> ([a],s)
   , eventState :: s
   }
 
@@ -43,7 +45,7 @@ zipEvents f e1 e2 =
     (do subscribersRef <- newIORef mempty
         tvar1 <- newEmptyMVar
         tvar2 <- newEmptyMVar
-        let !ev = Event subscribersRef (\s (a, b) -> (Just (f a b), s)) ()
+        let !ev = Event subscribersRef (\s (a, b) -> (pure (f a b), s)) ()
         let listen e us them pair =
               bindEvent
                 e
@@ -65,10 +67,25 @@ scanEvent f nil (Event subscribers fromOrigin oldState) =
     subscribers
     (\s origin ->
        let (a, _) = fromOrigin oldState origin
-           s' = fmap (f s) a
-       in (s', fromMaybe s s'))
+       in swap
+            (mapAccumL
+               (\s0 a0 ->
+                  let r = f s0 a0
+                  in (r, r))
+               s
+               a))
     nil
 {-# INLINE scanEvent #-}
+
+explodeEvent :: Event [a] -> Event a
+explodeEvent (Event subscribers fromOrigin oldState) =
+    Event
+      subscribers
+      (\s origin ->
+         let (a, s') = fromOrigin s origin
+         in (concat a, s'))
+      oldState
+{-# INLINE explodeEvent #-}
 
 mapMaybeEvent :: (a -> Maybe b) -> Event a -> Event b
 mapMaybeEvent f (Event subscribers fromOrigin oldState) =
@@ -76,7 +93,7 @@ mapMaybeEvent f (Event subscribers fromOrigin oldState) =
     subscribers
     (\s origin ->
        let (a, s') = fromOrigin s origin
-       in (a >>= f, s'))
+       in (mapMaybe f a, s'))
     oldState
 {-# INLINE mapMaybeEvent #-}
 
@@ -87,6 +104,7 @@ filterEvent p =
        if p a
          then Just a
          else Nothing)
+{-# INLINE filterEvent #-}
 
 bindEvent :: Event a -> (a -> IO ()) -> IO ()
 bindEvent Event {..} m = do
@@ -96,9 +114,7 @@ bindEvent Event {..} m = do
        (++ [ \v -> do
                s <- readIORef stateRef
                let (v', s') = eventFromOrigin s v
-               case v' of
-                 Nothing -> return ()
-                 Just v'' -> m v''
+               mapM_ m v'
                writeIORef stateRef s'
            ])
 
@@ -109,6 +125,9 @@ data Dynamic a = Dynamic
   { dynDefault :: a
   , dynEvent :: Maybe (Event a)
   }
+
+instance IsString str => IsString (Dynamic str) where
+  fromString = pure . fromString
 
 instance Functor Dynamic where
   fmap f (Dynamic def event) =
@@ -152,7 +171,11 @@ scanDynamic f nil e =
           ,dynEvent =  Just (scanEvent f nil e)}
 
 bindDynamic :: Dynamic a -> (a -> IO ()) -> IO ()
-bindDynamic (Dynamic _ event) m =
+bindDynamic (Dynamic val event) m = do
+  void
+    (forkIO
+       (do yield
+           m val))
   maybe
     (return ())
     (\e ->
@@ -167,6 +190,26 @@ dynamicDef (Dynamic def _) = def
 
 eventToDynamic :: a -> Event a -> Dynamic a
 eventToDynamic d e = Dynamic {dynDefault = d, dynEvent = Just e}
+
+--------------------------------------------------------------------------------
+-- Removable elements
+
+class Removable (elem :: * -> *) where
+  remove :: elem a -> IO ()
+
+removable
+  :: forall void elem.
+     Removable elem
+  => (forall t. IO (elem t, Event void)) -> IO ()
+removable create = do
+  (v, end) <- create
+  bindEvent end (\_ -> remove v)
+
+--------------------------------------------------------------------------------
+-- List of elements
+
+list :: Event (IO a) -> IO ()
+list d = bindEvent d (\m -> void m)
 
 --------------------------------------------------------------------------------
 -- Drag event
@@ -208,7 +251,7 @@ dragEvent d = do
   pure
     (Event
      { eventSubscribers = subscribersRef
-     , eventFromOrigin = \s origin -> (Just origin, s)
+     , eventFromOrigin = \s origin -> (pure origin, s)
      , eventState = st
      })
 
@@ -217,26 +260,23 @@ changeEvent d = do
   subscribersRef <- newIORef mempty
   Snap.change
     d
-    (\text -> do
+    (\text' -> do
        subscribers <- readIORef subscribersRef
-       mapM_ (\subscriber -> subscriber text) subscribers)
-  threadRef <- newIORef Nothing
+       mapM_ (\subscriber -> subscriber text') subscribers)
+  goahead <- newMVar ()
   Snap.keyup
     d
-    (\k text -> do
-       mthreadId <- readIORef threadRef
-       maybe (return ()) killThread mthreadId
-       threadId <-
-         forkIO
-           (do threadDelay (1000 * 50)
-               subscribers <- readIORef subscribersRef
-               mapM_ (\subscriber -> subscriber (T.unpack text)) subscribers)
-       atomicWriteIORef threadRef (Just threadId))
+    (\_k text' -> do
+       () <- takeMVar goahead
+       subscribers <- readIORef subscribersRef
+       mapM_ (\subscriber -> subscriber (T.unpack text')) subscribers
+       void (forkIO (do threadDelay (1000 * 50)
+                        putMVar goahead ())))
   st <- newIORef ()
   pure
     (Event
      { eventSubscribers = subscribersRef
-     , eventFromOrigin = \s origin -> (Just origin, s)
+     , eventFromOrigin = \s origin -> (pure origin, s)
      , eventState = st
      })
 
@@ -279,7 +319,7 @@ clickEvent d = do
   pure
     (Event
      { eventSubscribers = subscribersRef
-     , eventFromOrigin = \s origin -> (Just origin, s)
+     , eventFromOrigin = \s origin -> (pure origin, s)
      , eventState = st
      })
 
@@ -350,12 +390,15 @@ rect snap xdynamic ydynamic wdynamic hdynamic fdynamic = do
 --------------------------------------------------------------------------------
 -- Text object
 
-data Text = Text
+data Text t = Text
   { textObject :: Snap.Text
   , textClicked :: Event ClickEvent
   }
 
-text :: Snap.Snap -> Dynamic Double -> Dynamic Double -> Dynamic String -> IO Text
+instance Removable Text where
+  remove (Text s _) = Snap.remove s
+
+text :: Snap.Snap -> Dynamic Double -> Dynamic Double -> Dynamic String -> IO (Text t)
 text snap xdynamic ydynamic tdynamic = do
   let x = dynamicDef xdynamic
       y = dynamicDef ydynamic
@@ -384,10 +427,13 @@ text snap xdynamic ydynamic tdynamic = do
 --------------------------------------------------------------------------------
 -- Textbox object
 
-data Textbox = Textbox
+data Textbox t = Textbox
   { textboxObject :: Snap.Textbox
   , textboxChange :: Event String
   }
+
+instance Removable Textbox where
+  remove (Textbox s _) = Snap.remove s
 
 textbox
   :: Snap.Snap
@@ -396,14 +442,13 @@ textbox
   -> Dynamic Double
   -> Dynamic Double
   -> Dynamic String
-  -> IO Textbox
+  -> IO (Textbox t)
 textbox snap xdynamic ydynamic wdynamic hdynamic tdynamic = do
   let x = dynamicDef xdynamic
       y = dynamicDef ydynamic
       w = dynamicDef wdynamic
       h = dynamicDef hdynamic
   c <- Snap.textbox snap x y w h (dynamicDef tdynamic)
-  t <- Snap.newMatrix
   bindDynamic
     xdynamic
     (\x' -> Snap.setAttrInt c "left" x')
