@@ -51,7 +51,7 @@ main = do
                        fix
                          (\go e xs -> do
                             e' <-
-                              expandDeepSeq specialSigs signatures e bindGroups
+                              expandSeq1 specialSigs signatures e bindGroups
                             if e' /= e && length xs < 100
                               then go e' (e : xs)
                               else pure

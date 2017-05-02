@@ -10,14 +10,14 @@ import Data.List
 import Data.Maybe
 import Duet.Types
 
-expandDeepSeq
+expandSeq1
   :: MonadThrow m
   => SpecialSigs Name
   -> [TypeSignature Name Name]
   -> Expression Name (TypeSignature Name Location)
   -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
   -> m (Expression Name (TypeSignature Name Location))
-expandDeepSeq specialSigs signatures e b = evalStateT (go e) False
+expandSeq1 specialSigs signatures e b = evalStateT (go e) False
   where
     go =
       \case

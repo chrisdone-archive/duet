@@ -54,7 +54,7 @@ main = do
             (do e0 <- (lookupNameByString i bindGroups)
                 fix
                   (\loopy e -> do
-                     e' <- expandDeepSeq specialSigs signatures e bindGroups
+                     e' <- expandSeq1 specialSigs signatures e bindGroups
                      putStrLn (printExpression (const Nothing) e)
                      if e' /= e
                        then loopy e'
