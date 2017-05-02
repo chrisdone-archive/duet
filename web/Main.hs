@@ -37,7 +37,7 @@ main = do
       snap
       (pure 20)
       (pure 20)
-      (pure 500)
+      (pure 380)
       (pure 250)
       (pure defaultSource)
   let process src =
@@ -45,7 +45,7 @@ main = do
           Left e -> Left (show e)
           Right bindings ->
             case runCatch
-                   (do (specialSigs, _, bindGroups, signatures) <-
+                   (do (specialSigs, specialTypes, bindGroups, signatures) <-
                          runTypeChecker bindings
                        e0 <- lookupNameByString "main" bindGroups
                        fix
@@ -55,7 +55,9 @@ main = do
                             if e' /= e && length xs < 100
                               then go e' (e : xs)
                               else pure
-                                     (reverse (e : xs)))
+                                     ( specialTypes
+                                     , bindGroups
+                                     , reverse (e : xs)))
                          e0
                          []) of
               Left e -> Left (displayException e)
@@ -66,31 +68,52 @@ main = do
           (Snappy.eventToDynamic defaultSource (Snappy.textboxChange source))
   Snappy.textbox
     snap
-    (pure 520)
+    (pure 420)
     (pure 20)
-    (pure 500)
+    (pure 600)
     (pure 250)
     (fmap
        (\result ->
           case result of
-           (Left err) -> err
-           (Right steps) ->
-             unlines (map (printExpression (const Nothing))
-                     ((filter cleanExpression) steps)))
+            (Left err) -> ""
+            (Right (_, _, steps)) ->
+              unlines
+                (map
+                   (printExpression (const Nothing))
+                   ((filter cleanExpression) steps)))
        processedSource)
   Snappy.textbox
     snap
     (pure 20)
-    (pure 320)
+    (pure 300)
     (pure 500)
     (pure 250)
     (fmap
        (\result ->
           case result of
-           (Left err) -> err
-           (Right steps) ->
-             unlines (map (printExpression (const Nothing))
-                     ((id) steps)))
+            (Left err) -> ""
+            (Right (_, _, steps)) ->
+              unlines (map (printExpression (const Nothing)) ((id) steps)))
+       processedSource)
+  Snappy.textbox
+    snap
+    (pure 520)
+    (pure 300)
+    (pure 500)
+    (pure 250)
+    (fmap
+       (\result ->
+          case result of
+            (Left err) -> err
+            (Right (specialTypes, bindGroups, _)) ->
+              unlines (map
+                         (\(BindGroup _ is) ->
+                            concatMap
+                              (concatMap
+                                 (printImplicitlyTypedBinding
+                                    (\x -> Just (specialTypes, fmap (const ()) x))))
+                              is)
+                         bindGroups))
        processedSource)
   pure ()
 
