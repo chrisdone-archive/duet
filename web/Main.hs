@@ -1,3 +1,4 @@
+{-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
@@ -44,16 +45,17 @@ main = do
           Left e -> Left (show e)
           Right bindings ->
             case runCatch
-                   (do (specialSigs, specialTypes, bindGroups, signatures) <-
+                   (do (specialSigs, _, bindGroups, signatures) <-
                          runTypeChecker bindings
                        e0 <- lookupNameByString "main" bindGroups
                        fix
-                         (\loop e xs -> do
+                         (\go e xs -> do
                             e' <-
                               expandDeepSeq specialSigs signatures e bindGroups
                             if e' /= e && length xs < 100
-                              then loop e' (e : xs)
-                              else pure (filter cleanExpression (reverse (e : xs))))
+                              then go e' (e : xs)
+                              else pure
+                                     (reverse (e : xs)))
                          e0
                          []) of
               Left e -> Left (displayException e)
@@ -64,15 +66,31 @@ main = do
           (Snappy.eventToDynamic defaultSource (Snappy.textboxChange source))
   Snappy.textbox
     snap
+    (pure 520)
     (pure 20)
-    (pure 300)
     (pure 500)
     (pure 250)
     (fmap
-       (\case
-          Left err -> err
-          Right steps ->
-            unlines (map (printExpression (const Nothing)) steps))
+       (\result ->
+          case result of
+           (Left err) -> err
+           (Right steps) ->
+             unlines (map (printExpression (const Nothing))
+                     ((filter cleanExpression) steps)))
+       processedSource)
+  Snappy.textbox
+    snap
+    (pure 20)
+    (pure 320)
+    (pure 500)
+    (pure 250)
+    (fmap
+       (\result ->
+          case result of
+           (Left err) -> err
+           (Right steps) ->
+             unlines (map (printExpression (const Nothing))
+                     ((id) steps)))
        processedSource)
   pure ()
 

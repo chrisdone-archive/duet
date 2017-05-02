@@ -172,10 +172,10 @@ scanDynamic f nil e =
 
 bindDynamic :: Dynamic a -> (a -> IO ()) -> IO ()
 bindDynamic (Dynamic val event) m = do
-  void
+  {-void
     (forkIO
        (do yield
-           m val))
+           m val))-}
   maybe
     (return ())
     (\e ->

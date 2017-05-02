@@ -733,12 +733,12 @@ candidates ce (Ambiguity v qs) =
   , all ([VariableType v] ==) ts
   , any (`elem` numClasses) is
   , all (`elem` stdClasses) is
-  , t' <- []{-classEnvironmentDefaults ce-}
+  , t' <- [VariableType (TypeVariable (TypeName (-1) "x") StarKind)]-- classEnvironmentDefaults ce
   , all (entail ce []) [IsIn i [t'] | i <- is]
   ]
   where -- disabling these
-        numClasses = []
-        stdClasses = []
+        numClasses = [ForallName (-1)]
+        stdClasses = [ForallName (-1)]
 
 withDefaults
   :: MonadThrow m
