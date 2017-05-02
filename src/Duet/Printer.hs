@@ -10,7 +10,7 @@ import Data.List
 import Duet.Types
 import Text.Printf
 
-class Printable a where
+class Eq a => Printable a where
   printit :: a -> String
 
 instance Printable Name where
@@ -51,7 +51,7 @@ printImplicitlyTypedBinding
 printImplicitlyTypedBinding getType (ImplicitlyTypedBinding _ i [alt]) =
   printIdentifier i ++ " " ++ printAlternative getType alt
 
-printAlternative :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> Alternative i l -> [Char]
+printAlternative :: (Eq i, Printable i) => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> Alternative i l -> [Char]
 printAlternative getType (Alternative _ patterns expression) =
   concat (map (\p->printPattern p ++ " ") patterns) ++ "= " ++ printExpression getType expression
 
@@ -65,7 +65,7 @@ printPattern =
     ConstructorPattern _ i pats ->
       printIdentifier i ++ " " ++ unwords (map printPattern pats)
 
-printExpression :: Printable i => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> (Expression i l) -> String
+printExpression :: (Printable i, Eq i) => (l -> Maybe (SpecialTypes i, TypeSignature i ())) -> (Expression i l) -> String
 printExpression getType e =
   wrapType
     (case e of
@@ -100,12 +100,11 @@ printExpression getType e =
          " " ++ printIdentifier o ++ " " ++ printExpressionAppArg getType x
        _ -> "<TODO>")
   where
-    wrapType = id
-    {-wrapType x =
+    wrapType x =
       case getType (expressionLabel e) of
         (Nothing) -> x
         (Just (specialTypes, TypeSignature _ ty)) ->
-          "(" ++ x ++ " :: " ++ printScheme specialTypes ty ++ ")"-}
+          "(" ++ x ++ " :: " ++ printScheme specialTypes ty ++ ")"
 
 printPat :: Printable i => Pattern i l -> String
 printPat =

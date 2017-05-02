@@ -53,7 +53,7 @@ main = do
                               expandDeepSeq specialSigs signatures e bindGroups
                             if e' /= e && length xs < 100
                               then loop e' (e : xs)
-                              else pure (reverse (e : xs)))
+                              else pure (filter cleanExpression (reverse (e : xs))))
                          e0
                          []) of
               Left e -> Left (displayException e)
@@ -75,6 +75,20 @@ main = do
             unlines (map (printExpression (const Nothing)) steps))
        processedSource)
   pure ()
+
+--------------------------------------------------------------------------------
+-- Clean expressions
+
+-- | Filter out expressions with intermediate case, if and immediately-applied lambdas.
+cleanExpression :: Expression i l -> Bool
+cleanExpression =
+  \case
+    CaseExpression {} -> False
+    IfExpression {} -> False
+    e0
+      | (LambdaExpression {}, args) <- fargs e0 -> null args
+    ApplicationExpression _ f x -> cleanExpression f && cleanExpression x
+    _ -> True
 
 --------------------------------------------------------------------------------
 -- Renamer and inferer
@@ -190,17 +204,16 @@ runTypeChecker decls =
 
 defaultSource :: String
 defaultSource =
-
     "data List a = Nil | Cons a (List a)\n\
      \id = \\x -> x\n\
-     \not = \\p -> if p\n\
-     \               then False\n\
-     \               else True\n\
-     \map = \\f l ->\n\
+     \not = \\p -> if p then False else True\n\
+     \foldr = \\cons nil l ->\n\
      \  case l of\n\
-     \    Nil -> Nil\n\
-     \    Cons a xs -> Cons (f a) (map f xs)\n\
-     \main = map not (Cons True (Cons False Nil))"
+     \    Nil -> nil\n\
+     \    Cons x xs -> cons x (foldr cons nil xs)\n\
+     \map = \\f -> foldr (\\x xs -> Cons (f x) xs) Nil\n\
+     \main = map not (Cons True (Cons False Nil))\n\
+     \"
 
 -- | Built-in pre-defined functions.
 builtInSignatures
