@@ -140,7 +140,7 @@ tokenTokenizer prespaces =
     , parsing
         Constructor
         (do c <- satisfy isUpper
-            variable <- many (satisfy (flip elem ['a' .. 'z']))
+            variable <- many (satisfy (flip elem (['A' .. 'Z']++['a' .. 'z'])))
             pure (T.singleton c <> T.pack variable))
         "constructor (e.g. “Rocket”, “Just”, etc.)"
     , parsing
@@ -149,7 +149,7 @@ tokenTokenizer prespaces =
               do start <- many1 (satisfy (flip elem ("_" ++ ['a' .. 'z'])))
                  end <-
                    many
-                     (satisfy (flip elem ("_" ++ ['a' .. 'z'] ++ ['0' .. '9'])))
+                     (satisfy (flip elem ("_" ++ ['A' .. 'Z'] ++['a' .. 'z'] ++ ['0' .. '9'])))
                  pure (start ++ end)
             pure (T.pack variable))
         "variable (e.g. “elephant”, “age”, “t2”, etc.)"

@@ -54,9 +54,10 @@ main = do
             (do e0 <- (lookupNameByString i bindGroups)
                 fix
                   (\loopy e -> do
+                     when (cleanExpression e)
+                          (putStrLn (printExpression (const Nothing) e))
                      e' <- expandSeq1 specialSigs signatures e bindGroups
-                     putStrLn (printExpression (const Nothing) e)
-                     if e' /= e
+                     if fmap (const ()) e' /= fmap (const ()) e
                        then loopy e'
                        else pure ())
                   e0)
@@ -65,6 +66,20 @@ main = do
                  (do putStrLn (displayStepperException specialTypes e)
                      exitFailure))
     _ -> error "usage: duet <file>"
+
+--------------------------------------------------------------------------------
+-- Clean expressions
+
+-- | Filter out expressions with intermediate case, if and immediately-applied lambdas.
+cleanExpression :: Expression i l -> Bool
+cleanExpression =
+  \case
+    CaseExpression {} -> False
+    IfExpression {} -> False
+    e0
+      | (LambdaExpression {}, args) <- fargs e0 -> null args
+    ApplicationExpression _ f x -> cleanExpression f && cleanExpression x
+    _ -> True
 
 displayStepperException :: a -> StepException -> String
 displayStepperException _ =

@@ -1,13 +1,17 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 -- |
 
 module Duet.Stepper where
 
+import Control.Arrow
 import Control.Monad.Catch
 import Control.Monad.State
 import Data.List
 import Data.Maybe
+import Data.Semigroup
 import Duet.Types
 
 expandSeq1
@@ -78,57 +82,77 @@ expandWhnf specialSigs signatures e b = go e
         LetExpression {} -> return x
         LambdaExpression {} -> return x
         CaseExpression l e0 alts ->
-          case e0 of
-            _
-              | (ce@(ConstructorExpression l n), args) <- fargs e0 ->
-                let matches =
-                      catMaybes
-                        [ (do subs <- match e0 pat
-                              pure (subs, patE))
-                        | (pat, patE) <- alts
-                        ]
-                in case listToMaybe matches of
-                     Just (subs, expr) ->
-                       return
-                         (foldr
-                            (\(name, that) expr' -> substitute name that expr')
-                            expr
-                            subs)
-              | otherwise -> do
-                e' <- go e0
-                pure (CaseExpression l e' alts)
+          let matches = map (first (match e0)) alts
+          in case listToMaybe
+                    (mapMaybe
+                       (\(r, e) -> do
+                          case r of
+                            OK v -> pure (v, e)
+                            Fail -> Nothing)
+                       matches) of
+               Just (Success subs, expr) ->
+                 return
+                   (foldr
+                      (\(name, that) expr' -> substitute name that expr')
+                      expr
+                      subs)
+               Just (NeedsMoreEval is, _) -> do
+                 e' <- expandAt is specialSigs signatures e0 b
+                 pure (CaseExpression l e' alts)
+               Nothing -> error ("Incomplete pattern match... " ++ show matches)
+
+expandAt
+  :: MonadThrow m
+  => [Int]
+  -> SpecialSigs Name
+  -> [TypeSignature Name Name]
+  -> Expression Name (TypeSignature Name Location)
+  -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
+  -> m (Expression Name (TypeSignature Name Location))
+expandAt is specialSigs signatures e0 b = go [0] e0
+  where
+    go js e =
+      if is == js
+        then expandWhnf specialSigs signatures e b
+        else case e of
+               _
+                 | (ce@(ConstructorExpression l _), args) <- fargs e -> do
+                   args' <-
+                     sequence
+                       (zipWith (\i arg -> go (js ++ [i]) arg) [0 ..] args)
+                   pure (foldl (ApplicationExpression l) ce args')
+                 | otherwise -> pure e
 
 match
-  :: Expression Name l
-  -> Pattern Name l
-  -> Maybe [(Name, Expression Name l)]
-match val pat =
-  case pat of
-    WildcardPattern _ -> Just []
-    VariablePattern loc i ->
-      Just [(i, val)]
-    ConstructorPattern l i pats
-      | (ce@(ConstructorExpression l n), args) <- fargs val ->
-        if fmap (const ()) ce == ConstructorExpression () i
-          then do
-            xs <- zipWith' match args pats
-            fmap concat (sequence xs)
-          else Nothing
+  :: (Show l, Show i, Eq i)
+  => Expression i l -> Pattern i l -> Result (Match i l)
+match = go [0]
+  where
+    go is val pat =
+      case pat of
+        WildcardPattern _ -> OK (Success [])
+        VariablePattern _ i -> OK (Success [(i, val)])
+        ConstructorPattern _ i pats
+          | (constructor@ConstructorExpression {}, args) <- fargs val ->
+            if fmap (const ()) constructor == ConstructorExpression () i
+              then if length args == length pats
+                     then foldl
+                            (<>)
+                            (OK (Success []))
+                            (zipWith
+                               (\j (arg, p) -> go (is ++ [j]) arg p)
+                               [0 ..]
+                               (zip args pats))
+                     else Fail
+              else Fail
+          | otherwise -> OK (NeedsMoreEval is)
 
-zipWith' f xs ys =
-  if length xs /= length ys
-    then Nothing
-    else Just (zipWith f xs ys)
-
--- | Flatten a type application f x y into (f,[x,y]).
+-- | Flatten an application f x y into (f,[x,y]).
 fargs :: Expression i l -> (Expression i l, [(Expression i l)])
 fargs e = go e []
   where
-    go (ApplicationExpression l f x) args = go f (x : args)
+    go (ApplicationExpression _ f x) args = go f (x : args)
     go f args = (f, args)
-
-specialVar :: Eq i => SpecialSigs i -> i -> Bool
-specialVar specialSigs i = i `elem` [specialSigsFalse specialSigs, specialSigsTrue specialSigs]
 
 substitute :: Name -> Expression Name l -> Expression Name l -> Expression Name l
 substitute i arg =

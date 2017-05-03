@@ -7,13 +7,13 @@
 
 module Duet.Types where
 
-import           Control.Monad.Catch
-import           Control.Monad.State
-import           Data.Function
-import           Data.Map.Strict (Map)
-import           Data.Monoid
-import           Data.String
-import           Data.Typeable
+import Control.Monad.Catch
+import Control.Monad.State
+import Data.Function
+import Data.Map.Strict (Map)
+import Data.Semigroup
+import Data.String
+import Data.Typeable
 
 -- | A declaration.
 data Decl f i l
@@ -320,3 +320,23 @@ data TypeConstructor i = TypeConstructor
 data Scheme i =
   Forall [Kind] (Qualified i (Type i))
   deriving (Eq, Show)
+
+data Result a
+  = OK a
+  | Fail
+  deriving (Show, Functor)
+
+instance Semigroup a => Semigroup (Result a) where
+  Fail <> _ = Fail
+  _ <> Fail = Fail
+  OK x <> OK y = OK (x <> y)
+
+data Match i l
+  = Success [(i, Expression i l)]
+  | NeedsMoreEval [Int]
+  deriving (Eq, Show, Functor)
+
+instance Semigroup (Match i l) where
+  NeedsMoreEval is <> _ = NeedsMoreEval is
+  _ <> NeedsMoreEval is = NeedsMoreEval is
+  Success xs <> Success ys = Success (xs <> ys)

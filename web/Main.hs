@@ -52,7 +52,7 @@ main = do
                          (\go e xs -> do
                             e' <-
                               expandSeq1 specialSigs signatures e bindGroups
-                            if e' /= e && length xs < 100
+                            if fmap (const ()) e' /= fmap (const ()) e && length xs < 100
                               then go e' (e : xs)
                               else pure
                                      ( specialTypes
@@ -246,15 +246,25 @@ runTypeChecker decls =
 defaultSource :: String
 defaultSource =
     "data List a = Nil | Cons a (List a)\n\
+     \data Tuple a b = Tuple a b\n\
      \id = \\x -> x\n\
      \not = \\p -> if p then False else True\n\
      \foldr = \\cons nil l ->\n\
      \  case l of\n\
      \    Nil -> nil\n\
      \    Cons x xs -> cons x (foldr cons nil xs)\n\
-     \map = \\f -> foldr (\\x xs -> Cons (f x) xs) Nil\n\
-     \main = map not (Cons True (Cons False Nil))\n\
-     \"
+     \map = \\f xs ->\n\
+     \  case xs of\n\
+     \    Nil -> Nil\n\
+     \    Cons x xs -> Cons (f x) (map f xs)\n\
+     \zip = \\xs ys ->\n\
+     \  case Tuple xs ys of\n\
+     \    Tuple Nil _ -> Nil\n\
+     \    Tuple _ Nil -> Nil\n\
+     \    Tuple (Cons x xs1) (Cons y ys1) ->\n\
+     \      Cons (Tuple x y) (zip xs1 ys1)\n\
+     \list = (Cons True (Cons False Nil))\n\
+     \main = zip list (map not list)"
 
 -- | Built-in pre-defined functions.
 builtInSignatures
