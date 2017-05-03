@@ -1687,6 +1687,13 @@ preludeDefns
               (TGen 0 `fn` TAp tIO tUnit))),
       [([],
         ap [evar ".", evar "putStrLn", econst showMfun])])],
+    [("printChar",
+      Just (Forall []
+             ([] :=>
+              (tString))),
+      [([],
+        ap [econst showMfun, econst (("Z" :>: toScheme (TVar(Tyvar "k" Star)) -- (TCon (Tycon "Nat" Star))
+                                     ))])])],
     [("getLine",
       Just (Forall []
              ([] :=>
