@@ -145,8 +145,7 @@ runTypeChecker decls =
           decls
   in evalSupplyT
        (do specialTypes <- defaultSpecialTypes
-           theShow <- supplyTypeName "Show"
-           (specialSigs, signatures0) <- builtInSignatures theShow specialTypes
+           (specialSigs, signatures0) <- builtInSignatures specialTypes
            sigs' <-
              renameDataTypes specialTypes types >>=
              mapM (dataTypeSignatures specialTypes)
@@ -168,7 +167,7 @@ runTypeChecker decls =
                   liftIO
                     (do putStrLn (displayRenamerException specialTypes e)
                         exitFailure))
-           env <- setupEnv theShow specialTypes mempty
+           env <- setupEnv specialTypes mempty
            bindGroups <-
              lift
                (catch
@@ -183,20 +182,24 @@ runTypeChecker decls =
 -- | Built-in pre-defined functions.
 builtInSignatures
   :: MonadThrow m
-  => Name -> SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Name Name])
-builtInSignatures theShow specialTypes = do
+  => SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Name Name])
+builtInSignatures specialTypes = do
   the_show <- supplyValueName "show"
   sigs <- dataTypeSignatures specialTypes (specialTypesBool specialTypes)
   the_True <- getSig "True" sigs
   the_False <- getSig "False" sigs
   return
-    ( SpecialSigs {specialSigsTrue = the_True, specialSigsFalse = the_False}
+    ( SpecialSigs
+      { specialSigsTrue = the_True
+      , specialSigsFalse = the_False
+      , specialSigsShow = the_show
+      }
     , [ TypeSignature
           the_show
           (Forall
              [StarKind]
              (Qualified
-                [IsIn theShow [(GenericType 0)]]
+                [IsIn (specialTypesShow specialTypes) [(GenericType 0)]]
                 (GenericType 0 --> specialTypesString specialTypes)))
       ] ++
       sigs)
@@ -213,6 +216,7 @@ builtInSignatures theShow specialTypes = do
                 sigs) of
         Nothing -> throwM (BuiltinNotDefined ident)
         Just sig -> pure sig
+
     (-->) :: Type Name -> Type Name -> Type Name
     a --> b =
       ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
@@ -260,20 +264,17 @@ dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
 -- | Setup the class environment.
 setupEnv
   :: MonadThrow m
-  => Name
-  -> SpecialTypes Name
+  => SpecialTypes Name
   -> ClassEnvironment Name
   -> SupplyT Int m (ClassEnvironment Name)
-setupEnv theShow specialTypes env =
-  do theNum <- supplyTypeName "Num"
-     num_a <- supplyTypeName "a"
-     show_a <- supplyTypeName "a"
-     let update = addClass theNum [TypeVariable num_a StarKind] [] >=>
-                  addInstance [] (IsIn theNum [specialTypesInteger specialTypes]) >=>
-                  addClass theShow [TypeVariable show_a StarKind] [] >=>
-                  addInstance [] (IsIn theShow [specialTypesChar specialTypes]) >=>
-                  addInstance [] (IsIn theShow [specialTypesInteger specialTypes])
-     lift (update env)
+setupEnv specialTypes env = do
+  theNum <- supplyTypeName "Num"
+  num_a <- supplyTypeName "a"
+  let update =
+        addClass theNum [TypeVariable num_a StarKind] [] >=>
+        addInstance [] (IsIn theNum [specialTypesInteger specialTypes]) >=>
+        addInstance [] (IsIn theNum [specialTypesRational specialTypes])
+  lift (update env)
 
 --------------------------------------------------------------------------------
 -- Built-in types
@@ -295,6 +296,7 @@ defaultSpecialTypes = do
   theString <- supplyTypeName "String"
   theInteger <- supplyTypeName "Integer"
   theRational <- supplyTypeName "Rational"
+  theShow <- supplyTypeName "Show"
   return
     (SpecialTypes
      { specialTypesBool = boolDataType
@@ -309,4 +311,5 @@ defaultSpecialTypes = do
          ConstructorType (TypeConstructor theInteger StarKind)
      , specialTypesRational =
          ConstructorType (TypeConstructor theRational StarKind)
+     , specialTypesShow = theShow
      })

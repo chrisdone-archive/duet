@@ -58,12 +58,14 @@ data SpecialTypes i = SpecialTypes
   , specialTypesFunction   :: Type i
   , specialTypesInteger    :: Type i
   , specialTypesRational   :: Type i
+  , specialTypesShow       :: i
   } deriving (Show)
 
 -- | Special built-in signatures.
 data SpecialSigs i = SpecialSigs
   { specialSigsTrue :: i
   , specialSigsFalse :: i
+  , specialSigsShow :: i
   }
 
 -- | Type inference monad.

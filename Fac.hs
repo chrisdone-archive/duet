@@ -12,4 +12,5 @@ facAcc = \a n ->
 
 facA = facAcc (S Z)
 id = \x -> x
-main = show id
+double = \n -> n + n
+main = double (5 + 7)
