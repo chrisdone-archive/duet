@@ -621,9 +621,6 @@ inferExpressionType _ as (ConstructorExpression l i) = do
   qualified@(Qualified ps t) <- freshInst sc
   let scheme = (Forall [] qualified)
   return (ps, t, ConstructorExpression (TypeSignature l scheme) i)
--- inferExpressionType _ _ (ConstantExpression l s@(TypeSignature _  sc)) = do
---   (Qualified ps t) <- freshInst sc
---   return (ps, t, (ConstantExpression (TypeSignature l sc) s))
 inferExpressionType _ _ (LiteralExpression l0 l) = do
   specialTypes <- InferT (gets inferStateSpecialTypes)
   (ps, t) <- inferLiteralType specialTypes l
@@ -640,13 +637,12 @@ inferExpressionType ce as (ApplicationExpression l e f) = do
   let scheme = (Forall [] (Qualified (ps++qs) t))
   return (ps ++ qs, t, ApplicationExpression (TypeSignature l scheme) e' f')
 inferExpressionType ce as (InfixExpression l x op y) = do
-  inferExpressionType
-    ce
-    as
-    (ApplicationExpression
-       l
-       (ApplicationExpression l x (VariableExpression l op))
-       y)
+  (ps, ts, ApplicationExpression l (ApplicationExpression _ (VariableExpression _ op) x) y) <-
+    inferExpressionType
+      ce
+      as
+      (ApplicationExpression l (ApplicationExpression l (VariableExpression l op) x) y)
+  pure (ps, ts, InfixExpression l x op y)
 inferExpressionType ce as (LetExpression l bg e) = do
   (ps, as', bg') <- inferBindGroupTypes ce as bg
   (qs, t, e') <- inferExpressionType ce (as' ++ as) e
