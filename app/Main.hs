@@ -294,8 +294,7 @@ defaultSpecialTypes = do
   theChar <- supplyTypeName "Char"
   theString <- supplyTypeName "String"
   theInteger <- supplyTypeName "Integer"
-  theNum <- supplyTypeName "Num"
-  theFractional <- supplyTypeName "Fractional"
+  theRational <- supplyTypeName "Rational"
   return
     (SpecialTypes
      { specialTypesBool = boolDataType
@@ -308,6 +307,6 @@ defaultSpecialTypes = do
               (FunctionKind StarKind (FunctionKind StarKind StarKind)))
      , specialTypesInteger =
          ConstructorType (TypeConstructor theInteger StarKind)
-     , specialTypesNum = theNum
-     , specialTypesFractional = theFractional
+     , specialTypesRational =
+         ConstructorType (TypeConstructor theRational StarKind)
      })

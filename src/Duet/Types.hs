@@ -57,8 +57,7 @@ data SpecialTypes i = SpecialTypes
   , specialTypesString     :: Type i
   , specialTypesFunction   :: Type i
   , specialTypesInteger    :: Type i
-  , specialTypesNum        :: i
-  , specialTypesFractional :: i
+  , specialTypesRational   :: Type i
   } deriving (Show)
 
 -- | Special built-in signatures.

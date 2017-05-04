@@ -400,13 +400,11 @@ inferLiteralType
 inferLiteralType specialTypes (CharacterLiteral _) =
   return ([], specialTypesChar specialTypes)
 inferLiteralType specialTypes (IntegerLiteral _) = do
-  v <- newVariableType StarKind
-  return ([IsIn (specialTypesNum specialTypes) [v]], v)
+  return ([], specialTypesInteger specialTypes)
 inferLiteralType specialTypes (StringLiteral _) =
   return ([], specialTypesString specialTypes)
 inferLiteralType specialTypes (RationalLiteral _) = do
-  v <- newVariableType StarKind
-  return ([IsIn (specialTypesFractional specialTypes) [v]], v)
+  return ([], specialTypesRational specialTypes)
 
 inferPattern
   :: MonadThrow m
@@ -448,7 +446,7 @@ substituteConstr
 substituteConstr subs i =
   case find
          (\case
-            TypeSignature i' ty -> i' == i)
+            TypeSignature i' _ -> i' == i)
          subs of
     Just sig -> pure sig
     _ ->
@@ -456,7 +454,7 @@ substituteConstr subs i =
         (NameNotInConScope
            (filter
               (\case
-                 TypeSignature (ConstructorName _ i') ty -> True
+                 TypeSignature (ConstructorName _ _) _ -> True
                  _ -> False)
               subs)
            i)
