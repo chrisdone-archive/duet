@@ -225,6 +225,64 @@ renameExpression subs = go
             pat_exps
 
 --------------------------------------------------------------------------------
+-- Name things based on the existing name
+
+nameExpression :: Applicative f => (i -> f j) -> Expression i l -> f (Expression j l)
+nameExpression f = go
+  where
+    go =
+      \case
+        VariableExpression l i -> VariableExpression l <$> f i
+        ConstructorExpression l i -> ConstructorExpression l <$> f i
+        LiteralExpression l i -> pure (LiteralExpression l i)
+        ApplicationExpression l f x -> ApplicationExpression l <$> go f <*> go x
+        InfixExpression l x i y -> InfixExpression l <$> go x <*> f i <*> go y
+        LetExpression l bindGroup e -> do
+          LetExpression l <$> nameBindGroup f bindGroup <*> go e
+        LambdaExpression l alt -> LambdaExpression l <$> nameAlt f alt
+        IfExpression l x y z -> IfExpression l <$> go x <*> go y <*> go z
+        CaseExpression l e pat_exps ->
+          CaseExpression l <$> go e <*>
+          traverse
+            (\(pat, ex) -> (,) <$> namePattern f pat <*> nameExpression f ex)
+            pat_exps
+
+nameBindGroup
+  :: Applicative f
+  => (i -> f j) -> BindGroup i l -> f (BindGroup j l)
+nameBindGroup f (BindGroup explicit implicit) = do
+  BindGroup <$> nameExplicit f explicit <*>
+    traverse (traverse (nameImplicit f)) implicit
+
+nameExplicit :: Applicative f => t2 -> t1 -> f [t]
+nameExplicit _ _ = pure [] -- TODO:
+
+nameImplicit
+  :: (Applicative f)
+  => (i -> f j) -> ImplicitlyTypedBinding i t -> f (ImplicitlyTypedBinding j t)
+nameImplicit f (ImplicitlyTypedBinding l id' alts) =
+  ImplicitlyTypedBinding l <$> f id' <*> traverse (nameAlt f) alts
+
+nameAlt
+  :: (Applicative f)
+  => (i -> f j) -> Alternative i l -> f (Alternative j l)
+nameAlt f (Alternative l ps e) =
+  Alternative l <$> traverse (namePattern f) ps <*> nameExpression f e
+
+namePattern
+  :: Applicative f
+  => (i -> f j) -> Pattern i l -> f (Pattern j l)
+namePattern f =
+  \case
+    VariablePattern l i -> VariablePattern l <$> f i
+    WildcardPattern l -> pure (WildcardPattern l)
+    AsPattern l i p -> do
+      AsPattern l <$> f i <*> namePattern f p
+    LiteralPattern l0 l -> pure (LiteralPattern l0 l)
+    ConstructorPattern l i pats ->
+      ConstructorPattern l <$> f i <*> traverse (namePattern f) pats
+
+--------------------------------------------------------------------------------
 -- Provide a substitution
 
 substituteVar :: MonadThrow m => Map Identifier Name -> Identifier -> m Name
