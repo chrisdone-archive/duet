@@ -45,20 +45,28 @@ main = do
           Left e -> Left (show e)
           Right bindings ->
             case runCatch
-                   (do (specialSigs, specialTypes, bindGroups, signatures) <-
+                   (do ((specialSigs, specialTypes, bindGroups, signatures, subs), supplies0) <-
                          runTypeChecker bindings
                        e0 <- lookupNameByString "main" bindGroups
+                       e0_regressed <- regress e0
                        fix
-                         (\go e xs -> do
-                            e' <-
+                         (\go supplies (e, e_regressed) xs -> do
+                            e'_regressed <-
                               expandSeq1 specialSigs signatures e bindGroups
-                            if fmap (const ()) e' /= fmap (const ()) e && length xs < 100
-                              then go e' (e : xs)
+                            if fmap (const ()) e'_regressed /=
+                               fmap (const ()) e_regressed &&
+                               length xs < 100
+                              then do (e', supplies') <-
+                                        runSupplyT
+                                          (renameExpression subs e'_regressed)
+                                          supplies
+                                      go supplies' (e', e'_regressed) (e_regressed : xs)
                               else pure
                                      ( specialTypes
                                      , bindGroups
-                                     , reverse (e : xs)))
-                         e0
+                                     , reverse (e_regressed : xs)))
+                         supplies0
+                         (e0, e0_regressed)
                          []) of
               Left e -> Left (displayException e)
               Right v -> Right v
@@ -106,14 +114,15 @@ main = do
           case result of
             (Left err) -> err
             (Right (specialTypes, bindGroups, _)) ->
-              unlines (map
-                         (\(BindGroup _ is) ->
-                            concatMap
-                              (concatMap
-                                 (printImplicitlyTypedBinding
-                                    (\x -> Just (specialTypes, fmap (const ()) x))))
-                              is)
-                         bindGroups))
+              unlines
+                (map
+                   (\(BindGroup _ is) ->
+                      concatMap
+                        (concatMap
+                           (printImplicitlyTypedBinding
+                              (\x -> Just (specialTypes, fmap (const ()) x))))
+                        is)
+                   bindGroups))
        processedSource)
   pure ()
 
@@ -194,7 +203,7 @@ displayRenamerException _specialTypes =
 runTypeChecker
   :: (MonadThrow m, MonadCatch m)
   => [Decl FieldType Identifier l]
-  -> m (SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name])
+  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name], Map Identifier Name), [Int])
 runTypeChecker decls =
   let bindings =
         mapMaybe
@@ -208,16 +217,14 @@ runTypeChecker decls =
              DataDecl d -> Just d
              _ -> Nothing)
           decls
-  in evalSupplyT
+  in runSupplyT
        (do specialTypes <- defaultSpecialTypes
            theShow <- supplyTypeName "Show"
-           (specialSigs, signatures0) <- builtInSignatures theShow specialTypes
+           (specialSigs, signatures0) <- builtInSignatures specialTypes
            sigs' <-
              renameDataTypes specialTypes types >>=
              mapM (dataTypeSignatures specialTypes)
            let signatures = signatures0 ++ concat sigs'
-           {-liftIO
-             (mapM_ (putStrLn . printTypeSignature specialTypes) (concat sigs'))-}
            let signatureSubs =
                  M.fromList
                    (map
@@ -226,18 +233,17 @@ runTypeChecker decls =
                            ValueName _ ident -> (Identifier ident, name)
                            ConstructorName _ ident -> (Identifier ident, name))
                       signatures)
-           (renamedBindings, _) <-
+           (renamedBindings, subs) <-
              catch
                (renameBindGroups signatureSubs bindings)
-               (\e ->
-                  throwM (RenamerException specialTypes e))
+               (\e -> throwM (RenamerException specialTypes e))
            env <- setupEnv theShow specialTypes mempty
            bindGroups <-
              lift
                (catch
                   (typeCheckModule env signatures specialTypes renamedBindings)
                   (throwM . InferException specialTypes))
-           return (specialSigs, specialTypes, bindGroups, signatures))
+           return (specialSigs, specialTypes, bindGroups, signatures, subs))
        [0 ..]
 
 --------------------------------------------------------------------------------
@@ -253,6 +259,10 @@ defaultSource =
      \  case l of\n\
      \    Nil -> nil\n\
      \    Cons x xs -> cons x (foldr cons nil xs)\n\
+     \foldl = \\f z l ->\n\
+     \  case l of\n\
+     \    Nil -> z\n\
+     \    Cons x xs -> foldl f (f z x) xs\n\
      \map = \\f xs ->\n\
      \  case xs of\n\
      \    Nil -> Nil\n\
@@ -269,20 +279,24 @@ defaultSource =
 -- | Built-in pre-defined functions.
 builtInSignatures
   :: MonadThrow m
-  => Name -> SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Name Name])
-builtInSignatures theShow specialTypes = do
+  => SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Name Name])
+builtInSignatures specialTypes = do
   the_show <- supplyValueName "show"
   sigs <- dataTypeSignatures specialTypes (specialTypesBool specialTypes)
   the_True <- getSig "True" sigs
   the_False <- getSig "False" sigs
   return
-    ( SpecialSigs {specialSigsTrue = the_True, specialSigsFalse = the_False}
+    ( SpecialSigs
+      { specialSigsTrue = the_True
+      , specialSigsFalse = the_False
+      , specialSigsShow = the_show
+      }
     , [ TypeSignature
           the_show
           (Forall
              [StarKind]
              (Qualified
-                [IsIn theShow [(GenericType 0)]]
+                [IsIn (specialTypesShow specialTypes) [(GenericType 0)]]
                 (GenericType 0 --> specialTypesString specialTypes)))
       ] ++
       sigs)
@@ -299,6 +313,7 @@ builtInSignatures theShow specialTypes = do
                 sigs) of
         Nothing -> throwM (BuiltinNotDefined ident)
         Just sig -> pure sig
+
     (-->) :: Type Name -> Type Name -> Type Name
     a --> b =
       ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
@@ -380,8 +395,8 @@ defaultSpecialTypes = do
   theChar <- supplyTypeName "Char"
   theString <- supplyTypeName "String"
   theInteger <- supplyTypeName "Integer"
-  theNum <- supplyTypeName "Num"
-  theFractional <- supplyTypeName "Fractional"
+  theRational <- supplyTypeName "Rational"
+  theShow <- supplyTypeName "Show"
   return
     (SpecialTypes
      { specialTypesBool = boolDataType
@@ -394,6 +409,7 @@ defaultSpecialTypes = do
               (FunctionKind StarKind (FunctionKind StarKind StarKind)))
      , specialTypesInteger =
          ConstructorType (TypeConstructor theInteger StarKind)
-     , specialTypesNum = theNum
-     , specialTypesFractional = theFractional
+     , specialTypesRational =
+         ConstructorType (TypeConstructor theRational StarKind)
+     , specialTypesShow = theShow
      })
