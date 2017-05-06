@@ -184,31 +184,23 @@ fargs e = go e []
 -- Substitutions
 
 substitute :: Eq i => i -> Expression i l -> Expression i l -> Expression i l
-substitute i arg =
-  \case
-    VariableExpression l i'
-      | i == i' -> arg
-      | otherwise -> VariableExpression l i'
-    x@ConstructorExpression {} -> x
-    ApplicationExpression l f x ->
-      ApplicationExpression l (substitute i arg f) (substitute i arg x)
-    InfixExpression l x f y ->
-      InfixExpression l (substitute i arg x) f (substitute i arg y)
-    LetExpression {} -> error "let expressions unsupported."
-    CaseExpression l e cases ->
-      CaseExpression
-        l
-        (substitute i arg e)
-        (map (\(pat, e') -> (pat, substitute i arg e')) cases)
-    IfExpression l a b c ->
-      IfExpression
-        l
-        (substitute i arg a)
-        (substitute i arg b)
-        (substitute i arg c)
-    x@LiteralExpression {} -> x
-    LambdaExpression l (Alternative l' args body) ->
-      LambdaExpression l (Alternative l' args (substitute i arg body))
+substitute i arg = go
+  where
+    go =
+      \case
+        VariableExpression l i'
+          | i == i' -> arg
+          | otherwise -> VariableExpression l i'
+        x@ConstructorExpression {} -> x
+        ApplicationExpression l f x -> ApplicationExpression l (go f) (go x)
+        InfixExpression l x f y -> InfixExpression l (go x) f (go y)
+        LetExpression {} -> error "let expressions unsupported."
+        CaseExpression l e cases ->
+          CaseExpression l (go e) (map (\(pat, e') -> (pat, go e')) cases)
+        IfExpression l a b c -> IfExpression l (go a) (go b) (go c)
+        x@LiteralExpression {} -> x
+        LambdaExpression l (Alternative l' args body) ->
+          LambdaExpression l (Alternative l' args (go body))
 
 --------------------------------------------------------------------------------
 -- Lookups
