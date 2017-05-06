@@ -3,8 +3,9 @@ foldr0 = \f z l ->
   case l of
     Nil -> z
     Cons x xs -> f x (foldr0 f z xs)
-foldl0 = \f z l ->
+foldl = \f z l ->
   case l of
     Nil -> z
-    Cons x xs -> foldl0 f (f z x) xs
+    Cons x xs -> foldl f (f z x) xs
+list = (Cons True (Cons False Nil))
 main = foldl (\xs x -> Cons x xs) Nil list

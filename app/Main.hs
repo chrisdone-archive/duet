@@ -38,7 +38,7 @@ main = do
         Left e -> error (show e)
         Right decls -> do
           putStrLn "-- Type checking ..."
-          ((specialSigs, specialTypes, bindGroups, signatures, subs), supplies0) <-
+          ((specialSigs, specialTypes, bindGroups, signatures, subs), supplies) <-
             runTypeChecker decls
           putStrLn "-- Source: "
           mapM_
@@ -53,21 +53,20 @@ main = do
           putStrLn "-- Stepping ..."
           catch
             (do e0 <- lookupNameByString i bindGroups
-                fix
-                  (\loopy supplies e -> do
-                     when
-                       (True || cleanExpression e)
-                       (putStrLn (printExpression (const Nothing) e))
-                     (e', supplies') <-
-                       runSupplyT
-                         (expandSeq1 specialSigs signatures e bindGroups subs)
-                         supplies
-                     if fmap (const ()) e' /= fmap (const ()) e
-                       then do
-                         loopy supplies' e'
-                       else pure ())
-                  supplies0
-                  e0)
+                evalSupplyT
+                  (fix
+                     (\loopy e -> do
+                        when
+                          (True || cleanExpression e)
+                          (liftIO (putStrLn (printExpression (const Nothing) e)))
+                        e' <-
+                          expandSeq1 specialSigs signatures e bindGroups subs
+                        if fmap (const ()) e' /= fmap (const ()) e
+                          then do
+                            renameExpression subs e' >>= loopy
+                          else pure ())
+                     e0)
+                  supplies)
             (\e ->
                liftIO
                  (do putStrLn (displayStepperException specialTypes e)

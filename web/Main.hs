@@ -45,29 +45,29 @@ main = do
           Left e -> Left (show e)
           Right bindings ->
             case runCatch
-                   (do ((specialSigs, specialTypes, bindGroups, signatures, subs), supplies0) <-
+                   (do ((specialSigs, specialTypes, bindGroups, signatures, subs), supplies) <-
                          runTypeChecker bindings
                        e0 <- lookupNameByString "main" bindGroups
-                       e0_regressed <- regress e0
-                       fix
-                         (\go supplies (e, e_regressed) xs -> do
-                            e'_regressed <-
-                              expandSeq1 specialSigs signatures e bindGroups
-                            if fmap (const ()) e'_regressed /=
-                               fmap (const ()) e_regressed &&
-                               length xs < 100
-                              then do (e', supplies') <-
-                                        runSupplyT
-                                          (renameExpression subs e'_regressed)
-                                          supplies
-                                      go supplies' (e', e'_regressed) (e_regressed : xs)
-                              else pure
-                                     ( specialTypes
-                                     , bindGroups
-                                     , reverse (e_regressed : xs)))
-                         supplies0
-                         (e0, e0_regressed)
-                         []) of
+                       evalSupplyT
+                         (fix
+                            (\go xs e -> do
+                               e' <-
+                                 expandSeq1
+                                   specialSigs
+                                   signatures
+                                   e
+                                   bindGroups
+                                   subs
+                               if fmap (const ()) e' /= fmap (const ()) e &&
+                                  length xs < 100
+                                 then renameExpression subs e' >>= go (e : xs)
+                                 else pure
+                                        ( specialTypes
+                                        , bindGroups
+                                        , reverse (e : xs)))
+                            []
+                            e0)
+                         supplies) of
               Left e -> Left (displayException e)
               Right v -> Right v
       processedSource =
@@ -281,7 +281,7 @@ builtInSignatures
   :: MonadThrow m
   => SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Name Name])
 builtInSignatures specialTypes = do
-  the_show <- supplyValueName "show"
+  the_show <- supplyValueName ("show"::Identifier)
   sigs <- dataTypeSignatures specialTypes (specialTypesBool specialTypes)
   the_True <- getSig "True" sigs
   the_False <- getSig "False" sigs

@@ -31,7 +31,7 @@ expandSeq1
   -> Map Identifier Name
   -> m (Expression Name (TypeSignature Name Location))
 expandSeq1 specialSigs signatures e b subs =
-  evalStateT (go e) False >>= renameExpression subs
+  evalStateT (go e) False
   where
     go =
       \case
