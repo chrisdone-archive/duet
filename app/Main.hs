@@ -53,25 +53,21 @@ main = do
           putStrLn "-- Stepping ..."
           catch
             (do e0 <- lookupNameByString i bindGroups
-                e0_regressed <- regress e0
                 fix
-                  (\loopy supplies (e, e_regressed) -> do
+                  (\loopy supplies e -> do
                      when
                        (True || cleanExpression e)
                        (putStrLn (printExpression (const Nothing) e))
-                     e'_regressed <-
-                       expandSeq1 specialSigs signatures e bindGroups
-                     if fmap (const ()) e'_regressed /=
-                        fmap (const ()) e_regressed
+                     (e', supplies') <-
+                       runSupplyT
+                         (expandSeq1 specialSigs signatures e bindGroups subs)
+                         supplies
+                     if fmap (const ()) e' /= fmap (const ()) e
                        then do
-                         (e', supplies') <-
-                           runSupplyT
-                             (renameExpression subs e'_regressed)
-                             supplies
-                         loopy supplies' (e', e'_regressed)
+                         loopy supplies' e'
                        else pure ())
                   supplies0
-                  (e0, e0_regressed))
+                  e0)
             (\e ->
                liftIO
                  (do putStrLn (displayStepperException specialTypes e)
@@ -195,7 +191,7 @@ builtInSignatures
   :: MonadThrow m
   => SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Name Name])
 builtInSignatures specialTypes = do
-  the_show <- supplyValueName "show"
+  the_show <- supplyValueName ("show" :: Identifier)
   sigs <- dataTypeSignatures specialTypes (specialTypesBool specialTypes)
   the_True <- getSig "True" sigs
   the_False <- getSig "False" sigs

@@ -7,41 +7,31 @@
 
 module Duet.Stepper where
 
-import Control.Arrow
-import Control.Monad.Catch
-import Control.Monad.State
-import Data.List
-import Data.Maybe
-import Data.Semigroup
-import Duet.Renamer
-import Duet.Types
-
---------------------------------------------------------------------------------
--- Name regression
-
-regress
-  :: MonadThrow m
-  => Expression Name l -> m (Expression Identifier l)
-regress =
-  nameExpression
-    (\case
-       ValueName _ i -> pure (Identifier i)
-       ConstructorName _ c -> pure (Identifier c)
-       n@TypeName {} -> throwM (TypeAtValueScope n)
-       n@ForallName {} -> throwM (TypeAtValueScope n))
+import           Control.Arrow
+import           Control.Monad.Catch
+import           Control.Monad.State
+import           Control.Monad.Supply
+import           Data.List
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
+import           Data.Maybe
+import           Data.Semigroup
+import           Duet.Renamer
+import           Duet.Types
 
 --------------------------------------------------------------------------------
 -- Expansion
 
 expandSeq1
-  :: MonadThrow m
+  :: (MonadThrow m, MonadSupply Int m)
   => SpecialSigs Name
   -> [TypeSignature Name Name]
   -> Expression Name (TypeSignature Name Location)
   -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
-  -> m (Expression Identifier (TypeSignature Name Location))
-expandSeq1 specialSigs signatures e b =
-  evalStateT (go e) False >>= regress
+  -> Map Identifier Name
+  -> m (Expression Name (TypeSignature Name Location))
+expandSeq1 specialSigs signatures e b subs =
+  evalStateT (go e) False >>= renameExpression subs
   where
     go =
       \case

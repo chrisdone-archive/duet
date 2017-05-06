@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -27,6 +28,20 @@ import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Duet.Infer
 import           Duet.Types
+
+class Identifiable i where
+  identifyValue :: MonadThrow m => i -> m Identifier
+
+instance Identifiable Identifier where
+  identifyValue = pure
+
+instance Identifiable Name where
+  identifyValue =
+    \case
+      ValueName _ i -> pure (Identifier i)
+      ConstructorName _ c -> pure (Identifier c)
+      n@TypeName {} -> throwM (TypeAtValueScope n)
+      n@ForallName {} -> throwM (TypeAtValueScope n)
 
 --------------------------------------------------------------------------------
 -- Data type renaming
@@ -121,9 +136,9 @@ renameField specialTypes typeConstructors vars name fe = do
 -- Value renaming
 
 renameBindGroups
-  :: (MonadSupply Int m, MonadThrow m)
+  :: (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i)
   => Map Identifier Name
-  -> [BindGroup Identifier l]
+  -> [BindGroup i l]
   -> m ([BindGroup Name l], Map Identifier Name)
 renameBindGroups subs groups = do
   subs' <-
@@ -133,9 +148,9 @@ renameBindGroups subs groups = do
   fmap (second mconcat . unzip) (mapM (renameBindGroup subs') groups)
 
 renameBindGroup
-  :: (MonadSupply Int m, MonadThrow m)
+  :: (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i)
   => Map Identifier Name
-  -> BindGroup Identifier l
+  -> BindGroup i l
   -> m (BindGroup Name l, Map Identifier Name)
 renameBindGroup subs (BindGroup explicit implicit) = do
   bindGroup' <-
@@ -144,52 +159,56 @@ renameBindGroup subs (BindGroup explicit implicit) = do
   pure (bindGroup', subs)
 
 getImplicitSubs
-  :: (MonadSupply Int m)
+  :: (MonadSupply Int m, Ord i, Identifiable i, MonadThrow m)
   => Map Identifier Name
-  -> [[ImplicitlyTypedBinding Identifier l]]
+  -> [[ImplicitlyTypedBinding i l]]
   -> m (Map Identifier Name)
 getImplicitSubs subs implicit =
   fmap
     ((<> subs) . M.fromList)
     (mapM
-       (\(ImplicitlyTypedBinding _ i _) -> fmap (i, ) (supplyValueName i))
+       (\(ImplicitlyTypedBinding _ i _) -> do
+          v <- identifyValue i
+          fmap (v, ) (supplyValueName i))
        (concat implicit))
 
 renameExplicit :: Applicative f => t2 -> t1 -> f [t]
 renameExplicit _ _ = pure [] -- TODO:
 
 renameImplicit
-  :: (MonadThrow m,MonadSupply Int m)
+  :: (MonadThrow m,MonadSupply Int m,Ord i, Identifiable i)
   => Map Identifier Name
-  -> ImplicitlyTypedBinding Identifier t
+  -> ImplicitlyTypedBinding i t
   -> m (ImplicitlyTypedBinding Name t)
 renameImplicit subs (ImplicitlyTypedBinding l id' alts) =
   do name <- substituteVar subs id'
      ImplicitlyTypedBinding l name <$> mapM (renameAlt subs) alts
 
 renameAlt
-  :: (MonadSupply Int m, MonadThrow m)
-  => Map Identifier Name -> Alternative Identifier l -> m (Alternative Name l)
+  :: (MonadSupply Int m, MonadThrow m, Ord i , Ord i, Identifiable i)
+  => Map Identifier Name -> Alternative i l -> m (Alternative Name l)
 renameAlt subs (Alternative l ps e) =
   do (ps', subs') <- runWriterT (mapM (renamePattern subs) ps)
      let subs'' = M.fromList subs' <> subs
      Alternative l <$> pure ps' <*> renameExpression subs'' e
 
 renamePattern
-  :: (MonadSupply Int m, MonadThrow m)
+  :: (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i)
   => Map Identifier Name
-  -> Pattern Identifier l
+  -> Pattern i l
   -> WriterT [(Identifier, Name)] m (Pattern Name l)
 renamePattern subs =
   \case
     VariablePattern l i -> do
       name <- lift (supplyValueName i)
-      tell [(i, name)]
+      v <- identifyValue i
+      tell [(v, name)]
       pure (VariablePattern l name)
     WildcardPattern l -> pure (WildcardPattern l)
     AsPattern l i p -> do
       name <- supplyValueName i
-      tell [(i, name)]
+      v <- identifyValue i
+      tell [(v, name)]
       AsPattern l name <$> renamePattern subs p
     LiteralPattern l0 l -> pure (LiteralPattern l0 l)
     ConstructorPattern l i pats ->
@@ -197,10 +216,11 @@ renamePattern subs =
       mapM (renamePattern subs) pats
 
 renameExpression
-  :: (MonadThrow m, MonadSupply Int m)
-  => Map Identifier Name -> Expression Identifier l -> m (Expression Name l)
+  :: forall i m l. (MonadThrow m, MonadSupply Int m , Ord i, Identifiable i)
+  => Map Identifier Name -> Expression i l -> m (Expression Name l)
 renameExpression subs = go
   where
+    go :: Expression i l -> m (Expression Name l)
     go =
       \case
         VariableExpression l i -> VariableExpression l <$> substituteVar subs i
@@ -225,84 +245,30 @@ renameExpression subs = go
             pat_exps
 
 --------------------------------------------------------------------------------
--- Name things based on the existing name
-
-nameExpression :: Applicative f => (i -> f j) -> Expression i l -> f (Expression j l)
-nameExpression f = go
-  where
-    go =
-      \case
-        VariableExpression l i -> VariableExpression l <$> f i
-        ConstructorExpression l i -> ConstructorExpression l <$> f i
-        LiteralExpression l i -> pure (LiteralExpression l i)
-        ApplicationExpression l f x -> ApplicationExpression l <$> go f <*> go x
-        InfixExpression l x i y -> InfixExpression l <$> go x <*> f i <*> go y
-        LetExpression l bindGroup e -> do
-          LetExpression l <$> nameBindGroup f bindGroup <*> go e
-        LambdaExpression l alt -> LambdaExpression l <$> nameAlt f alt
-        IfExpression l x y z -> IfExpression l <$> go x <*> go y <*> go z
-        CaseExpression l e pat_exps ->
-          CaseExpression l <$> go e <*>
-          traverse
-            (\(pat, ex) -> (,) <$> namePattern f pat <*> nameExpression f ex)
-            pat_exps
-
-nameBindGroup
-  :: Applicative f
-  => (i -> f j) -> BindGroup i l -> f (BindGroup j l)
-nameBindGroup f (BindGroup explicit implicit) = do
-  BindGroup <$> nameExplicit f explicit <*>
-    traverse (traverse (nameImplicit f)) implicit
-
-nameExplicit :: Applicative f => t2 -> t1 -> f [t]
-nameExplicit _ _ = pure [] -- TODO:
-
-nameImplicit
-  :: (Applicative f)
-  => (i -> f j) -> ImplicitlyTypedBinding i t -> f (ImplicitlyTypedBinding j t)
-nameImplicit f (ImplicitlyTypedBinding l id' alts) =
-  ImplicitlyTypedBinding l <$> f id' <*> traverse (nameAlt f) alts
-
-nameAlt
-  :: (Applicative f)
-  => (i -> f j) -> Alternative i l -> f (Alternative j l)
-nameAlt f (Alternative l ps e) =
-  Alternative l <$> traverse (namePattern f) ps <*> nameExpression f e
-
-namePattern
-  :: Applicative f
-  => (i -> f j) -> Pattern i l -> f (Pattern j l)
-namePattern f =
-  \case
-    VariablePattern l i -> VariablePattern l <$> f i
-    WildcardPattern l -> pure (WildcardPattern l)
-    AsPattern l i p -> do
-      AsPattern l <$> f i <*> namePattern f p
-    LiteralPattern l0 l -> pure (LiteralPattern l0 l)
-    ConstructorPattern l i pats ->
-      ConstructorPattern l <$> f i <*> traverse (namePattern f) pats
-
---------------------------------------------------------------------------------
 -- Provide a substitution
 
-substituteVar :: MonadThrow m => Map Identifier Name -> Identifier -> m Name
-substituteVar subs i =
-  case M.lookup i subs of
-    Just name@ValueName{} -> pure name
-    _ -> throwM (IdentifierNotInVarScope subs i)
+substituteVar :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
+substituteVar subs i0 =
+  do i <- identifyValue i0
+     case M.lookup i subs of
+       Just name@ValueName{} -> pure name
+       _ -> do s <- identifyValue i
+               throwM (IdentifierNotInVarScope subs s)
 
-substituteCons :: MonadThrow m => Map Identifier Name -> Identifier -> m Name
-substituteCons subs i =
-  case M.lookup i subs of
-    Just name@ConstructorName{} -> pure name
-    _ -> throwM (IdentifierNotInConScope subs i)
+substituteCons :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
+substituteCons subs i0 =
+  do i <- identifyValue i0
+     case M.lookup i subs of
+       Just name@ConstructorName{} -> pure name
+       _ -> do  throwM (IdentifierNotInConScope subs i)
 
 --------------------------------------------------------------------------------
 -- Provide a new name
 
-supplyValueName :: (MonadSupply Int m) => Identifier -> m Name
-supplyValueName (Identifier s) = do
+supplyValueName :: (MonadSupply Int m, Identifiable i, MonadThrow m) => i -> m Name
+supplyValueName s = do
   i <- supply
+  Identifier s <- identifyValue s
   return (ValueName i s)
 
 supplyConstructorName :: (MonadSupply Int m) => Identifier -> m Name
