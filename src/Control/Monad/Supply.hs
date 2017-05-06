@@ -18,7 +18,6 @@ module Control.Monad.Supply
 , evalSupply
 , runSupplyT
 , runSupply
-, supplies
 ) where
 
 import Control.Monad.Catch
@@ -72,10 +71,6 @@ instance (Monoid a) => Monoid (Supply s a) where
     x1 <- m1
     x2 <- m2
     return (x1 `mappend` x2)
-
--- | Get n supplies.
-supplies :: MonadSupply s m => Int -> m [s]
-supplies n = replicateM n supply
 
 evalSupplyT :: Monad m => SupplyT s m a -> [s] -> m a
 evalSupplyT (SupplyT s) = evalStateT s

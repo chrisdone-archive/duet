@@ -14,6 +14,7 @@ import           Control.Monad.Fix
 import           Control.Monad.Supply
 import           Control.Monad.Trans
 import           Data.List
+import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
 import qualified Data.Text.IO as T
@@ -37,7 +38,7 @@ main = do
         Left e -> error (show e)
         Right decls -> do
           putStrLn "-- Type checking ..."
-          (specialSigs, specialTypes, bindGroups, signatures) <-
+          ((specialSigs, specialTypes, bindGroups, signatures, subs), supplies0) <-
             runTypeChecker decls
           putStrLn "-- Source: "
           mapM_
@@ -51,16 +52,26 @@ main = do
             bindGroups
           putStrLn "-- Stepping ..."
           catch
-            (do e0 <- (lookupNameByString i bindGroups)
+            (do e0 <- lookupNameByString i bindGroups
+                e0_regressed <- regress e0
                 fix
-                  (\loopy e -> do
-                     when (cleanExpression e)
-                          (putStrLn (printExpression (const Nothing) e))
-                     e' <- expandSeq1 specialSigs signatures e bindGroups
-                     if fmap (const ()) e' /= fmap (const ()) e
-                       then loopy e'
+                  (\loopy supplies (e, e_regressed) -> do
+                     when
+                       (True || cleanExpression e)
+                       (putStrLn (printExpression (const Nothing) e))
+                     e'_regressed <-
+                       expandSeq1 specialSigs signatures e bindGroups
+                     if fmap (const ()) e'_regressed /=
+                        fmap (const ()) e_regressed
+                       then do
+                         (e', supplies') <-
+                           runSupplyT
+                             (renameExpression subs e'_regressed)
+                             supplies
+                         loopy supplies' (e', e'_regressed)
                        else pure ())
-                  e0)
+                  supplies0
+                  (e0, e0_regressed))
             (\e ->
                liftIO
                  (do putStrLn (displayStepperException specialTypes e)
@@ -129,7 +140,7 @@ displayRenamerException _specialTypes =
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
   => [Decl FieldType Identifier l]
-  -> m (SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name])
+  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name], Map Identifier Name), [Int])
 runTypeChecker decls =
   let bindings =
         mapMaybe
@@ -143,7 +154,7 @@ runTypeChecker decls =
              DataDecl d -> Just d
              _ -> Nothing)
           decls
-  in evalSupplyT
+  in runSupplyT
        (do specialTypes <- defaultSpecialTypes
            (specialSigs, signatures0) <- builtInSignatures specialTypes
            sigs' <-
@@ -160,7 +171,7 @@ runTypeChecker decls =
                            ValueName _ ident -> (Identifier ident, name)
                            ConstructorName _ ident -> (Identifier ident, name))
                       signatures)
-           (renamedBindings, _) <-
+           (renamedBindings, subs) <-
              catch
                (renameBindGroups signatureSubs bindings)
                (\e ->
@@ -176,7 +187,7 @@ runTypeChecker decls =
                      liftIO
                        (do putStrLn (displayInferException specialTypes e)
                            exitFailure)))
-           return (specialSigs, specialTypes, bindGroups, signatures))
+           return (specialSigs, specialTypes, bindGroups, signatures, subs))
        [0 ..]
 
 -- | Built-in pre-defined functions.

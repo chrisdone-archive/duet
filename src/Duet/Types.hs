@@ -97,6 +97,7 @@ data InferState = InferState
 data StepException
   = CouldntFindName !Name
   | CouldntFindNameByString !String
+  | TypeAtValueScope !Name
   deriving (Typeable, Show)
 instance Exception StepException
 

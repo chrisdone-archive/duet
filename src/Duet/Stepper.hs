@@ -13,7 +13,22 @@ import Control.Monad.State
 import Data.List
 import Data.Maybe
 import Data.Semigroup
+import Duet.Renamer
 import Duet.Types
+
+--------------------------------------------------------------------------------
+-- Name regression
+
+regress
+  :: MonadThrow m
+  => Expression Name l -> m (Expression Identifier l)
+regress =
+  nameExpression
+    (\case
+       ValueName _ i -> pure (Identifier i)
+       ConstructorName _ c -> pure (Identifier c)
+       n@TypeName {} -> throwM (TypeAtValueScope n)
+       n@ForallName {} -> throwM (TypeAtValueScope n))
 
 --------------------------------------------------------------------------------
 -- Expansion
@@ -24,13 +39,14 @@ expandSeq1
   -> [TypeSignature Name Name]
   -> Expression Name (TypeSignature Name Location)
   -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
-  -> m (Expression Name (TypeSignature Name Location))
-expandSeq1 specialSigs signatures e b = evalStateT (go e) False
+  -> m (Expression Identifier (TypeSignature Name Location))
+expandSeq1 specialSigs signatures e b =
+  evalStateT (go e) False >>= regress
   where
     go =
       \case
         e0
-          | (ce@(ConstructorExpression l n), args) <- fargs e0 -> do
+          | (ce@(ConstructorExpression l _), args) <- fargs e0 -> do
             args' <- mapM go args
             pure (foldl (ApplicationExpression l) ce args')
           | otherwise -> do
@@ -38,9 +54,9 @@ expandSeq1 specialSigs signatures e b = evalStateT (go e) False
             if alreadyExpanded
               then pure e0
               else do
-                e <- lift (expandWhnf specialSigs signatures e0 b)
+                e' <- lift (expandWhnf specialSigs signatures e0 b)
                 put True
-                pure e
+                pure e'
 
 expandWhnf
   :: MonadThrow m
