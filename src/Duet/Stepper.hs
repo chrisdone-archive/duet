@@ -2,7 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
--- |
+
+-- | The substitution stepper.
 
 module Duet.Stepper where
 
@@ -13,6 +14,9 @@ import Data.List
 import Data.Maybe
 import Data.Semigroup
 import Duet.Types
+
+--------------------------------------------------------------------------------
+-- Expansion
 
 expandSeq1
   :: MonadThrow m
@@ -123,6 +127,9 @@ expandAt is specialSigs signatures e0 b = go [0] e0
                    pure (foldl (ApplicationExpression l) ce args')
                  | otherwise -> pure e
 
+--------------------------------------------------------------------------------
+-- Pattern matching
+
 match
   :: (Show l, Show i, Eq i)
   => Expression i l -> Pattern i l -> Result (Match i l)
@@ -147,6 +154,9 @@ match = go [0]
               else Fail
           | otherwise -> OK (NeedsMoreEval is)
 
+--------------------------------------------------------------------------------
+-- Expression manipulators
+
 -- | Flatten an application f x y into (f,[x,y]).
 fargs :: Expression i l -> (Expression i l, [(Expression i l)])
 fargs e = go e []
@@ -154,7 +164,10 @@ fargs e = go e []
     go (ApplicationExpression _ f x) args = go f (x : args)
     go f args = (f, args)
 
-substitute :: Name -> Expression Name l -> Expression Name l -> Expression Name l
+--------------------------------------------------------------------------------
+-- Substitutions
+
+substitute :: Eq i => i -> Expression i l -> Expression i l -> Expression i l
 substitute i arg =
   \case
     VariableExpression l i'
@@ -180,6 +193,9 @@ substitute i arg =
     x@LiteralExpression {} -> x
     LambdaExpression l (Alternative l' args body) ->
       LambdaExpression l (Alternative l' args (substitute i arg body))
+
+--------------------------------------------------------------------------------
+-- Lookups
 
 lookupName
   :: (MonadThrow m)
