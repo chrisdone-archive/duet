@@ -59,7 +59,7 @@ printPattern :: Printable i => Pattern i l -> [Char]
 printPattern =
   \case
     VariablePattern _ i -> printIdentifier i
-    WildcardPattern _ -> "_"
+    WildcardPattern _ s -> s
     AsPattern _ i p -> printIdentifier i ++ "@" ++ printPattern p
     LiteralPattern _ l -> printLiteral l
     ConstructorPattern _ i pats ->
@@ -71,6 +71,7 @@ printExpression getType e =
     (case e of
        LiteralExpression _ l -> printLiteral l
        VariableExpression _ i -> printIdentifier i
+       ConstantExpression _ i -> printIdentifier i
        ConstructorExpression _ i -> printIdentifier i
        CaseExpression _ e alts ->
          "case " ++
@@ -119,6 +120,7 @@ printPat =
     inner =
       \case
         VariablePattern _ i -> printit i
+        WildcardPattern _ s -> s
         ConstructorPattern _ i ps
           | null ps -> printit i
           | otherwise ->

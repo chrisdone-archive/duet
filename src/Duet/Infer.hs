@@ -418,9 +418,9 @@ inferPattern signatures = go
             , []
             , [TypeSignature i (toScheme v)]
             , v)
-        go (WildcardPattern l) = do
+        go (WildcardPattern l s) = do
           v <- newVariableType StarKind
-          return (WildcardPattern (TypeSignature l (toScheme v)), [], [], v)
+          return (WildcardPattern (TypeSignature l (toScheme v)) s, [], [], v)
         go (AsPattern l i pat) = do
           (pat', ps, as, t) <- go pat
           return (AsPattern (TypeSignature l (toScheme t)) i pat', ps, (TypeSignature i (toScheme t)) : as, t)
@@ -616,6 +616,9 @@ inferExpressionType _ as (VariableExpression l i) = do
   qualified@(Qualified ps t) <- freshInst sc
   let scheme = (Forall [] qualified)
   return (ps, t, VariableExpression (TypeSignature l scheme) i)
+inferExpressionType _ _ (ConstantExpression l i) = do
+  t <- newVariableType StarKind
+  return ([], t, (ConstantExpression (TypeSignature l (toScheme t)) i))
 inferExpressionType _ as (ConstructorExpression l i) = do
   sc <- lookupName i as
   qualified@(Qualified ps t) <- freshInst sc

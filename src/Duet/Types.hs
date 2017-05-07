@@ -249,6 +249,7 @@ data Location = Location
 data Expression i l
   = VariableExpression l i
   | ConstructorExpression l i
+  | ConstantExpression l Identifier
   | LiteralExpression l Literal
   | ApplicationExpression l (Expression i l) (Expression i l)
   | InfixExpression l (Expression i l) i (Expression i l)
@@ -262,7 +263,7 @@ expressionLabel :: Expression i l -> l
 expressionLabel =
   \case
      LiteralExpression l _ -> l
-     -- ConstantExpression l _ -> l
+     ConstantExpression l _ -> l
      ApplicationExpression l _ _ -> l
      InfixExpression l _ _ _ -> l
      LetExpression l _ _ -> l
@@ -275,7 +276,7 @@ expressionLabel =
 -- | A pattern match.
 data Pattern i l
   = VariablePattern l i
-  | WildcardPattern l
+  | WildcardPattern l String
   | AsPattern l i (Pattern i l)
   | LiteralPattern l Literal
   | ConstructorPattern l i [Pattern i l]

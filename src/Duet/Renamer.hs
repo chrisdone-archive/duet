@@ -204,7 +204,7 @@ renamePattern subs =
       v <- identifyValue i
       tell [(v, name)]
       pure (VariablePattern l name)
-    WildcardPattern l -> pure (WildcardPattern l)
+    WildcardPattern l s -> pure (WildcardPattern l s)
     AsPattern l i p -> do
       name <- supplyValueName i
       v <- identifyValue i
@@ -225,6 +225,7 @@ renameExpression subs = go
       \case
         VariableExpression l i -> VariableExpression l <$> substituteVar subs i
         ConstructorExpression l i -> ConstructorExpression l <$> substituteCons subs i
+        ConstantExpression l i -> pure (ConstantExpression l i)
         LiteralExpression l i -> pure (LiteralExpression l i)
         ApplicationExpression l f x -> ApplicationExpression l <$> go f <*> go x
         InfixExpression l x i y ->

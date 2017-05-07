@@ -39,6 +39,9 @@ expandSeq1 specialSigs signatures e b subs =
           | (ce@(ConstructorExpression l _), args) <- fargs e0 -> do
             args' <- mapM go args
             pure (foldl (ApplicationExpression l) ce args')
+          | (ce@(ConstantExpression l _), args) <- fargs e0 -> do
+            args' <- mapM go args
+            pure (foldl (ApplicationExpression l) ce args')
           | otherwise -> do
             alreadyExpanded <- get
             if alreadyExpanded
@@ -67,6 +70,7 @@ expandWhnf specialSigs signatures e b = go e
             Just {} -> pure x
         LiteralExpression {} -> return x
         ConstructorExpression {} -> return x
+        ConstantExpression {} -> return x
         ApplicationExpression l func arg ->
           case func of
             LambdaExpression l0 (Alternative l' params body) ->
@@ -143,7 +147,7 @@ match = go [0]
   where
     go is val pat =
       case pat of
-        WildcardPattern _ -> OK (Success [])
+        WildcardPattern _ _ -> OK (Success [])
         VariablePattern _ i -> OK (Success [(i, val)])
         ConstructorPattern _ i pats
           | (constructor@ConstructorExpression {}, args) <- fargs val ->
@@ -182,6 +186,7 @@ substitute i arg = go
           | i == i' -> arg
           | otherwise -> VariableExpression l i'
         x@ConstructorExpression {} -> x
+        x@ConstantExpression {} -> x
         ApplicationExpression l f x -> ApplicationExpression l (go f) (go x)
         InfixExpression l x f y -> InfixExpression l (go x) f (go y)
         LetExpression {} -> error "let expressions unsupported."

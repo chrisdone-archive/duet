@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE RankNTypes #-}
@@ -192,7 +193,9 @@ altPat = varp <|> constructorParser
               (\case
                  Variable i -> Just i
                  _ -> Nothing)
-          pure (VariablePattern loc (Identifier (T.unpack v)))
+          pure (if T.isPrefixOf "_" v
+                   then WildcardPattern loc (T.unpack v)
+                   else VariablePattern loc (Identifier (T.unpack v)))
     unaryConstructor = go <?> "unary constructor (e.g. Nothing)"
       where
         go = do
@@ -370,7 +373,9 @@ varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
           (\case
              Variable i -> Just i
              _ -> Nothing)
-      pure (VariableExpression loc (Identifier (T.unpack v)))
+      pure (if T.isPrefixOf "_" v
+               then ConstantExpression loc (Identifier (T.unpack v))
+               else VariableExpression loc (Identifier (T.unpack v)))
 
 ifParser :: TokenParser (Expression Identifier Location)
 ifParser = go <?> "if expression (e.g. ‘if p then x else y’)"
