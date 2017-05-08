@@ -88,7 +88,7 @@ list = (Cons True (Cons False Nil))
 ```
 
  ```haskell
-main = foldr _f _nil list
+> main = foldr _f _nil list
 foldr _f _nil list
 _f True (foldr _f _nil (Cons False Nil))
 _f True (_f False (foldr _f _nil Nil))
@@ -96,7 +96,7 @@ _f True (_f False _nil)
 ```
 
  ```haskell
-main = foldl _f _nil list
+> main = foldl _f _nil list
 foldl _f _nil list
 foldl _f (_f _nil True) (Cons False Nil)
 foldl _f (_f (_f _nil True) False) Nil
