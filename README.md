@@ -5,9 +5,9 @@ the developer and the computer.
 
 ## Web releases
 
-* [Alpha](http://chrisdone.com/toys/duet-alpha/)
-* [Beta](http://chrisdone.com/toys/duet-beta/)
-* [Gamma](http://chrisdone.com/toys/duet-gamma/)
+* [Gamma](http://chrisdone.com/toys/duet-gamma/) - May 2nd 2017
+* [Beta](http://chrisdone.com/toys/duet-beta/) - April 30th 2017
+* [Alpha](http://chrisdone.com/toys/duet-alpha/) - April 27th 2017
 
 ## Command-line usage
 
