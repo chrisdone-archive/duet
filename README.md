@@ -102,3 +102,10 @@ foldl _f (_f _nil True) (Cons False Nil)
 foldl _f (_f (_f _nil True) False) Nil
 _f (_f _nil True) False
 ```
+
+## Type-classes
+
+What remains to implement is a resolver of instances. An expression
+like `show 'a'` currently has type `Show Char => String` in my
+AST. Now I have to insert instance dictionaries as arguments (or
+annotations) to expressions, and then type-classes will be good to go.
