@@ -9,6 +9,33 @@ the developer and the computer.
 * [Beta](http://chrisdone.com/toys/duet-beta/)
 * [Gamma](http://chrisdone.com/toys/duet-gamma/)
 
+## Command-line usage
+
+Run with the file and function to evaluate:
+
+    $ stack exec duet File.hs main
+
+Output looks like:
+
+``` haskell
+$ stack exec duet examples/X.hs main
+-- Type checking ...
+Just :: forall g0. g0 -> Maybe g0
+Nothing :: forall g0. Maybe g0
+Left :: forall g0 g1. g0 -> Either g0 g1
+Right :: forall g0 g1. g1 -> Either g0 g1
+X :: Either (Maybe Bool) Bool -> X
+Y :: Y
+-- Source:
+compose = (\f g x -> ((f :: g4 -> g5) (((g :: g3 -> g4) (x :: g3) :: g4)) :: g5) :: (g4 -> g5) -> (g3 -> g4) -> g3 -> g5)
+id = (\x -> (x :: g7) :: g7 -> g7)
+and = (\x y -> (if (x :: Bool) then (if (y :: Bool) then (True :: Bool) else (False :: Bool) :: Bool) else (False :: Bool) :: Bool) :: Bool -> Bool -> Bool)
+main = ((Just :: String -> Maybe String) ((if (True :: Bool) then ("ok!" :: String) else ("nope" :: String) :: String)) :: Maybe String)
+-- Stepping ...
+Just (if True then "ok!" else "nope")
+Just "ok!"
+```
+
 ## Looks like
 
 The below is a pretty comprehensive example of supported syntax so
