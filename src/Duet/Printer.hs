@@ -105,7 +105,7 @@ printExpression getType e =
       case getType (expressionLabel e) of
         (Nothing) -> x
         (Just (specialTypes, TypeSignature _ ty)) ->
-          "(" ++ x ++ " :: " ++ printScheme specialTypes ty ++ ")"
+          "((" ++ x ++ ") :: " ++ printScheme specialTypes ty ++ ")"
 
 printPat :: Printable i => Pattern i l -> String
 printPat =
