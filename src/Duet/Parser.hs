@@ -17,9 +17,11 @@ import           Duet.Tokenizer
 import           Duet.Types
 import           Text.Parsec hiding (satisfy, anyToken)
 
+parseFile :: FilePath -> IO (Either ParseError [Decl FieldType Identifier Location])
 parseFile fp = do t <- T.readFile fp
                   return (parseText fp t)
 
+demo :: Num a => String -> Either ParseError a
 demo (i :: String) =
   runParser
     (do d <-
@@ -136,7 +138,13 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
       _ <- equalToken Equals
       e <- expParser
       _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
-      pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [Alternative loc [] e])
+      pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [makeAlt loc e])
+
+makeAlt :: l -> Expression i l -> Alternative i l
+makeAlt loc e =
+  case e of
+    LambdaExpression _ alt -> alt
+    _ -> Alternative loc [] e
 
 case' :: TokenParser (Expression Identifier Location)
 case' = do

@@ -696,7 +696,32 @@ inferAltType ce as (Alternative l pats e) = do
   let makeArrow :: Type Name -> Type Name -> Type Name
       a `makeArrow` b = ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
   let scheme = (Forall [] (Qualified (ps ++ qs) (foldr makeArrow t ts)))
-  return (ps ++ qs, foldr makeArrow t ts, Alternative (TypeSignature l scheme) pats' e')
+  return (ps ++ qs, foldr makeArrow t ts, makeAlt l scheme pats' e')
+
+-- | During parsing, we parse
+-- f = \x -> x
+-- as
+-- f x = x
+-- After type-checking, we expand the lambda out again:
+--
+-- f = \x -> x
+--
+-- But type-checked and generalized.
+makeAlt
+  :: a
+  -> Scheme i1
+  -> [Pattern i (TypeSignature i1 a)]
+  -> Expression i (TypeSignature i1 a)
+  -> Alternative i (TypeSignature i1 a)
+makeAlt l scheme pats' e' =
+  if null pats'
+    then Alternative (TypeSignature l scheme) pats' e'
+    else Alternative
+           (TypeSignature l scheme)
+           []
+           (LambdaExpression
+              (TypeSignature l scheme)
+              (Alternative (TypeSignature l scheme) pats' e'))
 
 inferAltTypes
   :: MonadThrow m
