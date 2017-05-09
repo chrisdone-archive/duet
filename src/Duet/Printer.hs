@@ -6,6 +6,7 @@
 
 module Duet.Printer where
 
+import Data.Char
 import Data.List
 import Duet.Types
 import Text.Printf
@@ -105,7 +106,11 @@ printExpression getType e =
       case getType (expressionLabel e) of
         (Nothing) -> x
         (Just (specialTypes, TypeSignature _ ty)) ->
-          "((" ++ x ++ ") :: " ++ printScheme specialTypes ty ++ ")"
+          "(" ++ parens x ++ " :: " ++ printScheme specialTypes ty ++ ")"
+          where parens k =
+                  if any isSpace k
+                    then "(" ++ k ++ ")"
+                    else k
 
 printPat :: Printable i => Pattern i l -> String
 printPat =
