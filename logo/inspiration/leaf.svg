@@ -1,0 +1,71 @@
+<?xml version="1.0"?><svg width="610" height="610" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+ <defs>
+  <clipPath id="clipPath4516" clipPathUnits="userSpaceOnUse">
+   <rect transform="matrix(0.999746,-0.0225494,0.0225494,0.999746,0,0)" y="780.64514" x="294.93369" height="240.87065" width="357.86496" id="rect4518" fill="#ff0000"/>
+  </clipPath>
+  <clipPath id="clipPath4271" clipPathUnits="userSpaceOnUse">
+   <rect id="rect4273" width="350.45737" height="235.88478" x="221.38594" y="804.24225" transform="matrix(0.999942,0.0107639,-0.0107639,0.999942,0,0)" fill="#000000"/>
+  </clipPath>
+  <clipPath id="clipPath4093" clipPathUnits="userSpaceOnUse">
+   <rect transform="matrix(0.999992,0.0038715,-0.0038715,0.999992,0,0)" y="758.67517" x="218.90018" height="318.39673" width="357.38409" id="rect4095" fill="#ffffff"/>
+  </clipPath>
+  <clipPath id="clipPath3156" clipPathUnits="userSpaceOnUse">
+   <rect transform="matrix(0.937429,0.348176,-0.348176,0.937429,0,0)" id="rect3158" width="506.46136" height="37.480064" x="8.208093" y="0.063516" fill="#162d50"/>
+  </clipPath>
+  <clipPath id="clipPath4093-3" clipPathUnits="userSpaceOnUse">
+   <rect transform="matrix(0.999992,0.0038715,-0.0038715,0.999992,0,0)" y="758.67517" x="218.90018" height="318.39673" width="357.38409" id="rect4095-8" fill="#ffffff"/>
+  </clipPath>
+  <clipPath id="clipPath3156-2" clipPathUnits="userSpaceOnUse">
+   <rect transform="matrix(0.937429,0.348176,-0.348176,0.937429,0,0)" id="rect3158-1" width="506.46136" height="37.480064" x="8.208093" y="0.063516" fill="#162d50"/>
+  </clipPath>
+  <clipPath clipPathUnits="userSpaceOnUse" id="clipPath7049">
+   <rect id="rect7051" width="287.43179" height="279.02737" x="257.32095" y="793.52008" transform="matrix(0.999996,0.00272778,-0.00272778,0.999996,0,0)" fill="#ffffff"/>
+  </clipPath>
+  <clipPath id="clipPath3932" clipPathUnits="userSpaceOnUse">
+   <rect y="977.09009" x="276.36502" height="30.005573" width="79.477402" id="rect3934" fill-rule="nonzero" fill="#e20a17"/>
+  </clipPath>
+  <clipPath id="clipPath4355" clipPathUnits="userSpaceOnUse">
+   <rect id="rect4357" width="301.42856" height="195" x="0" y="857.54077" fill-rule="nonzero" fill="#ffffff"/>
+  </clipPath>
+  <clipPath clipPathUnits="userSpaceOnUse" id="clipPath5334">
+   <rect id="rect5336" width="301.42856" height="195" x="0" y="0.060481" fill-rule="nonzero" fill="#ffffff"/>
+  </clipPath>
+  <clipPath clipPathUnits="userSpaceOnUse" id="clipPath5338">
+   <rect id="rect5340" width="301.42856" height="195" x="0" y="857.54077" fill-rule="nonzero" fill="#ffffff"/>
+  </clipPath>
+  <clipPath clipPathUnits="userSpaceOnUse" id="clipPath5342">
+   <rect id="rect5344" width="301.42856" height="195" x="0" y="857.54077" fill-rule="nonzero" fill="#ffffff"/>
+  </clipPath>
+  <clipPath clipPathUnits="userSpaceOnUse" id="clipPath5348">
+   <rect id="rect5350" width="63.986946" height="41.394402" x="448.11798" y="815.73981" transform="matrix(0.887416,0.46097,-0.46097,0.887416,0,0)" fill-rule="nonzero" fill="#ffffff"/>
+  </clipPath>
+  <clipPath clipPathUnits="userSpaceOnUse" id="clipPath11531">
+   <path d="m572.54187,241.738144a176.020081,176.020081 0 1 1 -352.040222,0a176.020081,176.020081 0 1 1 352.040222,0z" id="path11533" fill-rule="nonzero" fill="#44aa00"/>
+  </clipPath>
+  <clipPath clipPathUnits="userSpaceOnUse" id="clipPath11535">
+   <path d="m699.285706,672.932312a40.714291,40.714291 0 1 1 -81.428589,0a40.714291,40.714291 0 1 1 81.428589,0z" id="path11537" fill-rule="nonzero" fill="#44aa00"/>
+  </clipPath>
+  <clipPath clipPathUnits="userSpaceOnUse" id="clipPath11541">
+   <path clip-path="url(#clipPath11535)" d="m572.54187,241.738144a176.020081,176.020081 0 1 1 -352.040222,0a176.020081,176.020081 0 1 1 352.040222,0z" id="path11543" fill-rule="nonzero" fill="#44aa00"/>
+  </clipPath>
+  <clipPath clipPathUnits="userSpaceOnUse" id="clipPath11545">
+   <path clip-path="url(#clipPath11535)" d="m572.54187,241.738144a176.020081,176.020081 0 1 1 -352.040222,0a176.020081,176.020081 0 1 1 352.040222,0z" id="path11547" fill-rule="nonzero" fill="#44aa00"/>
+  </clipPath>
+  <clipPath clipPathUnits="userSpaceOnUse" id="clipPath11549">
+   <path clip-path="url(#clipPath11535)" d="m699.285706,672.932312a40.714291,40.714291 0 1 1 -81.428589,0a40.714291,40.714291 0 1 1 81.428589,0z" id="path11551" fill-rule="nonzero" fill="#44aa00"/>
+  </clipPath>
+  <pattern patternUnits="userSpaceOnUse" width="353.96574" height="298.2363" patternTransform="translate(408.017, 528.512)" id="pattern6232">
+   <image y="102.812" x="-40.616985" id="image6230" height="201.80798" width="300.8605" xlink:href="file:///home/ceyhan/Ceyhan/Tara/inkscape_pasted_image_20100507_140817.png" transform="matrix(0.930052, -0.367427, 0.367427, 0.930052, 0, 0)"/>
+  </pattern>
+ </defs>
+ <metadata id="metadata7">image/svg+xml</metadata>
+ <g>
+  <title>Layer 1</title>
+  <g id="layer4" display="inline">
+   <rect id="rect5840" width="600" height="600" x="5" y="4.999997" ry="1.538054" stroke-dashoffset="0" stroke-miterlimit="4" stroke-linejoin="round" stroke-width="10" fill="none"/>
+   <g id="g5458" transform="matrix(7.68575, 0, 0, 7.68575, -2642.04, -1071.31)">
+    <path id="path4670" d="m365.19458,192.734283c0,0 -7.476135,-17.297363 23.214294,-28.571411c17.5,-6.428589 17.142853,-16.428589 17.142853,-16.428589c0,0 3.571411,45 -26.428589,49.285736c0,0 -8.131775,1.805389 -12.361786,-1.098816c0,0 -4.230011,8.649445 -3.661804,12.816315l-3.914337,0.189392c0,0 6.565979,-17.235718 9.596466,-19.256012l-3.587097,3.063385z" fill="#5fbf00"/>
+   </g>
+  </g>
+ </g>
+</svg>
