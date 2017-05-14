@@ -28,6 +28,7 @@ library
     Duet.Printer
     Duet.Tokenizer
     Duet.Renamer
+    Duet.Resolver
     Duet.Stepper
     Control.Monad.Supply
 

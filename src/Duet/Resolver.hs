@@ -1,3 +1,6 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+
 -- | Resolve type-class instances.
 
 module Duet.Resolver where
@@ -17,4 +20,13 @@ resolveImplicit
   :: Monad m
   => ImplicitlyTypedBinding Name (TypeSignature Name l)
   -> m (ImplicitlyTypedBinding Name (TypeSignature Name l))
-resolveImplicit (ImplicitlyTypedBinding l name alt) = undefined
+resolveImplicit (ImplicitlyTypedBinding l name alts) =
+  ImplicitlyTypedBinding l name <$> mapM resolveAlt alts
+
+resolveAlt (Alternative l ps e) =
+  Alternative l <$> pure ps <*> resolveExp e
+
+resolveExp = go
+  where go = \case
+                e@(ApplicationExpression l f x) -> pure e
+                e -> pure e

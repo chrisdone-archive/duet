@@ -22,6 +22,7 @@ import           Duet.Infer
 import           Duet.Parser
 import           Duet.Printer
 import           Duet.Renamer
+import           Duet.Resolver
 import           Duet.Stepper
 import           Duet.Tokenizer
 import           Duet.Types
@@ -58,7 +59,7 @@ main = do
                      (\loopy e -> do
                         when
                           (True || cleanExpression e)
-                          (liftIO (putStrLn (printExpression (const Nothing) e)))
+                          (liftIO (putStrLn (printExpression (\x -> Just (specialTypes, fmap (const ()) x)) {-(const Nothing)-} e)))
                         e' <-
                           expandSeq1 specialSigs signatures e bindGroups subs
                         if fmap (const ()) e' /= fmap (const ()) e
@@ -174,7 +175,7 @@ runTypeChecker decls =
                     (do putStrLn (displayRenamerException specialTypes e)
                         exitFailure))
            env <- setupEnv specialTypes mempty
-           bindGroups <-
+           bindGroups0 <-
              lift
                (catch
                   (typeCheckModule env signatures specialTypes renamedBindings)
@@ -182,6 +183,7 @@ runTypeChecker decls =
                      liftIO
                        (do putStrLn (displayInferException specialTypes e)
                            exitFailure)))
+           bindGroups <- mapM resolveBindGroup bindGroups0
            return (specialSigs, specialTypes, bindGroups, signatures, subs))
        [0 ..]
 
