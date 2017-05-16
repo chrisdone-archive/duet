@@ -35,44 +35,50 @@ main = do
   case args of
     [file, i] -> do
       text <- T.readFile file
-      case parseText file text of
-        Left e -> error (show e)
-        Right decls -> do
-          putStrLn "-- Type checking ..."
-          ((specialSigs, specialTypes, bindGroups, signatures, subs), supplies) <-
-            runTypeChecker decls
-          putStrLn "-- Source: "
-          mapM_
-            (\(BindGroup _ is) ->
-               mapM_
-                 (mapM_
-                    (putStrLn .
-                     printImplicitlyTypedBinding
-                       (\x -> Just (specialTypes, fmap (const ()) x))))
-                 is)
-            bindGroups
-          putStrLn "-- Stepping ..."
-          catch
-            (do e0 <- lookupNameByString i bindGroups
-                evalSupplyT
-                  (fix
-                     (\loopy e -> do
-                        when
-                          (True || cleanExpression e)
-                          (liftIO (putStrLn (printExpression (\x -> Just (specialTypes, fmap (const ()) x)) {-(const Nothing)-} e)))
-                        e' <-
-                          expandSeq1 specialSigs signatures e bindGroups subs
-                        if fmap (const ()) e' /= fmap (const ()) e
-                          then do
-                            renameExpression subs e' >>= loopy
-                          else pure ())
-                     e0)
-                  supplies)
-            (\e ->
-               liftIO
-                 (do putStrLn (displayStepperException specialTypes e)
-                     exitFailure))
+      compileStepText "<interactive>" i text
     _ -> error "usage: duet <file>"
+
+compileStepText file i text =
+  case parseText file text of
+    Left e -> error (show e)
+    Right decls -> do
+      putStrLn "-- Type checking ..."
+      ((specialSigs, specialTypes, bindGroups, signatures, subs), supplies) <-
+        runTypeChecker decls
+      putStrLn "-- Source: "
+      mapM_
+        (\(BindGroup _ is) ->
+           mapM_
+             (mapM_
+                (putStrLn .
+                 printImplicitlyTypedBinding
+                   (\x -> Just (specialTypes, fmap (const ()) x))))
+             is)
+        bindGroups
+      putStrLn "-- Stepping ..."
+      catch
+        (do e0 <- lookupNameByString i bindGroups
+            evalSupplyT
+              (fix
+                 (\loopy e -> do
+                    when
+                      (True || cleanExpression e)
+                      (liftIO
+                         (putStrLn
+                            (printExpression
+                               (\x -> Just (specialTypes, fmap (const ()) x))
+                               e))) {-(const Nothing)-}
+                    e' <- expandSeq1 specialSigs signatures e bindGroups subs
+                    if fmap (const ()) e' /= fmap (const ()) e
+                      then do
+                        renameExpression subs e' >>= loopy
+                      else pure ())
+                 e0)
+              supplies)
+        (\e ->
+           liftIO
+             (do putStrLn (displayStepperException specialTypes e)
+                 exitFailure))
 
 --------------------------------------------------------------------------------
 -- Clean expressions
