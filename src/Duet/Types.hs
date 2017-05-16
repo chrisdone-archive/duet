@@ -9,7 +9,6 @@ module Duet.Types where
 
 import Control.Monad.Catch
 import Control.Monad.State
-import Data.Function
 import Data.Map.Strict (Map)
 import Data.Semigroup
 import Data.String
@@ -122,6 +121,11 @@ data ReadException
   | UndefinedSuperclass
   deriving (Show, Typeable)
 instance Exception ReadException
+
+data ResolveException =
+  NoInstanceFor (Predicate Name)
+  deriving (Show, Typeable)
+instance Exception ResolveException
 
 -- | A type error.
 data InferException
@@ -283,6 +287,7 @@ data Pattern i l
 --  | LazyPattern Pattern
   deriving (Show , Eq , Functor, Traversable, Foldable)
 
+patternLabel :: Pattern t t1 -> t1
 patternLabel (VariablePattern loc _) = loc
 patternLabel (ConstructorPattern loc _ _) = loc
 
@@ -293,24 +298,23 @@ data Literal
   | StringLiteral String
   deriving (Show , Eq)
 
--- | A class environment.
-data ClassEnvironment i = ClassEnvironment
-  { classEnvironmentClasses :: !(Map i (Class i))
-  -- , classEnvironmentDefaults :: ![Type]--Disabling for now because
-  -- I don't understand how it works.
+-- | A class.
+data Class i l = Class
+  { classTypeVariables :: ![TypeVariable i]
+  , classSuperclasses :: ![Predicate i]
+  , classInstances :: ![Instance i l]
+  , className :: i
   } deriving (Show)
 
-instance (Ord i) => Monoid (ClassEnvironment i) where
-  mempty = ClassEnvironment mempty
-  mappend x y =
-    ClassEnvironment
-      (on (<>) classEnvironmentClasses x y)
+-- | Class instance.
+data Instance i l = Instance
+  { instancePredicate :: !(Qualified i (Predicate i))
+  , instanceDictionary :: !(Dictionary i l)
+  } deriving (Show)
 
--- | A class.
-data Class i = Class
-  { classTypeVariables :: ![TypeVariable i]
-  , classPredicates :: ![Predicate i]
-  , classQualifiedPredicates :: ![Qualified i (Predicate i)]
+-- | A dictionary for a class.
+data Dictionary i l = Dictionary
+  { dictionaryMethods :: Map i (Alternative i l)
   } deriving (Show)
 
 -- | A type constructor.

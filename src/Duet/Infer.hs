@@ -15,12 +15,12 @@ module Duet.Infer
   -- * Type checker
   -- $type-checker
     typeCheckModule
+  , byInst
   , InferException(..)
   -- * Setting up
   , addClass
   , addInstance
   , SpecialTypes(..)
-  , ClassEnvironment(..)
   , ReadException(..)
   -- * Printers
   -- , printTypeSignature
@@ -48,6 +48,7 @@ module Duet.Infer
 import           Control.Monad.Catch
 import           Control.Monad.State
 import           Data.List
+import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
 import           Duet.Types
@@ -71,7 +72,7 @@ import           Duet.Types
 -- Throws 'InferException' in case of a type error.
 typeCheckModule
   :: MonadThrow m
-  => ClassEnvironment Name -- ^ Set of defined type-classes.
+  => Map Name (Class Name l) -- ^ Set of defined type-classes.
   -> [(TypeSignature Name Name)] -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
   -> SpecialTypes Name -- ^ Special types that Haskell uses for pattern matching and literals.
   -> [BindGroup Name l] -- ^ Bindings in the module.
@@ -144,7 +145,7 @@ newVariableType k =
 
 inferExplicitlyTypedBindingType
   :: MonadThrow m
-  => ClassEnvironment Name
+  => Map Name (Class Name l)
   -> [TypeSignature Name Name]
   -> (ExplicitlyTypedBinding Name l)
   -> InferT m ([Predicate Name], ExplicitlyTypedBinding Name (TypeSignature Name l))
@@ -167,7 +168,7 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding identifier sc alts
 
 inferImplicitlyTypedBindingsTypes
   :: MonadThrow m
-  => ClassEnvironment Name
+  => Map Name (Class Name l)
   -> [(TypeSignature Name Name)]
   -> [ImplicitlyTypedBinding Name l]
   -> InferT m ([Predicate Name], [(TypeSignature Name Name)], [ImplicitlyTypedBinding Name (TypeSignature Name l)])
@@ -217,7 +218,7 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
 
 inferBindGroupTypes
   :: MonadThrow m
-  => ClassEnvironment Name
+  => Map Name (Class Name l)
   -> [(TypeSignature Name Name)]
   -> (BindGroup Name l)
   -> InferT m ([Predicate Name], [(TypeSignature Name Name)], BindGroup Name (TypeSignature Name l))
@@ -230,8 +231,8 @@ inferBindGroupTypes ce as (BindGroup es iss) = do
 
 inferSequenceTypes0
   :: Monad m
-  => (ClassEnvironment Name -> [(TypeSignature Name Name)] -> [bg l] -> InferT m ([Predicate Name], [(TypeSignature Name Name)], [bg (TypeSignature Name l)]))
-  -> ClassEnvironment Name
+  => (Map Name (Class Name l) -> [(TypeSignature Name Name)] -> [bg l] -> InferT m ([Predicate Name], [(TypeSignature Name Name)], [bg (TypeSignature Name l)]))
+  -> Map Name (Class Name l)
   -> [(TypeSignature Name Name)]
   -> [[bg l]]
   -> InferT m ([Predicate Name], [(TypeSignature Name Name)], [[bg (TypeSignature Name l)]])
@@ -243,8 +244,8 @@ inferSequenceTypes0 ti ce as (bs:bss) = do
 
 inferSequenceTypes
   :: Monad m
-  => (ClassEnvironment Name -> [(TypeSignature Name Name)] -> bg l -> InferT m ([Predicate Name], [(TypeSignature Name Name)], bg (TypeSignature Name l)))
-  -> ClassEnvironment Name
+  => (Map Name (Class Name l) -> [(TypeSignature Name Name)] -> bg l -> InferT m ([Predicate Name], [(TypeSignature Name Name)], bg (TypeSignature Name l)))
+  -> Map Name (Class Name l)
   -> [(TypeSignature Name Name)]
   -> [bg l]
   -> InferT m ([Predicate Name], [(TypeSignature Name Name)], [bg (TypeSignature Name l)])
@@ -480,31 +481,28 @@ lift' m (IsIn i ts) (IsIn i' ts')
   | i == i' = m ts ts'
   | otherwise = throwM ClassMismatch
 
-lookupClassTypeVariables :: ClassEnvironment Name -> Name -> [TypeVariable Name]
+lookupClassTypeVariables :: Map Name (Class Name l) -> Name -> [TypeVariable Name]
 lookupClassTypeVariables ce i =
   fromMaybe
     []
-    (fmap classTypeVariables (M.lookup i (classEnvironmentClasses ce)))
+    (fmap classTypeVariables (M.lookup i ce))
 
-lookupClassSuperclasses :: ClassEnvironment Name -> Name -> [Predicate Name]
-lookupClassSuperclasses ce i = maybe [] classPredicates (M.lookup i (classEnvironmentClasses ce))
+lookupClassSuperclasses :: Map Name (Class Name l) -> Name -> [Predicate Name]
+lookupClassSuperclasses ce i = maybe [] classSuperclasses (M.lookup i ce)
 
-lookupClassInstances :: ClassEnvironment Name -> Name -> [Qualified Name (Predicate Name)]
+lookupClassInstances :: Map Name (Class Name l) -> Name -> [Instance Name l]
 lookupClassInstances ce i =
-  maybe [] classQualifiedPredicates (M.lookup i (classEnvironmentClasses ce))
+  maybe [] classInstances (M.lookup i ce)
 
 defined :: Maybe a -> Bool
 defined (Just _) = True
 defined Nothing = False
 
-modify0 :: ClassEnvironment Name -> Name -> Class Name -> ClassEnvironment Name
-modify0 ce i c =
-  ce {classEnvironmentClasses = M.insert i c (classEnvironmentClasses ce)}
 
 -- | Add a class to the environment. Example:
 --
 -- @
--- env <- addClass (Name \"Num\") [TypeVariable (Name \"n\") StarKind] [] mempty
+-- env <- addClass (Name l \"Num\") [TypeVariable (Name \"n\") StarKind] [] mempty
 -- @
 --
 -- Throws 'ReadException' in the case of error.
@@ -513,13 +511,13 @@ addClass
   => Name
   -> [TypeVariable Name]
   -> [Predicate Name]
-  -> ClassEnvironment Name
-  -> m (ClassEnvironment Name)
+  -> Map Name (Class Name l)
+  -> m (Map Name (Class Name l))
 addClass i vs ps ce
-  | defined (M.lookup i (classEnvironmentClasses ce)) = throwM ClassAlreadyDefined
-  | any (not . defined . flip M.lookup (classEnvironmentClasses ce) . predHead) ps =
+  | defined (M.lookup i ce) = throwM ClassAlreadyDefined
+  | any (not . defined . flip M.lookup ce . predHead) ps =
     throwM UndefinedSuperclass
-  | otherwise = return (modify0 ce i (Class vs ps []))
+  | otherwise = return (M.insert i (Class vs ps [] i) ce)
 
 -- | Add an instance of a class. Example:
 --
@@ -530,34 +528,38 @@ addClass i vs ps ce
 -- Throws 'ReadException' in the case of error.
 addInstance
   :: MonadThrow m
-  => [Predicate Name] -> Predicate Name -> ClassEnvironment Name -> m (ClassEnvironment Name)
+  => [Predicate Name] -> Predicate Name -> Map Name (Class Name l) -> m (Map Name (Class Name l))
 addInstance ps p@(IsIn i _) ce
-  | not (defined (M.lookup i (classEnvironmentClasses ce))) =
-    throwM NoSuchClassForInstance
+  | not (defined (M.lookup i ce)) = throwM NoSuchClassForInstance
   | any (overlap p) qs = throwM OverlappingInstance
-  | otherwise = return (modify0 ce i c)
+  | otherwise = return (M.insert i c ce)
   where
     its = lookupClassInstances ce i
-    qs = [q | (Qualified _ q) <- its]
-    c = (Class (lookupClassTypeVariables ce i) (lookupClassSuperclasses ce i) (Qualified ps p : its))
+    qs = [q | Instance (Qualified _ q) _ <- its]
+    c =
+      (Class
+         (lookupClassTypeVariables ce i)
+         (lookupClassSuperclasses ce i)
+         (Instance (Qualified ps p) (Dictionary mempty) : its)
+         i)
 
 overlap :: Predicate Name -> Predicate Name -> Bool
 overlap p q = defined (unifyPredicates p q)
 
-bySuper :: ClassEnvironment Name -> Predicate Name -> [Predicate Name]
+bySuper :: Map Name (Class Name l) -> Predicate Name -> [Predicate Name]
 bySuper ce p@(IsIn i ts) = p : concat (map (bySuper ce) supers)
   where
     supers = map (substitutePredicate substitutions) (lookupClassSuperclasses ce i)
     substitutions = zipWith Substitution (lookupClassTypeVariables ce i) ts
 
-byInst :: ClassEnvironment Name -> Predicate Name -> Maybe [Predicate Name]
+byInst :: Map Name (Class Name l) -> Predicate Name -> Maybe [Predicate Name]
 byInst ce p@(IsIn i _) = msum [tryInst it | it <- lookupClassInstances ce i]
   where
-    tryInst (Qualified ps h) = do
+    tryInst (Instance (Qualified ps h) _) = do
       u <- oneWayMatchPredicate h p
       Just (map (substitutePredicate u) ps)
 
-entail :: ClassEnvironment Name -> [Predicate Name] -> Predicate Name -> Bool
+entail :: Map Name (Class Name l) -> [Predicate Name] -> Predicate Name -> Bool
 entail ce ps p =
   any (p `elem`) (map (bySuper ce) ps) ||
   case byInst ce p of
@@ -572,13 +574,13 @@ simplify ent = loop []
       | ent (rs ++ ps) p = loop rs ps
       | otherwise = loop (p : rs) ps
 
-reduce :: ClassEnvironment Name -> [Predicate Name] -> [Predicate Name]
+reduce :: Map Name (Class Name l) -> [Predicate Name] -> [Predicate Name]
 reduce ce = simplify (scEntail ce) . elimTauts ce
 
-elimTauts :: ClassEnvironment Name -> [Predicate Name] -> [Predicate Name]
+elimTauts :: Map Name (Class Name l) -> [Predicate Name] -> [Predicate Name]
 elimTauts ce ps = [p | p <- ps, not (entail ce [] p)]
 
-scEntail :: ClassEnvironment Name -> [Predicate Name] -> Predicate Name -> Bool
+scEntail :: Map Name (Class Name l) -> [Predicate Name] -> Predicate Name -> Bool
 scEntail ce ps p = any (p `elem`) (map (bySuper ce) ps)
 
 quantify :: [TypeVariable Name] -> Qualified Name (Type Name) -> Scheme Name
@@ -607,7 +609,7 @@ merge s1 s2 =
 
 inferExpressionType
   :: MonadThrow m
-  => ClassEnvironment Name
+  => Map Name (Class Name l)
   -> [(TypeSignature Name Name)]
   -> (Expression Name l)
   -> InferT m ([Predicate Name], Type Name, Expression Name (TypeSignature Name l))
@@ -685,7 +687,7 @@ inferExpressionType ce as (CaseExpression l e branches) = do
 
 inferAltType
   :: MonadThrow m
-  => ClassEnvironment Name
+  => Map Name (Class Name l)
   -> [(TypeSignature Name Name)]
   -> Alternative Name l
   -> InferT m ([Predicate Name], Type Name, Alternative Name (TypeSignature Name l))
@@ -725,7 +727,7 @@ makeAlt l scheme pats' e' =
 
 inferAltTypes
   :: MonadThrow m
-  => ClassEnvironment Name
+  => Map Name (Class Name l)
   -> [(TypeSignature Name Name)]
   -> [Alternative Name l]
   -> Type Name
@@ -740,14 +742,14 @@ inferAltTypes ce as alts t = do
 
 split
   :: MonadThrow m
-  => ClassEnvironment Name -> [TypeVariable Name] -> [TypeVariable Name] -> [Predicate Name] -> m ([Predicate Name], [Predicate Name])
+  => Map Name (Class Name l) -> [TypeVariable Name] -> [TypeVariable Name] -> [Predicate Name] -> m ([Predicate Name], [Predicate Name])
 split ce fs gs ps = do
   let ps' = reduce ce ps
       (ds, rs) = partition (all (`elem` fs) . getPredicateTypeVariables) ps'
   rs' <- defaultedPredicates ce (fs ++ gs) rs
   return (ds, rs \\ rs')
 
-candidates :: ClassEnvironment Name -> Ambiguity Name -> [Type Name]
+candidates :: Map Name (Class Name l) -> Ambiguity Name -> [Type Name]
 candidates ce (Ambiguity v qs) =
   [ t'
   | let is = [i | IsIn i _ <- qs]
@@ -764,7 +766,7 @@ candidates ce (Ambiguity v qs) =
 
 withDefaults
   :: MonadThrow m
-  => String->([Ambiguity Name] -> [Type Name] -> a) -> ClassEnvironment Name -> [TypeVariable Name] -> [Predicate Name] -> m a
+  => String->([Ambiguity Name] -> [Type Name] -> a) -> Map Name (Class Name l) -> [TypeVariable Name] -> [Predicate Name] -> m a
 withDefaults _label f ce vs ps
   | any null tss = throwM (AmbiguousInstance vps)
   | otherwise = do
@@ -777,12 +779,12 @@ withDefaults _label f ce vs ps
 
 defaultedPredicates
   :: MonadThrow m
-  => ClassEnvironment Name -> [TypeVariable Name] -> [Predicate Name] -> m [Predicate Name]
+  => Map Name (Class Name l) -> [TypeVariable Name] -> [Predicate Name] -> m [Predicate Name]
 defaultedPredicates = withDefaults "defaultedPredicates" (\vps _ -> concat (map ambiguityPredicates vps))
 
 defaultSubst
   :: MonadThrow m
-  => ClassEnvironment Name -> [TypeVariable Name] -> [Predicate Name] -> m [Substitution Name]
+  => Map Name (Class Name l) -> [TypeVariable Name] -> [Predicate Name] -> m [Substitution Name]
 defaultSubst = withDefaults "defaultSubst" (\vps ts -> zipWith Substitution (map ambiguityTypeVariable vps) ts)
 
 -- extSubst

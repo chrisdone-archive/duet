@@ -18,7 +18,7 @@ library
     parsec,
     text
   ghc-options:
-    -Wall -O2
+    -Wall -O0
   default-language:
     Haskell2010
   exposed-modules:

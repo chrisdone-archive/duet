@@ -17,6 +17,7 @@ import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
+import           Data.Text (Text)
 import qualified Data.Text.IO as T
 import           Duet.Infer
 import           Duet.Parser
@@ -38,14 +39,16 @@ main = do
       compileStepText "<interactive>" i text
     _ -> error "usage: duet <file>"
 
+
+compileStepText :: String -> String -> Text -> IO ()
 compileStepText file i text =
   case parseText file text of
     Left e -> error (show e)
     Right decls -> do
       putStrLn "-- Type checking ..."
-      ((specialSigs, specialTypes, bindGroups, signatures, subs), supplies) <-
+      ((specialSigs, specialTypes, bindGroups, signatures, subs, env), supplies) <-
         runTypeChecker decls
-      putStrLn "-- Source: "
+      putStrLn "-- Source:"
       mapM_
         (\(BindGroup _ is) ->
            mapM_
@@ -55,19 +58,29 @@ compileStepText file i text =
                    (\x -> Just (specialTypes, fmap (const ()) x))))
              is)
         bindGroups
+      bindGroups' <-
+        catch (evalSupplyT (mapM (resolveBindGroup env specialTypes) bindGroups) supplies)
+              (\e -> liftIO (do putStrLn (displayResolveException specialTypes e)
+                                exitFailure))
+      putStrLn "-- Source with instance dictionaries inserted:"
+      mapM_
+        (\(BindGroup _ is) ->
+           mapM_
+             (mapM_
+                (putStrLn .
+                 printImplicitlyTypedBinding
+                   (const Nothing)))
+             is)
+        bindGroups'
       putStrLn "-- Stepping ..."
       catch
-        (do e0 <- lookupNameByString i bindGroups
+        (do e0 <- lookupNameByString i bindGroups'
             evalSupplyT
               (fix
                  (\loopy e -> do
                     when
                       (True || cleanExpression e)
-                      (liftIO
-                         (putStrLn
-                            (printExpression
-                               (\x -> Just (specialTypes, fmap (const ()) x))
-                               e))) {-(const Nothing)-}
+                      (liftIO (putStrLn (printExpression (const Nothing) e)))
                     e' <- expandSeq1 specialSigs signatures e bindGroups subs
                     if fmap (const ()) e' /= fmap (const ()) e
                       then do
@@ -94,6 +107,11 @@ cleanExpression =
     ApplicationExpression _ f x -> cleanExpression f && cleanExpression x
     _ -> True
 
+displayResolveException :: SpecialTypes Name -> ResolveException -> String
+displayResolveException specialTypes =
+  \case
+    NoInstanceFor p -> "No instance for " ++ printPredicate specialTypes p
+
 displayStepperException :: a -> StepException -> String
 displayStepperException _ =
   \case
@@ -102,6 +120,7 @@ displayStepperException _ =
       "The starter variable isn't defined: " ++
       curlyQuotes n ++
       "\nPlease define a variable called " ++ curlyQuotes n
+    TypeAtValueScope k -> "Type at value scope: " ++ show k
 
 displayInferException :: SpecialTypes Name -> InferException -> [Char]
 displayInferException specialTypes =
@@ -124,7 +143,7 @@ displayInferException specialTypes =
       "Couldn't infer which instances to use for\n" ++
       unlines
         (map
-           (\(Ambiguity t ps) ->
+           (\(Ambiguity _ ps) ->
               intercalate ", " (map (printPredicate specialTypes) ps))
            ambiguities)
     e -> show e
@@ -138,11 +157,12 @@ displayRenamerException _specialTypes =
     IdentifierNotInConScope scope name ->
       "Not in constructors scope " ++ curlyQuotes (printit name) ++ "\n" ++
       "Current scope:\n\n" ++ unlines (map printit (M.elems scope))
+    e -> show e
 
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
   => [Decl FieldType Identifier l]
-  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name], Map Identifier Name), [Int])
+  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name], Map Identifier Name, Map Name (Class Name l)), [Int])
 runTypeChecker decls =
   let bindings =
         mapMaybe
@@ -189,8 +209,7 @@ runTypeChecker decls =
                      liftIO
                        (do putStrLn (displayInferException specialTypes e)
                            exitFailure)))
-           bindGroups <- mapM resolveBindGroup bindGroups0
-           return (specialSigs, specialTypes, bindGroups, signatures, subs))
+           return (specialSigs, specialTypes, bindGroups0, signatures, subs, env))
        [0 ..]
 
 -- | Built-in pre-defined functions.
@@ -279,16 +298,18 @@ dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
 setupEnv
   :: MonadThrow m
   => SpecialTypes Name
-  -> ClassEnvironment Name
-  -> SupplyT Int m (ClassEnvironment Name)
+  -> Map Name (Class Name l)
+  -> SupplyT Int m (Map Name (Class Name l))
 setupEnv specialTypes env = do
-  theNum <- supplyTypeName "Num"
-  num_a <- supplyTypeName "a"
+  show_a <- supplyTypeName "a"
   let update =
-        addClass theNum [TypeVariable num_a StarKind] [] >=>
-        addInstance [] (IsIn theNum [specialTypesInteger specialTypes]) >=>
-        addInstance [] (IsIn theNum [specialTypesRational specialTypes])
+        addClass theShow [TypeVariable show_a StarKind] [] >=>
+        addInstance [] (IsIn theShow [specialTypesInteger specialTypes]) >=>
+        addInstance [] (IsIn theShow [specialTypesRational specialTypes]) >=>
+        addInstance [] (IsIn theShow [specialTypesChar specialTypes])
   lift (update env)
+  where
+    theShow = specialTypesShow specialTypes
 
 --------------------------------------------------------------------------------
 -- Built-in types
