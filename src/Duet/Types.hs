@@ -151,8 +151,8 @@ data TypeSignature i a = TypeSignature
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 data BindGroup i l = BindGroup
-  { bindGroupExplicitlyTypedBindings :: ![(ExplicitlyTypedBinding i l)]
-  , bindGroupImplicitlyTypedBindings :: ![[(ImplicitlyTypedBinding i l)]]
+  { bindGroupExplicitlyTypedBindings :: ![ExplicitlyTypedBinding i l]
+  , bindGroupImplicitlyTypedBindings :: ![[ImplicitlyTypedBinding i l]]
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 data ImplicitlyTypedBinding i l = ImplicitlyTypedBinding
