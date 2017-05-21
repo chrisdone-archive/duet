@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE Strict #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
@@ -10,7 +11,6 @@ module Duet.Resolver where
 
 import           Control.Monad.Catch
 import           Control.Monad.Supply
-import           Data.List
 import           Data.Map.Strict (Map)
 import           Data.Maybe
 
@@ -21,7 +21,7 @@ import           Duet.Types
 
 resolveBindGroup
   :: (MonadSupply Int m, MonadThrow m)
-  => Map Name (Class Name l)
+  => Map Name (Class Name (TypeSignature Name l))
   -> SpecialTypes Name
   -> BindGroup Name (TypeSignature Name l)
   -> m (BindGroup Name (TypeSignature Name l))
@@ -32,7 +32,7 @@ resolveBindGroup classes specialTypes (BindGroup explicit implicit) = do
 
 resolveImplicit
   :: (MonadSupply Int m, MonadThrow m)
-  => Map Name (Class Name l)
+  => Map Name (Class Name (TypeSignature Name l))
   -> SpecialTypes Name
   -> ImplicitlyTypedBinding Name (TypeSignature Name l)
   -> m (ImplicitlyTypedBinding Name (TypeSignature Name l))
@@ -41,44 +41,49 @@ resolveImplicit classes specialTypes (ImplicitlyTypedBinding l name alts) =
 
 resolveAlt
   :: (MonadSupply Int m, MonadThrow m)
-  => Map Name (Class Name l)
+  => Map Name (Class Name (TypeSignature Name l))
   -> SpecialTypes Name
   -> Alternative Name (TypeSignature Name l)
   -> m (Alternative Name (TypeSignature Name l))
 resolveAlt classes specialTypes (Alternative l ps e) = do
-  dictVars <-
+  dicts <-
     mapM
-      (supplyValueName . predicateToIdentifier specialTypes)
+      (\pred ->
+         (pred, ) <$> supplyDictName (predicateToString specialTypes pred))
       (filter (\p -> (not (isJust (byInst classes p)))) predicates)
   (Alternative l <$> pure ps <*>
    resolveExp
      classes
      specialTypes
-     (if null dictVars
+     dicts
+     (if null dicts
         then e
         else (LambdaExpression
                 l
-                (Alternative l [VariablePattern l d | d <- dictVars] e))))
+                (Alternative l [VariablePattern l d | (_, d) <- dicts] e))))
   where
     Forall _ (Qualified predicates _) = typeSignatureScheme l
 
-predicateToIdentifier :: (Printable i, Show i) => SpecialTypes i -> Predicate i -> Identifier
-predicateToIdentifier specialTypes (IsIn name ts) =
-  Identifier ("dict_" ++ printIdentifier name ++ intercalate "_" (map (printType specialTypes) ts))
+predicateToString
+  :: (Printable i, Show i)
+  => SpecialTypes i -> Predicate i -> String
+predicateToString specialTypes (IsIn name ts) =
+  printIdentifier name ++ " " ++ unwords (map (printType specialTypes) ts)
 
 resolveExp
   :: (MonadThrow m, MonadSupply Int m)
-  => Map Name (Class Name l)
+  => Map Name (Class Name (TypeSignature Name l))
   -> SpecialTypes Name
+  -> [(Predicate Name, Name)]
   -> Expression Name (TypeSignature Name l)
   -> m (Expression Name (TypeSignature Name l))
-resolveExp classes specialTypes = go
+resolveExp classes specialTypes dicts = go
   where
     go =
       \case
         VariableExpression l i -> do
-          dicts <- mapM (lookupDictionary l) predicates
-          pure (foldl (ApplicationExpression l) (VariableExpression l i) dicts)
+          dictArgs <- mapM (lookupDictionary l) predicates
+          pure (foldl (ApplicationExpression l) (VariableExpression l i) dictArgs)
           where Forall _ (Qualified predicates _) = typeSignatureScheme l
         ApplicationExpression l f x -> ApplicationExpression l <$> go f <*> go x
         LambdaExpression l0 (Alternative l vs b) ->
@@ -86,13 +91,8 @@ resolveExp classes specialTypes = go
         e -> pure e
     lookupDictionary l p =
       case byInst classes p of
-        Just i ->
-          -- Known statically.
-          fmap
-            (VariableExpression l)
-            (supplyValueName (predicateToIdentifier specialTypes p))
+        Just (_, dict) -> pure (VariableExpression l (dictionaryName dict))
         Nothing ->
-          -- Comes from argument.
-          fmap
-            (VariableExpression l)
-            (supplyValueName (predicateToIdentifier specialTypes p))
+          case lookup p dicts of
+            Nothing -> throwM (NoInstanceFor p)
+            Just v -> pure (VariableExpression l v)

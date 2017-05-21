@@ -277,6 +277,11 @@ supplyConstructorName (Identifier s) = do
   i <- supply
   return (ConstructorName i s)
 
+supplyDictName :: (MonadSupply Int m) => String -> m Name
+supplyDictName s = do
+  i <- supply
+  return (DictName i s)
+
 supplyTypeName :: (MonadSupply Int m) => Identifier -> m Name
 supplyTypeName (Identifier s) = do
   i <- supply

@@ -76,7 +76,7 @@ typeCheckModule
   -> [(TypeSignature Name Name)] -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
   -> SpecialTypes Name -- ^ Special types that Haskell uses for pattern matching and literals.
   -> [BindGroup Name l] -- ^ Bindings in the module.
-  -> m [BindGroup Name (TypeSignature Name l)] -- ^ Inferred types for all identifiers.
+  -> m ([BindGroup Name (TypeSignature Name l)], Map Name (Class Name (TypeSignature Name l)))
 typeCheckModule ce as specialTypes bgs =
   evalStateT
     (runInferT $ do
@@ -84,7 +84,8 @@ typeCheckModule ce as specialTypes bgs =
        s <- InferT (gets inferStateSubstitutions)
        let rs = reduce ce (map (substitutePredicate s) ps)
        s' <- defaultSubst ce [] rs
-       return (map (fmap (substituteTypeSignature (s' @@ s))) bgs'))
+       return (map (fmap (substituteTypeSignature (s' @@ s))) bgs'
+              ,mempty))
     (InferState nullSubst 0 specialTypes)
 
 --------------------------------------------------------------------------------
@@ -528,8 +529,12 @@ addClass i vs ps ce
 -- Throws 'ReadException' in the case of error.
 addInstance
   :: MonadThrow m
-  => [Predicate Name] -> Predicate Name -> Map Name (Class Name l) -> m (Map Name (Class Name l))
-addInstance ps p@(IsIn i _) ce
+  => [Predicate Name]
+  -> Predicate Name
+  -> Dictionary Name l
+  -> Map Name (Class Name l)
+  -> m (Map Name (Class Name l))
+addInstance ps p@(IsIn i _) dict ce
   | not (defined (M.lookup i ce)) = throwM NoSuchClassForInstance
   | any (overlap p) qs = throwM OverlappingInstance
   | otherwise = return (M.insert i c ce)
@@ -540,7 +545,7 @@ addInstance ps p@(IsIn i _) ce
       (Class
          (lookupClassTypeVariables ce i)
          (lookupClassSuperclasses ce i)
-         (Instance (Qualified ps p) (Dictionary mempty) : its)
+         (Instance (Qualified ps p) dict : its)
          i)
 
 overlap :: Predicate Name -> Predicate Name -> Bool
@@ -552,19 +557,19 @@ bySuper ce p@(IsIn i ts) = p : concat (map (bySuper ce) supers)
     supers = map (substitutePredicate substitutions) (lookupClassSuperclasses ce i)
     substitutions = zipWith Substitution (lookupClassTypeVariables ce i) ts
 
-byInst :: Map Name (Class Name l) -> Predicate Name -> Maybe [Predicate Name]
+byInst :: Map Name (Class Name l) -> Predicate Name -> Maybe ([Predicate Name], Dictionary Name l)
 byInst ce p@(IsIn i _) = msum [tryInst it | it <- lookupClassInstances ce i]
   where
-    tryInst (Instance (Qualified ps h) _) = do
+    tryInst (Instance (Qualified ps h) dict) = do
       u <- oneWayMatchPredicate h p
-      Just (map (substitutePredicate u) ps)
+      Just (map (substitutePredicate u) ps, dict)
 
 entail :: Map Name (Class Name l) -> [Predicate Name] -> Predicate Name -> Bool
 entail ce ps p =
   any (p `elem`) (map (bySuper ce) ps) ||
   case byInst ce p of
     Nothing -> False
-    Just qs -> all (entail ce ps) qs
+    Just (qs, _) -> all (entail ce ps) qs
 
 simplify :: ([Predicate Name] -> Predicate Name -> Bool) -> [Predicate Name] -> [Predicate Name]
 simplify ent = loop []

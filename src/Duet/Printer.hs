@@ -21,6 +21,7 @@ instance Printable Name where
       TypeName i string -> string  --  ++ "[type: " ++ show i ++ "]"
       ConstructorName i string -> string
       ForallName i -> "g" ++ show i
+      DictName i string -> "("  ++ string ++ ":" ++ show i ++")"
 
 instance Printable Identifier where
   printit =

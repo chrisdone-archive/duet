@@ -83,6 +83,7 @@ data Name
   | ConstructorName !Int !String
   | TypeName !Int !String
   | ForallName !Int
+  | DictName !Int String
   deriving (Show, Eq, Ord)
 
 -- | State of inferring.
@@ -314,8 +315,9 @@ data Instance i l = Instance
 
 -- | A dictionary for a class.
 data Dictionary i l = Dictionary
-  { dictionaryMethods :: Map i (Alternative i l)
-  } deriving (Show)
+  { dictionaryName :: i
+  , dictionaryMethods :: Map i (Alternative i l)
+  } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | A type constructor.
 data TypeConstructor i = TypeConstructor

@@ -39,7 +39,6 @@ main = do
       compileStepText "<interactive>" i text
     _ -> error "usage: duet <file>"
 
-
 compileStepText :: String -> String -> Text -> IO ()
 compileStepText file i text =
   case parseText file text of
@@ -59,17 +58,19 @@ compileStepText file i text =
              is)
         bindGroups
       bindGroups' <-
-        catch (evalSupplyT (mapM (resolveBindGroup env specialTypes) bindGroups) supplies)
-              (\e -> liftIO (do putStrLn (displayResolveException specialTypes e)
-                                exitFailure))
+        catch
+          (evalSupplyT
+             (mapM (resolveBindGroup env specialTypes) bindGroups)
+             supplies)
+          (\e ->
+             liftIO
+               (do putStrLn (displayResolveException specialTypes e)
+                   exitFailure))
       putStrLn "-- Source with instance dictionaries inserted:"
       mapM_
         (\(BindGroup _ is) ->
            mapM_
-             (mapM_
-                (putStrLn .
-                 printImplicitlyTypedBinding
-                   (const Nothing)))
+             (mapM_ (putStrLn . printImplicitlyTypedBinding (const Nothing)))
              is)
         bindGroups'
       putStrLn "-- Stepping ..."
@@ -162,7 +163,7 @@ displayRenamerException _specialTypes =
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
   => [Decl FieldType Identifier l]
-  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name], Map Identifier Name, Map Name (Class Name l)), [Int])
+  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name], Map Identifier Name, Map Name (Class Name (TypeSignature Name l))), [Int])
 runTypeChecker decls =
   let bindings =
         mapMaybe
@@ -201,15 +202,15 @@ runTypeChecker decls =
                     (do putStrLn (displayRenamerException specialTypes e)
                         exitFailure))
            env <- setupEnv specialTypes mempty
-           bindGroups0 <-
-             lift
-               (catch
-                  (typeCheckModule env signatures specialTypes renamedBindings)
-                  (\e ->
-                     liftIO
-                       (do putStrLn (displayInferException specialTypes e)
-                           exitFailure)))
-           return (specialSigs, specialTypes, bindGroups0, signatures, subs, env))
+           (bindGroups, env') <-
+            lift
+              (catch
+                 (typeCheckModule env signatures specialTypes renamedBindings)
+                 (\e ->
+                    liftIO
+                      (do putStrLn (displayInferException specialTypes e)
+                          exitFailure)))
+           return (specialSigs, specialTypes, bindGroups, signatures, subs, env'))
        [0 ..]
 
 -- | Built-in pre-defined functions.
@@ -302,11 +303,23 @@ setupEnv
   -> SupplyT Int m (Map Name (Class Name l))
 setupEnv specialTypes env = do
   show_a <- supplyTypeName "a"
+  showInt <- supplyDictName "Show Int"
+  showRational <- supplyDictName "Show Rational"
+  showChar' <- supplyDictName "Show Char"
   let update =
         addClass theShow [TypeVariable show_a StarKind] [] >=>
-        addInstance [] (IsIn theShow [specialTypesInteger specialTypes]) >=>
-        addInstance [] (IsIn theShow [specialTypesRational specialTypes]) >=>
-        addInstance [] (IsIn theShow [specialTypesChar specialTypes])
+        addInstance
+          []
+          (IsIn theShow [specialTypesInteger specialTypes])
+          (Dictionary showInt mempty) >=>
+        addInstance
+          []
+          (IsIn theShow [specialTypesRational specialTypes])
+          (Dictionary showRational mempty) >=>
+        addInstance
+          []
+          (IsIn theShow [specialTypesChar specialTypes])
+          (Dictionary showChar' mempty)
   lift (update env)
   where
     theShow = specialTypesShow specialTypes
