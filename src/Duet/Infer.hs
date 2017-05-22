@@ -85,7 +85,7 @@ typeCheckModule ce as specialTypes bgs =
        let rs = reduce ce (map (substitutePredicate s) ps)
        s' <- defaultSubst ce [] rs
        return (map (fmap (substituteTypeSignature (s' @@ s))) bgs'
-              ,mempty))
+              ,mempty)) -- TODO: next step: type check also the instance methods.
     (InferState nullSubst 0 specialTypes)
 
 --------------------------------------------------------------------------------

@@ -21,19 +21,6 @@ parseFile :: FilePath -> IO (Either ParseError [Decl FieldType Identifier Locati
 parseFile fp = do t <- T.readFile fp
                   return (parseText fp t)
 
-demo :: Num a => String -> Either ParseError a
-demo (i :: String) =
-  runParser
-    (do d <-
-          do putState 123
-             ((do putState 1
-                  digit) <|> pure '0')
-        u <- getState
-        pure u)
-    0
-    ""
-    i
-
 parseText :: SourceName -> Text -> Either ParseError [Decl FieldType Identifier Location]
 parseText fp inp =
   case parse tokensTokenizer fp (inp) of
@@ -56,7 +43,7 @@ datadecl :: TokenParser (DataType FieldType Identifier)
 datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
   where
     tyvar = do
-      (v, loc) <-
+      (v, _) <-
         consumeToken
           (\case
              Variable i -> Just i
@@ -65,7 +52,7 @@ datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
       pure (TypeVariable (Identifier (T.unpack v)) StarKind)
     go = do
       _ <- equalToken Data
-      (v, loc) <-
+      (v, _) <-
         consumeToken
           (\case
              Constructor i -> Just i
@@ -78,13 +65,13 @@ datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
       pure (DataType (Identifier (T.unpack v)) vs cs)
 
 consp :: TokenParser (DataTypeConstructor FieldType Identifier)
-consp = do c <- constructorParser
+consp = do c <- consParser
            slots <- many slot
            pure (DataTypeConstructor c slots)
-  where constructorParser = go <?> "value constructor (e.g. Just)"
+  where consParser = go <?> "value constructor (e.g. Just)"
           where
             go = do
-              (c, loc) <-
+              (c, _) <-
                 consumeToken
                   (\case
                      Constructor c -> Just c
@@ -93,32 +80,32 @@ consp = do c <- constructorParser
                 (Identifier (T.unpack c))
 
 slot :: TokenParser (FieldType Identifier)
-slot = constructorParser <|> varParser <|> appP
+slot = consParser <|> variableParser <|> appP
   where
-    appP = parens go <?> "type application e.g. (Maybe Int)"
+    appP = parentheses go <?> "type application e.g. (Maybe Int)"
       where
         go = do
           f <- slot
           xs <- many1 slot
           pure (foldl FieldTypeApp f xs)
-        parens p = do
+        parentheses p = do
           _ <- equalToken OpenParen
           e <- p <?> "type inside parentheses e.g. (Maybe a)"
           _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
           pure e
-    varParser = go <?> "type variable (e.g. ‘a’, ‘s’, etc.)"
+    variableParser = go <?> "type variable (e.g. ‘a’, ‘s’, etc.)"
       where
         go = do
-          (v, loc) <-
+          (v, _) <-
             consumeToken
               (\case
                  Variable i -> Just i
                  _ -> Nothing)
           pure (FieldTypeVariable (Identifier (T.unpack v)))
-    constructorParser = go <?> "type constructor (e.g. Maybe)"
+    consParser = go <?> "type constructor (e.g. Maybe)"
       where
         go = do
-          (c, loc) <-
+          (c, _) <-
             consumeToken
               (\case
                  Constructor c -> Just c
@@ -183,7 +170,7 @@ altParser e' startCol =
   \  Just bar -> bar"
 
 altPat :: TokenParser (Pattern Identifier Location)
-altPat = varp <|> constructorParser
+altPat = varp <|> consParser
   where
     patInner = parenpat <|> varp <|> unaryConstructor
     parenpat = go
@@ -213,7 +200,7 @@ altPat = varp <|> constructorParser
                  Constructor c -> Just c
                  _ -> Nothing)
           pure (ConstructorPattern loc (Identifier (T.unpack c)) [])
-    constructorParser = go <?> "constructor pattern (e.g. Just x)"
+    consParser = go <?> "constructor pattern (e.g. Just x)"
       where
         go = do
           (c, loc) <-
