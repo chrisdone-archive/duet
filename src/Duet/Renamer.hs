@@ -44,12 +44,12 @@ instance Identifiable Name where
       n@ForallName {} -> throwM (TypeAtValueScope n)
 
 --------------------------------------------------------------------------------
--- Data type renaming
+-- Data type renaming (this includes kind checking)
 
 renameDataTypes
   :: (MonadSupply Int m, MonadThrow m)
   => SpecialTypes Name
-  -> [DataType FieldType Identifier]
+  -> [DataType ParsedType Identifier]
   -> m [DataType Type Name]
 renameDataTypes specialTypes types = do
   typeConstructors <-
@@ -72,9 +72,9 @@ renameDataTypes specialTypes types = do
 
 renameConstructor
   :: (MonadSupply Int m, MonadThrow m)
-  => SpecialTypes Name -> [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor FieldType Identifier])]
+  => SpecialTypes Name -> [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor ParsedType Identifier])]
   -> [(Identifier, TypeVariable Name)]
-  -> DataTypeConstructor FieldType Identifier
+  -> DataTypeConstructor ParsedType Identifier
   -> m (DataTypeConstructor Type Name)
 renameConstructor specialTypes typeConstructors vars (DataTypeConstructor name fields) = do
   name' <- supplyConstructorName name
@@ -84,10 +84,10 @@ renameConstructor specialTypes typeConstructors vars (DataTypeConstructor name f
 renameField
   :: MonadThrow m
   => SpecialTypes Name
-  -> [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor FieldType Identifier])]
+  -> [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor ParsedType Identifier])]
   -> [(Identifier, TypeVariable Name)]
   -> Name
-  -> FieldType Identifier
+  -> ParsedType Identifier
   -> m (Type Name)
 renameField specialTypes typeConstructors vars name fe = do
   ty <- go fe
@@ -97,14 +97,14 @@ renameField specialTypes typeConstructors vars name fe = do
   where
     go =
       \case
-        FieldTypeConstructor i -> do
+        ParsedTypeConstructor i -> do
           (name', vars') <- resolve i
           pure (ConstructorType (toTypeConstructor name' (map snd vars')))
-        FieldTypeVariable v ->
+        ParsedTypeVariable v ->
           case lookup v vars of
             Nothing -> throwM (TypeNotInScope [] v)
             Just tyvar -> pure (VariableType tyvar)
-        FieldTypeApp f x -> do
+        ParsedTypeApp f x -> do
           f' <- go f
           let fKind = typeKind f'
           case fKind of

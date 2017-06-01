@@ -25,11 +25,12 @@ data Token
   | Data
   | Else
   | Case
+  | Where
   | Of
   | Backslash
   | Let
   | In
-  | Arrow
+  | RightArrow
   | OpenParen
   | CloseParen
   | Equals
@@ -44,6 +45,7 @@ data Token
   | Decimal !Double
   | NonIndentedNewline
   | Bar
+  | ClassToken
   deriving (Eq, Ord)
 
 tokenize :: FilePath -> Text -> Either ParseError [(Token, Location)]
@@ -69,6 +71,8 @@ tokenTokenizer prespaces =
         else unexpected "indented newline"
     , atomThenSpace If "if"
     , atomThenSpace Then "then"
+    , atomThenSpace ClassToken "class"
+    , atomThenSpace Where "where"
     , atomThenSpace Data "data"
     , atomThenSpace Else "else"
     , atomThenSpace Case "case"
@@ -79,7 +83,7 @@ tokenTokenizer prespaces =
     , atom Equals "="
     , atom Bar "|"
     , atom Colons "::"
-    , atom Arrow "->"
+    , atom RightArrow "->"
     , atomThenSpace Let "let"
     , atomThenSpace In "in"
     , atom Comma ","
@@ -197,7 +201,7 @@ atomThenSpace constructor text = do
   start <- getPosition
   _ <-
     (try (string text <?> smartQuotes text) <*
-     (lookAhead spaces1 <?> ("space after " ++ smartQuotes text)))
+     (lookAhead spaces1 <?> ("space or newline after " ++ smartQuotes text)))
   end <- getPosition
   pure
     ( constructor
@@ -347,8 +351,10 @@ tokenStr tok =
   case tok of
     If -> curlyQuotes "if"
     Then -> curlyQuotes "then"
-    Arrow -> curlyQuotes "->"
+    RightArrow -> curlyQuotes "->"
     Else -> curlyQuotes "else"
+    Where -> curlyQuotes "where"
+    ClassToken -> curlyQuotes "class"
     Data -> curlyQuotes "data"
     Case -> curlyQuotes "case"
     Of -> curlyQuotes "of"

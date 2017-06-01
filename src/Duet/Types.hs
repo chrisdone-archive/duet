@@ -18,6 +18,7 @@ import Data.Typeable
 data Decl f i l
   = DataDecl (DataType f i)
   | BindGroupDecl (BindGroup i l)
+  | ClassDecl (Class i l)
   deriving (Show)
 
 -- | Data type.
@@ -41,11 +42,11 @@ data DataTypeConstructor f i = DataTypeConstructor
   , dataTypeConstructorFields :: [f i]
   } deriving (Show)
 
--- | Type for a data type field.
-data FieldType i
-  = FieldTypeConstructor i
-  | FieldTypeVariable i
-  | FieldTypeApp (FieldType i) (FieldType i)
+-- | Type for a data typed parsed from user input.
+data ParsedType i
+  = ParsedTypeConstructor i
+  | ParsedTypeVariable i
+  | ParsedTypeApp (ParsedType i) (ParsedType i)
   deriving (Show)
 
 -- | Special built-in types you need for type-checking patterns and
@@ -305,6 +306,7 @@ data Class i l = Class
   , classSuperclasses :: ![Predicate i]
   , classInstances :: ![Instance i l]
   , className :: i
+  , classMethods :: Map i (Type i)
   } deriving (Show)
 
 -- | Class instance.

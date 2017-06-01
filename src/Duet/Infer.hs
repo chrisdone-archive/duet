@@ -491,6 +491,9 @@ lookupClassTypeVariables ce i =
 lookupClassSuperclasses :: Map Name (Class Name l) -> Name -> [Predicate Name]
 lookupClassSuperclasses ce i = maybe [] classSuperclasses (M.lookup i ce)
 
+lookupClassMethods :: Map Name (Class Name l) -> Name -> Map Name (Type Name)
+lookupClassMethods ce i = maybe mempty classMethods (M.lookup i ce)
+
 lookupClassInstances :: Map Name (Class Name l) -> Name -> [Instance Name l]
 lookupClassInstances ce i =
   maybe [] classInstances (M.lookup i ce)
@@ -512,13 +515,14 @@ addClass
   => Name
   -> [TypeVariable Name]
   -> [Predicate Name]
+  -> Map Name (Type Name)
   -> Map Name (Class Name l)
   -> m (Map Name (Class Name l))
-addClass i vs ps ce
+addClass i vs ps methods ce
   | defined (M.lookup i ce) = throwM ClassAlreadyDefined
   | any (not . defined . flip M.lookup ce . predHead) ps =
     throwM UndefinedSuperclass
-  | otherwise = return (M.insert i (Class vs ps [] i) ce)
+  | otherwise = return (M.insert i (Class vs ps [] i methods) ce)
 
 -- | Add an instance of a class. Example:
 --
@@ -546,7 +550,8 @@ addInstance ps p@(IsIn i _) dict ce
          (lookupClassTypeVariables ce i)
          (lookupClassSuperclasses ce i)
          (Instance (Qualified ps p) dict : its)
-         i)
+         i
+         (lookupClassMethods ce i))
 
 overlap :: Predicate Name -> Predicate Name -> Bool
 overlap p q = defined (unifyPredicates p q)

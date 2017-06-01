@@ -162,7 +162,7 @@ displayRenamerException _specialTypes =
 
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
-  => [Decl FieldType Identifier l]
+  => [Decl ParsedType Identifier l]
   -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name], Map Identifier Name, Map Name (Class Name (TypeSignature Name l))), [Int])
 runTypeChecker decls =
   let bindings =
@@ -307,7 +307,7 @@ setupEnv specialTypes env = do
   showRational <- supplyDictName "Show Rational"
   showChar' <- supplyDictName "Show Char"
   let update =
-        addClass theShow [TypeVariable show_a StarKind] [] >=>
+        addClass theShow [TypeVariable show_a StarKind] [] mempty >=>
         addInstance
           []
           (IsIn theShow [specialTypesInteger specialTypes])

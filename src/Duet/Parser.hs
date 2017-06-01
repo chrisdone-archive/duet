@@ -1,3 +1,5 @@
+{-# LANGUAGE Strict #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -9,6 +11,8 @@
 module Duet.Parser where
 
 import           Control.Monad
+import           Data.List
+import qualified Data.Map.Strict as M
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -17,11 +21,11 @@ import           Duet.Tokenizer
 import           Duet.Types
 import           Text.Parsec hiding (satisfy, anyToken)
 
-parseFile :: FilePath -> IO (Either ParseError [Decl FieldType Identifier Location])
+parseFile :: FilePath -> IO (Either ParseError [Decl ParsedType Identifier Location])
 parseFile fp = do t <- T.readFile fp
                   return (parseText fp t)
 
-parseText :: SourceName -> Text -> Either ParseError [Decl FieldType Identifier Location]
+parseText :: SourceName -> Text -> Either ParseError [Decl ParsedType Identifier Location]
 parseText fp inp =
   case parse tokensTokenizer fp (inp) of
     Left e -> Left e
@@ -30,16 +34,146 @@ parseText fp inp =
         Left e -> Left e
         Right ast -> Right ast
 
-tokensParser :: TokenParser [Decl FieldType Identifier Location]
+tokensParser :: TokenParser [Decl ParsedType Identifier Location]
 tokensParser = moduleParser <* endOfTokens
 
-moduleParser :: TokenParser [Decl FieldType Identifier Location]
+moduleParser :: TokenParser [Decl ParsedType Identifier Location]
 moduleParser =
   many
     ((fmap (\x -> BindGroupDecl (BindGroup [] [[x]])) varfundecl) <|>
-     fmap DataDecl datadecl)
+     fmap DataDecl datadecl <|> fmap ClassDecl classdecl)
 
-datadecl :: TokenParser (DataType FieldType Identifier)
+classdecl :: TokenParser (Class Identifier Location)
+classdecl =
+  go <?> "class declaration (e.g. class Show a where show a :: a -> String)"
+  where
+    go = do
+      u <- getState
+      loc <- equalToken ClassToken
+      setState (locationStartColumn loc)
+      (c, _) <-
+        consumeToken
+          (\case
+             Constructor c -> Just c
+             _ -> Nothing) <?> "class name e.g. Show"
+      vars <- many1 typeVariableP
+      mwhere <-
+        fmap (const True) (equalToken Where) <|> fmap (const False) endOfDecl
+      methods <-
+        if mwhere
+          then do
+            (_, identLoc) <-
+              lookAhead
+                (consumeToken
+                   (\case
+                      Variable i -> Just i
+                      _ -> Nothing)) <?> "class methods e.g. foo :: a -> Int"
+            (many1 (methodParser (locationStartColumn identLoc))) <*
+              endOfDecl
+          else (pure [])
+      setState u
+      _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
+      pure
+        (Class
+         { className = Identifier (T.unpack c)
+         , classTypeVariables = vars
+         , classSuperclasses = []
+         , classInstances = []
+         , classMethods = M.fromList methods
+         })
+      where
+        endOfDecl =
+          (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
+        typeVariableP = go' <?> "type variable (e.g. ‘a’, ‘f’, etc.)"
+          where
+            go' = do
+              (v, _) <-
+                consumeToken
+                  (\case
+                     Variable i -> Just i
+                     _ -> Nothing)
+              pure (TypeVariable (Identifier (T.unpack v)) StarKind)
+        methodParser startCol = go <?> "method signature e.g. foo :: a -> Y"
+          where
+            go = do
+              u <- getState
+              (v, p) <-
+                consumeToken
+                  (\case
+                     Variable i -> Just i
+                     _ -> Nothing)
+              when
+                (locationStartColumn p /= startCol)
+                (unexpected
+                   ("method name at column " ++
+                    show (locationStartColumn p) ++
+                    ", it should start at column " ++ show startCol ++
+                    " to match the others"))
+              setState startCol
+              _ <- equalToken Colons <?> "‘::’ for method signature"
+              ty <- parseType <?> "method type signature e.g. foo :: Int"
+              setState u
+              pure (Identifier (T.unpack v), ty)
+
+parseType :: TokenParser (Type Identifier)
+parseType = infix' <|> app <|> unambiguous
+  where
+    infix' = do
+      left <- (app <|> unambiguous) <?> "left-hand side of function arrow"
+      tok <- fmap Just (operator <?> ("function arrow " ++ curlyQuotes "->")) <|> pure Nothing
+      case tok of
+        Just (RightArrow, _) -> do
+          right <-
+            parseType <?>
+            ("right-hand side of function arrow " ++ curlyQuotes "->")
+          pure
+            (ApplicationType
+               (ApplicationType
+                  (ConstructorType
+                     (TypeConstructor
+                        (Identifier "(->)")
+                        (FunctionKind StarKind StarKind)))
+                  left)
+               right)
+        _ -> pure left
+      where
+        operator =
+          satisfyToken
+            (\case
+               RightArrow {} -> True
+               _ -> False)
+    app = do
+      f <- unambiguous
+      args <- many unambiguous
+      pure (foldl' ApplicationType f args)
+    unambiguous = atomicType <|> parensTy parseType
+    atomicType = consParse <|> varParse
+    consParse = do
+      (v, _) <-
+        consumeToken
+          (\case
+             Constructor i -> Just i
+             _ -> Nothing) <?>
+        "type constructor (e.g. Int, Maybe)"
+      pure
+        (ConstructorType (TypeConstructor (Identifier (T.unpack v)) StarKind))
+    varParse = do
+      (v, _) <-
+        consumeToken
+          (\case
+             Variable i -> Just i
+             _ -> Nothing) <?>
+        "type variable (e.g. a, f)"
+      pure (VariableType (TypeVariable (Identifier (T.unpack v)) StarKind))
+    parensTy p = go <?> "parentheses e.g. (T a)"
+      where
+        go = do
+          _ <- equalToken OpenParen
+          e <- p <?> "type inside parentheses e.g. (Maybe a)"
+          _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
+          pure e
+
+datadecl :: TokenParser (DataType ParsedType Identifier)
 datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
   where
     tyvar = do
@@ -64,7 +198,7 @@ datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
       _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
       pure (DataType (Identifier (T.unpack v)) vs cs)
 
-consp :: TokenParser (DataTypeConstructor FieldType Identifier)
+consp :: TokenParser (DataTypeConstructor ParsedType Identifier)
 consp = do c <- consParser
            slots <- many slot
            pure (DataTypeConstructor c slots)
@@ -79,7 +213,7 @@ consp = do c <- consParser
               pure
                 (Identifier (T.unpack c))
 
-slot :: TokenParser (FieldType Identifier)
+slot :: TokenParser (ParsedType Identifier)
 slot = consParser <|> variableParser <|> appP
   where
     appP = parentheses go <?> "type application e.g. (Maybe Int)"
@@ -87,7 +221,7 @@ slot = consParser <|> variableParser <|> appP
         go = do
           f <- slot
           xs <- many1 slot
-          pure (foldl FieldTypeApp f xs)
+          pure (foldl ParsedTypeApp f xs)
         parentheses p = do
           _ <- equalToken OpenParen
           e <- p <?> "type inside parentheses e.g. (Maybe a)"
@@ -101,7 +235,7 @@ slot = consParser <|> variableParser <|> appP
               (\case
                  Variable i -> Just i
                  _ -> Nothing)
-          pure (FieldTypeVariable (Identifier (T.unpack v)))
+          pure (ParsedTypeVariable (Identifier (T.unpack v)))
     consParser = go <?> "type constructor (e.g. Maybe)"
       where
         go = do
@@ -110,7 +244,7 @@ slot = consParser <|> variableParser <|> appP
               (\case
                  Constructor c -> Just c
                  _ -> Nothing)
-          pure (FieldTypeConstructor (Identifier (T.unpack c)))
+          pure (ParsedTypeConstructor (Identifier (T.unpack c)))
 
 varfundecl :: TokenParser (ImplicitlyTypedBinding Identifier Location)
 varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
@@ -122,7 +256,7 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
               Variable i -> Just i
               _ -> Nothing) <?>
          "variable name"
-      _ <- equalToken Equals
+      _ <- equalToken Equals <?> "‘=’ for variable declaration e.g. x = 1"
       e <- expParser
       _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
       pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [makeAlt loc e])
@@ -140,7 +274,7 @@ case' = do
   setState (locationStartColumn loc)
   e <- expParser <?> "expression to do case analysis e.g. case e of ..."
   _ <-  equalToken Of
-  p <- lookAhead altPat
+  p <- lookAhead altPat <?> "case pattern"
   alts <- many (altParser e (locationStartColumn (patternLabel p)))
   setState u
   pure (CaseExpression loc e alts)
@@ -157,9 +291,10 @@ altParser e' startCol =
         (unexpected
            ("pattern at column " ++
             show (locationStartColumn (patternLabel p)) ++
-            ", it should start at column " ++ show startCol))
+            ", it should start at column " ++
+            show startCol ++ " to match the others"))
       setState startCol
-      _ <- equalToken Arrow
+      _ <- equalToken RightArrow
       e <- expParser
       setState u
       pure (p, e)) <?>
@@ -224,7 +359,6 @@ expParser = case' <|> lambda <|> ifParser <|> infix' <|> app <|> atomic
       (do left <- (app <|> unambiguous) <?> "left-hand side of operator"
           tok <- fmap Just (operator <?> "infix operator") <|> pure Nothing
           case tok of
-
             Just (Operator t, _) -> do
               right <-
                 (app <|> unambiguous) <?>
@@ -281,7 +415,7 @@ lambda :: TokenParser (Expression Identifier Location)
 lambda = do
   loc <- equalToken Backslash <?> "lambda expression (e.g. \\x -> x)"
   args <- many1 funcParam <?> "lambda parameters"
-  _ <- equalToken Arrow
+  _ <- equalToken RightArrow
   e <- expParser
   pure (LambdaExpression loc (Alternative loc args e))
 
