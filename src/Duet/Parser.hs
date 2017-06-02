@@ -1,5 +1,3 @@
-{-# LANGUAGE Strict #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -41,7 +39,9 @@ moduleParser :: TokenParser [Decl ParsedType Identifier Location]
 moduleParser =
   many
     ((fmap (\x -> BindGroupDecl (BindGroup [] [[x]])) varfundecl) <|>
-     fmap DataDecl datadecl <|> fmap ClassDecl classdecl)
+     fmap DataDecl datadecl <|>
+     fmap ClassDecl classdecl <|>
+     fmap InstanceDecl instancedecl)
 
 classdecl :: TokenParser (Class Identifier Location)
 classdecl =
@@ -55,7 +55,7 @@ classdecl =
         consumeToken
           (\case
              Constructor c -> Just c
-             _ -> Nothing) <?> "class name e.g. Show"
+             _ -> Nothing) <?> "new class name e.g. Show"
       vars <- many1 typeVariableP
       mwhere <-
         fmap (const True) (equalToken Where) <|> fmap (const False) endOfDecl
@@ -93,9 +93,9 @@ classdecl =
                      Variable i -> Just i
                      _ -> Nothing)
               pure (TypeVariable (Identifier (T.unpack v)) StarKind)
-        methodParser startCol = go <?> "method signature e.g. foo :: a -> Y"
+        methodParser startCol = go' <?> "method signature e.g. foo :: a -> Y"
           where
-            go = do
+            go' = do
               u <- getState
               (v, p) <-
                 consumeToken
@@ -114,6 +114,72 @@ classdecl =
               ty <- parseType <?> "method type signature e.g. foo :: Int"
               setState u
               pure (Identifier (T.unpack v), ty)
+
+
+instancedecl :: TokenParser (Instance Identifier Location)
+instancedecl =
+  go <?> "instance declaration (e.g. instance Show Int where show = ...)"
+  where
+    go = do
+      u <- getState
+      loc <- equalToken InstanceToken
+      setState (locationStartColumn loc)
+      (c, _) <-
+        consumeToken
+          (\case
+             Constructor c -> Just c
+             _ -> Nothing) <?>
+        "class name e.g. Show"
+      ty <- parseType
+      mwhere <-
+        fmap (const True) (equalToken Where) <|> fmap (const False) endOfDecl
+      methods <-
+        if mwhere
+          then do
+            (_, identLoc) <-
+              lookAhead
+                (consumeToken
+                   (\case
+                      Variable i -> Just i
+                      _ -> Nothing)) <?>
+              "instance methods e.g. foo :: a -> Int"
+            (many1 (methodParser (locationStartColumn identLoc))) <* endOfDecl
+          else (pure [])
+      setState u
+      _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
+      let predicate = Qualified [] (IsIn (Identifier (T.unpack c)) [ty])
+          dictName = "$dict" ++ T.unpack c
+      pure
+        (Instance
+         { instancePredicate = predicate
+         , instanceDictionary =
+             Dictionary (Identifier dictName) (M.fromList methods)
+         })
+      where
+        endOfDecl =
+          (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
+        methodParser startCol =
+          go' <?> "method implementation e.g. foo = \\x -> f x"
+          where
+            go' = do
+              u <- getState
+              (v, p) <-
+                consumeToken
+                  (\case
+                     Variable i -> Just i
+                     _ -> Nothing)
+              when
+                (locationStartColumn p /= startCol)
+                (unexpected
+                   ("method name at column " ++
+                    show (locationStartColumn p) ++
+                    ", it should start at column " ++
+                    show startCol ++ " to match the others"))
+              setState startCol
+              _ <- equalToken Equals <?> "‘=’ for method declaration e.g. x = 1"
+              e <- expParser
+              setState u
+              pure (Identifier (T.unpack v), makeAlt (expressionLabel e) e)
 
 parseType :: TokenParser (Type Identifier)
 parseType = infix' <|> app <|> unambiguous

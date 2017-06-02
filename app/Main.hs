@@ -44,10 +44,9 @@ compileStepText file i text =
   case parseText file text of
     Left e -> error (show e)
     Right decls -> do
-      putStrLn "-- Type checking ..."
       ((specialSigs, specialTypes, bindGroups, signatures, subs, env), supplies) <-
         runTypeChecker decls
-      putStrLn "-- Source:"
+      putStrLn "-- Type-checked bindings:"
       mapM_
         (\(BindGroup _ is) ->
            mapM_
@@ -180,10 +179,12 @@ runTypeChecker decls =
   in runSupplyT
        (do specialTypes <- defaultSpecialTypes
            (specialSigs, signatures0) <- builtInSignatures specialTypes
+           liftIO (putStrLn "-- Renaming types, classes and instances ...")
            sigs' <-
              renameDataTypes specialTypes types >>=
              mapM (dataTypeSignatures specialTypes)
            let signatures = signatures0 ++ concat sigs'
+           liftIO (putStrLn "-- Signatures in scope:")
            liftIO
              (mapM_ (putStrLn . printTypeSignature specialTypes) (concat sigs'))
            let signatureSubs =
@@ -194,6 +195,7 @@ runTypeChecker decls =
                            ValueName _ ident -> (Identifier ident, name)
                            ConstructorName _ ident -> (Identifier ident, name))
                       signatures)
+           liftIO (putStrLn "-- Renaming variable/function declarations ...")
            (renamedBindings, subs) <-
              catch
                (renameBindGroups signatureSubs bindings)
@@ -202,6 +204,7 @@ runTypeChecker decls =
                     (do putStrLn (displayRenamerException specialTypes e)
                         exitFailure))
            env <- setupEnv specialTypes mempty
+           liftIO (putStrLn "-- Inferring types")
            (bindGroups, env') <-
             lift
               (catch

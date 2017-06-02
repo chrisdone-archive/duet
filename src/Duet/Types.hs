@@ -19,6 +19,7 @@ data Decl f i l
   = DataDecl (DataType f i)
   | BindGroupDecl (BindGroup i l)
   | ClassDecl (Class i l)
+  | InstanceDecl (Instance i l)
   deriving (Show)
 
 -- | Data type.
@@ -292,6 +293,7 @@ data Pattern i l
 patternLabel :: Pattern t t1 -> t1
 patternLabel (VariablePattern loc _) = loc
 patternLabel (ConstructorPattern loc _ _) = loc
+patternLabel (WildcardPattern l _) = l
 
 data Literal
   = IntegerLiteral Integer

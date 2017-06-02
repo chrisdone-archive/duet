@@ -46,6 +46,7 @@ data Token
   | NonIndentedNewline
   | Bar
   | ClassToken
+  | InstanceToken
   deriving (Eq, Ord)
 
 tokenize :: FilePath -> Text -> Either ParseError [(Token, Location)]
@@ -72,6 +73,7 @@ tokenTokenizer prespaces =
     , atomThenSpace If "if"
     , atomThenSpace Then "then"
     , atomThenSpace ClassToken "class"
+    , atomThenSpace InstanceToken "instance"
     , atomThenSpace Where "where"
     , atomThenSpace Data "data"
     , atomThenSpace Else "else"
@@ -200,8 +202,8 @@ atomThenSpace :: t -> String -> Parser (t, Location)
 atomThenSpace constructor text = do
   start <- getPosition
   _ <-
-    (try (string text <?> smartQuotes text) <*
-     (lookAhead spaces1 <?> ("space or newline after " ++ smartQuotes text)))
+    try ((string text <?> smartQuotes text) <*
+         (lookAhead spaces1 <?> ("space or newline after " ++ smartQuotes text)))
   end <- getPosition
   pure
     ( constructor
@@ -356,6 +358,7 @@ tokenStr tok =
     Where -> curlyQuotes "where"
     ClassToken -> curlyQuotes "class"
     Data -> curlyQuotes "data"
+    InstanceToken -> curlyQuotes "instance"
     Case -> curlyQuotes "case"
     Of -> curlyQuotes "of"
     Let -> curlyQuotes "let"
