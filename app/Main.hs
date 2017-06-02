@@ -13,10 +13,13 @@ import           Control.Monad.Catch
 import           Control.Monad.Fix
 import           Control.Monad.Supply
 import           Control.Monad.Trans
+import           Data.Char
+import           Data.Function
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
+import           Data.Ord
 import           Data.Text (Text)
 import qualified Data.Text.IO as T
 import           Duet.Infer
@@ -29,6 +32,7 @@ import           Duet.Tokenizer
 import           Duet.Types
 import           System.Environment
 import           System.Exit
+import           Text.EditDistance
 
 main :: IO ()
 main = do
@@ -129,8 +133,16 @@ displayInferException specialTypes =
       "Not in scope " ++
       curlyQuotes (printit name) ++
       "\n" ++
-      "Current scope:\n\n" ++
-      unlines (map (printTypeSignature specialTypes) scope)
+      "Nearest names in scope:\n\n" ++
+      intercalate
+        ", "
+        (map
+           curlyQuotes
+           (take
+              5
+              (sortBy
+                 (comparing (editDistance (printit name)))
+                 (map (printTypeSignature specialTypes) scope))))
     TypeMismatch t1 t2 ->
       "Couldn't match type " ++
       curlyQuotes (printType specialTypes t1) ++
@@ -152,12 +164,37 @@ displayRenamerException :: SpecialTypes Name -> RenamerException -> [Char]
 displayRenamerException _specialTypes =
   \case
     IdentifierNotInVarScope scope name ->
-      "Not in variable scope " ++ curlyQuotes (printit name) ++ "\n" ++
-      "Current scope:\n\n" ++ unlines (map printit (M.elems scope))
+      "Not in variable scope " ++
+      curlyQuotes (printit name) ++
+      "\n" ++
+      "Nearest names in scope:\n\n" ++
+      intercalate
+        ", "
+        (map
+           curlyQuotes
+           (take
+              5
+              (sortBy
+                 (comparing (editDistance (printit name)))
+                 (map printit (M.elems scope)))))
     IdentifierNotInConScope scope name ->
-      "Not in constructors scope " ++ curlyQuotes (printit name) ++ "\n" ++
-      "Current scope:\n\n" ++ unlines (map printit (M.elems scope))
+      "Not in constructors scope " ++
+      curlyQuotes (printit name) ++
+      "\n" ++
+      "Nearest names in scope:\n\n" ++
+      intercalate
+        ", "
+        (map
+           curlyQuotes
+           (take
+              5
+              (sortBy
+                 (comparing (editDistance (printit name)))
+                 (map printit (M.elems scope)))))
     e -> show e
+
+editDistance :: [Char] -> [Char] -> Int
+editDistance = on (levenshteinDistance defaultEditCosts) (map toLower)
 
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)

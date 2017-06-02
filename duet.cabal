@@ -48,7 +48,8 @@ executable duet
     text,
     exceptions,
     mtl,
-    containers
+    containers,
+    edit-distance
   default-language:
     Haskell2010
 
