@@ -19,9 +19,10 @@ import           Duet.Printer
 import           Duet.Renamer
 import           Duet.Types
 
+
 resolveBindGroup
   :: (MonadSupply Int m, MonadThrow m)
-  => Map Name (Class Name (TypeSignature Name l))
+  => Map Name (Class Type Name (TypeSignature Name l))
   -> SpecialTypes Name
   -> BindGroup Name (TypeSignature Name l)
   -> m (BindGroup Name (TypeSignature Name l))
@@ -32,7 +33,7 @@ resolveBindGroup classes specialTypes (BindGroup explicit implicit) = do
 
 resolveImplicit
   :: (MonadSupply Int m, MonadThrow m)
-  => Map Name (Class Name (TypeSignature Name l))
+  => Map Name (Class Type Name (TypeSignature Name l))
   -> SpecialTypes Name
   -> ImplicitlyTypedBinding Name (TypeSignature Name l)
   -> m (ImplicitlyTypedBinding Name (TypeSignature Name l))
@@ -41,7 +42,7 @@ resolveImplicit classes specialTypes (ImplicitlyTypedBinding l name alts) =
 
 resolveAlt
   :: (MonadSupply Int m, MonadThrow m)
-  => Map Name (Class Name (TypeSignature Name l))
+  => Map Name (Class Type Name (TypeSignature Name l))
   -> SpecialTypes Name
   -> Alternative Name (TypeSignature Name l)
   -> m (Alternative Name (TypeSignature Name l))
@@ -72,7 +73,7 @@ predicateToString specialTypes (IsIn name ts) =
 
 resolveExp
   :: (MonadThrow m, MonadSupply Int m)
-  => Map Name (Class Name (TypeSignature Name l))
+  => Map Name (Class Type Name (TypeSignature Name l))
   -> SpecialTypes Name
   -> [(Predicate Type Name, Name)]
   -> Expression Name (TypeSignature Name l)

@@ -72,11 +72,11 @@ import           Duet.Types
 -- Throws 'InferException' in case of a type error.
 typeCheckModule
   :: MonadThrow m
-  => Map Name (Class Name l) -- ^ Set of defined type-classes.
+  => Map Name (Class Type Name l) -- ^ Set of defined type-classes.
   -> [(TypeSignature Name Name)] -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
   -> SpecialTypes Name -- ^ Special types that Haskell uses for pattern matching and literals.
   -> [BindGroup Name l] -- ^ Bindings in the module.
-  -> m ([BindGroup Name (TypeSignature Name l)], Map Name (Class Name (TypeSignature Name l)))
+  -> m ([BindGroup Name (TypeSignature Name l)], Map Name (Class Type Name (TypeSignature Name l)))
 typeCheckModule ce as specialTypes bgs =
   evalStateT
     (runInferT $ do
@@ -146,7 +146,7 @@ newVariableType k =
 
 inferExplicitlyTypedBindingType
   :: MonadThrow m
-  => Map Name (Class Name l)
+  => Map Name (Class Type Name l)
   -> [TypeSignature Name Name]
   -> (ExplicitlyTypedBinding Name l)
   -> InferT m ([Predicate Type Name], ExplicitlyTypedBinding Name (TypeSignature Name l))
@@ -169,7 +169,7 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding identifier sc alts
 
 inferImplicitlyTypedBindingsTypes
   :: MonadThrow m
-  => Map Name (Class Name l)
+  => Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> [ImplicitlyTypedBinding Name l]
   -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], [ImplicitlyTypedBinding Name (TypeSignature Name l)])
@@ -219,7 +219,7 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
 
 inferBindGroupTypes
   :: MonadThrow m
-  => Map Name (Class Name l)
+  => Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> (BindGroup Name l)
   -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], BindGroup Name (TypeSignature Name l))
@@ -232,8 +232,8 @@ inferBindGroupTypes ce as (BindGroup es iss) = do
 
 inferSequenceTypes0
   :: Monad m
-  => (Map Name (Class Name l) -> [(TypeSignature Name Name)] -> [bg l] -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], [bg (TypeSignature Name l)]))
-  -> Map Name (Class Name l)
+  => (Map Name (Class Type Name l) -> [(TypeSignature Name Name)] -> [bg l] -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], [bg (TypeSignature Name l)]))
+  -> Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> [[bg l]]
   -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], [[bg (TypeSignature Name l)]])
@@ -245,8 +245,8 @@ inferSequenceTypes0 ti ce as (bs:bss) = do
 
 inferSequenceTypes
   :: Monad m
-  => (Map Name (Class Name l) -> [(TypeSignature Name Name)] -> bg l -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], bg (TypeSignature Name l)))
-  -> Map Name (Class Name l)
+  => (Map Name (Class Type Name l) -> [(TypeSignature Name Name)] -> bg l -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], bg (TypeSignature Name l)))
+  -> Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> [bg l]
   -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], [bg (TypeSignature Name l)])
@@ -482,19 +482,19 @@ lift' m (IsIn i ts) (IsIn i' ts')
   | i == i' = m ts ts'
   | otherwise = throwM ClassMismatch
 
-lookupClassTypeVariables :: Map Name (Class Name l) -> Name -> [TypeVariable Name]
+lookupClassTypeVariables :: Map Name (Class Type Name l) -> Name -> [TypeVariable Name]
 lookupClassTypeVariables ce i =
   fromMaybe
     []
     (fmap classTypeVariables (M.lookup i ce))
 
-lookupClassSuperclasses :: Map Name (Class Name l) -> Name -> [Predicate Type Name]
+lookupClassSuperclasses :: Map Name (Class Type Name l) -> Name -> [Predicate Type Name]
 lookupClassSuperclasses ce i = maybe [] classSuperclasses (M.lookup i ce)
 
-lookupClassMethods :: Map Name (Class Name l) -> Name -> Map Name (Type Name)
+lookupClassMethods :: Map Name (Class Type Name l) -> Name -> Map Name (Type Name)
 lookupClassMethods ce i = maybe mempty classMethods (M.lookup i ce)
 
-lookupClassInstances :: Map Name (Class Name l) -> Name -> [Instance Name l]
+lookupClassInstances :: Map Name (Class Type Name l) -> Name -> [Instance Type Name l]
 lookupClassInstances ce i =
   maybe [] classInstances (M.lookup i ce)
 
@@ -516,8 +516,8 @@ addClass
   -> [TypeVariable Name]
   -> [Predicate Type Name]
   -> Map Name (Type Name)
-  -> Map Name (Class Name l)
-  -> m (Map Name (Class Name l))
+  -> Map Name (Class Type Name l)
+  -> m (Map Name (Class Type Name l))
 addClass i vs ps methods ce
   | defined (M.lookup i ce) = throwM ClassAlreadyDefined
   | any (not . defined . flip M.lookup ce . predHead) ps =
@@ -536,8 +536,8 @@ addInstance
   => [Predicate Type Name]
   -> Predicate Type Name
   -> Dictionary Name l
-  -> Map Name (Class Name l)
-  -> m (Map Name (Class Name l))
+  -> Map Name (Class Type Name l)
+  -> m (Map Name (Class Type Name l))
 addInstance ps p@(IsIn i _) dict ce
   | not (defined (M.lookup i ce)) = throwM NoSuchClassForInstance
   | any (overlap p) qs = throwM OverlappingInstance
@@ -556,20 +556,20 @@ addInstance ps p@(IsIn i _) dict ce
 overlap :: Predicate Type Name -> Predicate Type Name -> Bool
 overlap p q = defined (unifyPredicates p q)
 
-bySuper :: Map Name (Class Name l) -> Predicate Type Name -> [Predicate Type Name]
+bySuper :: Map Name (Class Type Name l) -> Predicate Type Name -> [Predicate Type Name]
 bySuper ce p@(IsIn i ts) = p : concat (map (bySuper ce) supers)
   where
     supers = map (substitutePredicate substitutions) (lookupClassSuperclasses ce i)
     substitutions = zipWith Substitution (lookupClassTypeVariables ce i) ts
 
-byInst :: Map Name (Class Name l) -> Predicate Type Name -> Maybe ([Predicate Type Name], Dictionary Name l)
+byInst :: Map Name (Class Type Name l) -> Predicate Type Name -> Maybe ([Predicate Type Name], Dictionary Name l)
 byInst ce p@(IsIn i _) = msum [tryInst it | it <- lookupClassInstances ce i]
   where
     tryInst (Instance (Qualified ps h) dict) = do
       u <- oneWayMatchPredicate h p
       Just (map (substitutePredicate u) ps, dict)
 
-entail :: Map Name (Class Name l) -> [Predicate Type Name] -> Predicate Type Name -> Bool
+entail :: Map Name (Class Type Name l) -> [Predicate Type Name] -> Predicate Type Name -> Bool
 entail ce ps p =
   any (p `elem`) (map (bySuper ce) ps) ||
   case byInst ce p of
@@ -584,13 +584,13 @@ simplify ent = loop []
       | ent (rs ++ ps) p = loop rs ps
       | otherwise = loop (p : rs) ps
 
-reduce :: Map Name (Class Name l) -> [Predicate Type Name] -> [Predicate Type Name]
+reduce :: Map Name (Class Type Name l) -> [Predicate Type Name] -> [Predicate Type Name]
 reduce ce = simplify (scEntail ce) . elimTauts ce
 
-elimTauts :: Map Name (Class Name l) -> [Predicate Type Name] -> [Predicate Type Name]
+elimTauts :: Map Name (Class Type Name l) -> [Predicate Type Name] -> [Predicate Type Name]
 elimTauts ce ps = [p | p <- ps, not (entail ce [] p)]
 
-scEntail :: Map Name (Class Name l) -> [Predicate Type Name] -> Predicate Type Name -> Bool
+scEntail :: Map Name (Class Type Name l) -> [Predicate Type Name] -> Predicate Type Name -> Bool
 scEntail ce ps p = any (p `elem`) (map (bySuper ce) ps)
 
 quantify :: [TypeVariable Name] -> Qualified Type Name (Type Name) -> Scheme Name
@@ -619,7 +619,7 @@ merge s1 s2 =
 
 inferExpressionType
   :: MonadThrow m
-  => Map Name (Class Name l)
+  => Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> (Expression Name l)
   -> InferT m ([Predicate Type Name], Type Name, Expression Name (TypeSignature Name l))
@@ -697,7 +697,7 @@ inferExpressionType ce as (CaseExpression l e branches) = do
 
 inferAltType
   :: MonadThrow m
-  => Map Name (Class Name l)
+  => Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> Alternative Name l
   -> InferT m ([Predicate Type Name], Type Name, Alternative Name (TypeSignature Name l))
@@ -737,7 +737,7 @@ makeAlt l scheme pats' e' =
 
 inferAltTypes
   :: MonadThrow m
-  => Map Name (Class Name l)
+  => Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> [Alternative Name l]
   -> Type Name
@@ -752,14 +752,14 @@ inferAltTypes ce as alts t = do
 
 split
   :: MonadThrow m
-  => Map Name (Class Name l) -> [TypeVariable Name] -> [TypeVariable Name] -> [Predicate Type Name] -> m ([Predicate Type Name], [Predicate Type Name])
+  => Map Name (Class Type Name l) -> [TypeVariable Name] -> [TypeVariable Name] -> [Predicate Type Name] -> m ([Predicate Type Name], [Predicate Type Name])
 split ce fs gs ps = do
   let ps' = reduce ce ps
       (ds, rs) = partition (all (`elem` fs) . getPredicateTypeVariables) ps'
   rs' <- defaultedPredicates ce (fs ++ gs) rs
   return (ds, rs \\ rs')
 
-candidates :: Map Name (Class Name l) -> Ambiguity Name -> [Type Name]
+candidates :: Map Name (Class Type Name l) -> Ambiguity Name -> [Type Name]
 candidates ce (Ambiguity v qs) =
   [ t'
   | let is = [i | IsIn i _ <- qs]
@@ -776,7 +776,7 @@ candidates ce (Ambiguity v qs) =
 
 withDefaults
   :: MonadThrow m
-  => String->([Ambiguity Name] -> [Type Name] -> a) -> Map Name (Class Name l) -> [TypeVariable Name] -> [Predicate Type Name] -> m a
+  => String->([Ambiguity Name] -> [Type Name] -> a) -> Map Name (Class Type Name l) -> [TypeVariable Name] -> [Predicate Type Name] -> m a
 withDefaults _label f ce vs ps
   | any null tss = throwM (AmbiguousInstance vps)
   | otherwise = do
@@ -789,12 +789,12 @@ withDefaults _label f ce vs ps
 
 defaultedPredicates
   :: MonadThrow m
-  => Map Name (Class Name l) -> [TypeVariable Name] -> [Predicate Type Name] -> m [Predicate Type Name]
+  => Map Name (Class Type Name l) -> [TypeVariable Name] -> [Predicate Type Name] -> m [Predicate Type Name]
 defaultedPredicates = withDefaults "defaultedPredicates" (\vps _ -> concat (map ambiguityPredicates vps))
 
 defaultSubst
   :: MonadThrow m
-  => Map Name (Class Name l) -> [TypeVariable Name] -> [Predicate Type Name] -> m [Substitution Name]
+  => Map Name (Class Type Name l) -> [TypeVariable Name] -> [Predicate Type Name] -> m [Substitution Name]
 defaultSubst = withDefaults "defaultSubst" (\vps ts -> zipWith Substitution (map ambiguityTypeVariable vps) ts)
 
 -- extSubst

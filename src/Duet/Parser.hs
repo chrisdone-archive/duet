@@ -43,7 +43,7 @@ moduleParser =
      fmap ClassDecl classdecl <|>
      fmap InstanceDecl instancedecl)
 
-classdecl :: TokenParser (Class Identifier Location)
+classdecl :: TokenParser (Class ParsedType Identifier Location)
 classdecl =
   go <?> "class declaration (e.g. class Show a where show a :: a -> String)"
   where
@@ -111,12 +111,11 @@ classdecl =
                     " to match the others"))
               setState startCol
               _ <- equalToken Colons <?> "‘::’ for method signature"
-              ty <- parseType <?> "method type signature e.g. foo :: Int"
+              ty <- parsedType <?> "method type signature e.g. foo :: Int"
               setState u
               pure (Identifier (T.unpack v), ty)
 
-
-instancedecl :: TokenParser (Instance Identifier Location)
+instancedecl :: TokenParser (Instance ParsedType Identifier Location)
 instancedecl =
   go <?> "instance declaration (e.g. instance Show Int where show = ...)"
   where
@@ -130,7 +129,7 @@ instancedecl =
              Constructor c -> Just c
              _ -> Nothing) <?>
         "class name e.g. Show"
-      ty <- parseType
+      ty <- parsedType
       mwhere <-
         fmap (const True) (equalToken Where) <|> fmap (const False) endOfDecl
       methods <-
@@ -311,6 +310,62 @@ slot = consParser <|> variableParser <|> appP
                  Constructor c -> Just c
                  _ -> Nothing)
           pure (ParsedTypeConstructor (Identifier (T.unpack c)))
+
+parsedType :: TokenParser (ParsedType Identifier)
+parsedType = infix' <|> app <|> unambiguous
+  where
+    infix' = do
+      left <- (app <|> unambiguous) <?> "left-hand side of function arrow"
+      tok <-
+        fmap Just (operator <?> ("function arrow " ++ curlyQuotes "->")) <|>
+        pure Nothing
+      case tok of
+        Just (RightArrow, _) -> do
+          right <-
+            parsedType <?>
+            ("right-hand side of function arrow " ++ curlyQuotes "->")
+          pure
+            (ParsedTypeApp
+               (ParsedTypeApp (ParsedTypeConstructor (Identifier "(->)")) left)
+               right)
+        _ -> pure left
+      where
+        operator =
+          satisfyToken
+            (\case
+               RightArrow {} -> True
+               _ -> False)
+    app = do
+      f <- unambiguous
+      args <- many unambiguous
+      pure (foldl' ParsedTypeApp f args)
+    unambiguous = atomicType <|> parensTy parsedType
+    atomicType = consParse <|> varParse
+    consParse = do
+      (v, _) <-
+        consumeToken
+          (\case
+             Constructor i -> Just i
+             _ -> Nothing) <?>
+        "type constructor (e.g. Int, Maybe)"
+      pure
+        (ParsedTypeConstructor
+           (Identifier (T.unpack v)))
+    varParse = do
+      (v, _) <-
+        consumeToken
+          (\case
+             Variable i -> Just i
+             _ -> Nothing) <?>
+        "type variable (e.g. a, f)"
+      pure (ParsedTypeVariable (Identifier (T.unpack v)))
+    parensTy p = go <?> "parentheses e.g. (T a)"
+      where
+        go = do
+          _ <- equalToken OpenParen
+          e <- p <?> "type inside parentheses e.g. (Maybe a)"
+          _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
+          pure e
 
 varfundecl :: TokenParser (ImplicitlyTypedBinding Identifier Location)
 varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"

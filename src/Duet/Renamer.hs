@@ -135,7 +135,7 @@ renameField specialTypes typeConstructors vars name fe = do
 --------------------------------------------------------------------------------
 -- Class renaming
 
-renameClass :: MonadSupply Int m => Class Identifier l -> m (Class Name l)
+renameClass :: MonadSupply Int m => Class ParsedType Identifier l -> m (Class Type Name l)
 renameClass cls = do
   name <- supplyClassName (className cls)
   identToVars <-
@@ -159,7 +159,7 @@ renameClass cls = do
 
 renameInstance
   :: Applicative f
-  => Instance Identifier t -> f (Instance Name l)
+  => Instance ParsedType Identifier t -> f (Instance Type Name l)
 renameInstance (Instance pred dict) =
   pure (Instance undefined undefined)
 

@@ -193,7 +193,7 @@ printScheme specialTypes (Forall kinds qualifiedType') =
           intercalate ", " (map (printPredicate specialTypes) predicates) ++
           ") => " ++ printTypeSansParens specialTypes typ
 
-printClass :: Printable i => SpecialTypes i -> Class i l -> String
+printClass :: Printable i => SpecialTypes i -> Class Type i l -> String
 printClass specialTypes (Class vars supers instances i methods) =
   "class " ++
   printSupers specialTypes supers ++
@@ -207,7 +207,7 @@ printMethod :: Printable i =>  SpecialTypes i -> (i, Type i) -> String
 printMethod specialTypes (i, ty) =
   printit i ++ " :: " ++ printType specialTypes ty
 
-printInstance :: Printable i =>  SpecialTypes i -> Instance i l -> String
+printInstance :: Printable i =>  SpecialTypes i -> Instance Type i l -> String
 printInstance specialTypes (Instance (Qualified predicates typ) _) =
   "instance " ++
   if null predicates

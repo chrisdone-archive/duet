@@ -204,7 +204,7 @@ editDistance = on (levenshteinDistance defaultEditCosts) (map toLower)
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
   => [Decl ParsedType Identifier l]
-  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name], Map Identifier Name, Map Name (Class Name (TypeSignature Name l))), [Int])
+  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name], Map Identifier Name, Map Name (Class Type Name (TypeSignature Name l))), [Int])
 runTypeChecker decls =
   let bindings =
         mapMaybe
@@ -348,8 +348,8 @@ dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
 setupEnv
   :: MonadThrow m
   => SpecialTypes Name
-  -> Map Name (Class Name l)
-  -> SupplyT Int m (Map Name (Class Name l))
+  -> Map Name (Class Type Name l)
+  -> SupplyT Int m (Map Name (Class Type Name l))
 setupEnv specialTypes env = do
   show_a <- supplyTypeName "a"
   showInt <- supplyDictName "Show Int"

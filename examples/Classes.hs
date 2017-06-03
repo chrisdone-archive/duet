@@ -1,3 +1,4 @@
+data List a = Nil | Cons a (List a)
 class Read a where
   read :: List Char -> a
 class Show a where
@@ -14,7 +15,7 @@ instance Read Nat where
       Cons Z Nil -> Zero
       Cons S xs  -> Succ (read xs)
       _ -> Zero
-data List a = Nil | Cons a (List a)
+
 
 data Char = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z
 

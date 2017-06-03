@@ -18,8 +18,8 @@ import Data.Typeable
 data Decl f i l
   = DataDecl (DataType f i)
   | BindGroupDecl (BindGroup i l)
-  | ClassDecl (Class i l)
-  | InstanceDecl (Instance i l)
+  | ClassDecl (Class f i l)
+  | InstanceDecl (Instance f i l)
   deriving (Show)
 
 -- | Data type.
@@ -304,17 +304,17 @@ data Literal
   deriving (Show , Eq)
 
 -- | A class.
-data Class i l = Class
+data Class f i l = Class
   { classTypeVariables :: ![TypeVariable i]
-  , classSuperclasses :: ![Predicate Type i]
-  , classInstances :: ![Instance i l]
+  , classSuperclasses :: ![Predicate f i]
+  , classInstances :: ![Instance f i l]
   , className :: i
-  , classMethods :: Map i (Type i)
+  , classMethods :: Map i (f i)
   } deriving (Show)
 
 -- | Class instance.
-data Instance i l = Instance
-  { instancePredicate :: !(Qualified Type i (Predicate Type i))
+data Instance f i l = Instance
+  { instancePredicate :: !(Qualified f i (Predicate f i))
   , instanceDictionary :: !(Dictionary i l)
   } deriving (Show)
 
