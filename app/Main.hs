@@ -161,7 +161,7 @@ displayInferException specialTypes =
     e -> show e
 
 displayRenamerException :: SpecialTypes Name -> RenamerException -> [Char]
-displayRenamerException _specialTypes =
+displayRenamerException specialTypes =
   \case
     IdentifierNotInVarScope scope name ->
       "Not in variable scope " ++
@@ -191,6 +191,11 @@ displayRenamerException _specialTypes =
               (sortBy
                  (comparing (editDistance (printit name)))
                  (map printit (M.elems scope)))))
+    KindTooManyArgs ty k ty2 ->
+      "The type " ++
+      curlyQuotes (printType specialTypes ty ++ " :: " ++ printKind k) ++
+      " has an unexpected additional argument, " ++
+      curlyQuotes (printType specialTypes ty2)
     e -> show e
 
 editDistance :: [Char] -> [Char] -> Int
@@ -218,8 +223,12 @@ runTypeChecker decls =
            (specialSigs, signatures0) <- builtInSignatures specialTypes
            liftIO (putStrLn "-- Renaming types, classes and instances ...")
            sigs' <-
-             renameDataTypes specialTypes types >>=
-             mapM (dataTypeSignatures specialTypes)
+             catch (renameDataTypes specialTypes types >>=
+                    mapM (dataTypeSignatures specialTypes))
+                   (\e ->
+                      liftIO
+                        (do putStrLn (displayRenamerException specialTypes e)
+                            exitFailure))
            let signatures = signatures0 ++ concat sigs'
            liftIO (putStrLn "-- Signatures in scope:")
            liftIO
