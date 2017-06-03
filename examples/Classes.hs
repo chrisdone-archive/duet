@@ -1,24 +1,21 @@
-data List a = Nil | Cons a (List a)
-class Read a where
-  read :: List Char -> a
-class Show a where
-  show :: a -> String
-instance Show Nat where
-  show = \n ->
+class Reader a where
+  reader :: List Ch -> a
+class Shower a where
+  shower :: a -> List Ch
+instance Shower Nat where
+  shower = \n ->
     case n of
       Zero -> Cons Z Nil
-      Succ n -> Cons S (show n)
+      Succ n -> Cons S (shower n)
 data Nat = Succ Nat | Zero
-instance Read Nat where
-  read = \cs ->
+instance Reader Nat where
+  reader = \cs ->
     case cs of
       Cons Z Nil -> Zero
-      Cons S xs  -> Succ (read xs)
+      Cons S xs  -> Succ (reader xs)
       _ -> Zero
-
-
-data Char = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z
-
+data List a = Nil | Cons a (List a)
+data Ch = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z
 class Equal a where
   equal :: a -> a -> Bool
 instance Equal Nat where
@@ -34,4 +31,4 @@ instance Equal Nat where
             Succ m -> equal n m
             _ -> False
         _ -> False
-main = equal (read (show (Succ Zero))) (Succ Zero)
+demo = equal (reader (shower (Succ Zero))) (Succ Zero)
