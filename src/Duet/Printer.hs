@@ -214,13 +214,13 @@ printInstance specialTypes (Instance (Qualified predicates typ) _) =
     then printPredicate specialTypes typ
     else printSupers specialTypes predicates ++ printPredicate specialTypes typ
 
-printSupers :: Printable i => SpecialTypes i -> [Predicate i] -> [Char]
+printSupers :: Printable i => SpecialTypes i -> [Predicate Type i] -> [Char]
 printSupers specialTypes supers
   | null supers = ""
   | otherwise =
     "(" ++ intercalate ", " (map (printPredicate specialTypes) supers) ++ ") => "
 
-printPredicate :: (Eq i, Printable i) => SpecialTypes i -> Predicate i -> [Char]
+printPredicate :: (Eq i, Printable i) => SpecialTypes i -> Predicate Type i -> [Char]
 printPredicate specialTypes (IsIn identifier types) =
   printIdentifier identifier ++
   " " ++ unwords (map (printType specialTypes) types)

@@ -66,7 +66,7 @@ resolveAlt classes specialTypes (Alternative l ps e) = do
 
 predicateToString
   :: (Printable i, Show i)
-  => SpecialTypes i -> Predicate i -> String
+  => SpecialTypes i -> Predicate Type i -> String
 predicateToString specialTypes (IsIn name ts) =
   printIdentifier name ++ " " ++ unwords (map (printType specialTypes) ts)
 
@@ -74,7 +74,7 @@ resolveExp
   :: (MonadThrow m, MonadSupply Int m)
   => Map Name (Class Name (TypeSignature Name l))
   -> SpecialTypes Name
-  -> [(Predicate Name, Name)]
+  -> [(Predicate Type Name, Name)]
   -> Expression Name (TypeSignature Name l)
   -> m (Expression Name (TypeSignature Name l))
 resolveExp classes specialTypes dicts = go

@@ -127,7 +127,7 @@ data ReadException
 instance Exception ReadException
 
 data ResolveException =
-  NoInstanceFor (Predicate Name)
+  NoInstanceFor (Predicate Type Name)
   deriving (Show, Typeable)
 instance Exception ResolveException
 
@@ -188,7 +188,7 @@ data ExplicitlyTypedBinding i l = ExplicitlyTypedBinding
 -- substituted for v.
 data Ambiguity i = Ambiguity
   { ambiguityTypeVariable :: !(TypeVariable i)
-  , ambiguityPredicates :: ![Predicate i]
+  , ambiguityPredicates :: ![Predicate Type i]
   } deriving (Show)
 
 -- | An Alt specifies the left and right hand sides of a function
@@ -222,14 +222,14 @@ newtype Identifier = Identifier
 -- | Haskell types can be qualified by adding a (possibly empty) list
 -- of predicates, or class constraints, to restrict the ways in which
 -- type variables are instantiated.
-data Qualified i typ = Qualified
-  { qualifiedPredicates :: ![Predicate i]
+data Qualified f i typ = Qualified
+  { qualifiedPredicates :: ![Predicate f i]
   , qualifiedType :: !typ
   } deriving (Eq, Show)
 
 -- | One of potentially many predicates.
-data Predicate i =
-  IsIn i [Type i]
+data Predicate f i =
+  IsIn i [f i]
   deriving (Eq, Show)
 
 -- | A simple Haskell type.
@@ -306,7 +306,7 @@ data Literal
 -- | A class.
 data Class i l = Class
   { classTypeVariables :: ![TypeVariable i]
-  , classSuperclasses :: ![Predicate i]
+  , classSuperclasses :: ![Predicate Type i]
   , classInstances :: ![Instance i l]
   , className :: i
   , classMethods :: Map i (Type i)
@@ -314,7 +314,7 @@ data Class i l = Class
 
 -- | Class instance.
 data Instance i l = Instance
-  { instancePredicate :: !(Qualified i (Predicate i))
+  { instancePredicate :: !(Qualified Type i (Predicate Type i))
   , instanceDictionary :: !(Dictionary i l)
   } deriving (Show)
 
@@ -332,7 +332,7 @@ data TypeConstructor i = TypeConstructor
 
 -- | A type scheme.
 data Scheme i =
-  Forall [Kind] (Qualified i (Type i))
+  Forall [Kind] (Qualified Type i (Type i))
   deriving (Eq, Show)
 
 data Result a
