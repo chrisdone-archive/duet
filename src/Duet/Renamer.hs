@@ -133,6 +133,40 @@ renameField specialTypes typeConstructors vars name fe = do
                       vars)
 
 --------------------------------------------------------------------------------
+-- Class renaming
+
+renameClass :: MonadSupply Int m => Class Identifier l -> m (Class Name l)
+renameClass cls = do
+  name <- supplyClassName (className cls)
+  identToVars <-
+    mapM
+      (\(TypeVariable i k) -> do
+         i' <- supplyTypeName i
+         pure (i, TypeVariable i' k))
+      (classTypeVariables cls)
+  instances <- mapM renameInstance (classInstances cls)
+  pure
+    (Class
+     { className = name
+     , classTypeVariables = map snd identToVars
+     , classSuperclasses = []
+     , classInstances = instances
+     , classMethods = M.fromList []
+     })
+
+--------------------------------------------------------------------------------
+-- Instance renaming
+
+renameInstance
+  :: Applicative f
+  => Instance Identifier t -> f (Instance Name l)
+renameInstance (Instance pred dict) =
+  pure (Instance undefined undefined)
+
+renamePredicate (IsIn className types)
+  = undefined
+
+--------------------------------------------------------------------------------
 -- Value renaming
 
 renameBindGroups
@@ -286,3 +320,8 @@ supplyTypeName :: (MonadSupply Int m) => Identifier -> m Name
 supplyTypeName (Identifier s) = do
   i <- supply
   return (TypeName i s)
+
+supplyClassName :: (MonadSupply Int m) => Identifier -> m Name
+supplyClassName (Identifier s) = do
+  i <- supply
+  return (ClassName i s)

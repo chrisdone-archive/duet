@@ -86,6 +86,7 @@ data Name
   | TypeName !Int !String
   | ForallName !Int
   | DictName !Int String
+  | ClassName !Int String
   deriving (Show, Eq, Ord)
 
 -- | State of inferring.
