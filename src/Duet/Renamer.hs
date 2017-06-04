@@ -31,17 +31,23 @@ import           Duet.Types
 
 class Identifiable i where
   identifyValue :: MonadThrow m => i -> m Identifier
+  identifyType :: MonadThrow m => i -> m Identifier
 
 instance Identifiable Identifier where
   identifyValue = pure
+  identifyType = pure
 
 instance Identifiable Name where
   identifyValue =
     \case
       ValueName _ i -> pure (Identifier i)
       ConstructorName _ c -> pure (Identifier c)
-      n@TypeName {} -> throwM (TypeAtValueScope n)
-      n@ForallName {} -> throwM (TypeAtValueScope n)
+      DictName _ i -> pure (Identifier i)
+      n -> throwM (TypeAtValueScope n)
+  identifyType =
+    \case
+      TypeName _ i -> pure (Identifier i)
+      n -> throwM (RenamerNameMismatch n)
 
 --------------------------------------------------------------------------------
 -- Data type renaming (this includes kind checking)
@@ -135,8 +141,13 @@ renameField specialTypes typeConstructors vars name fe = do
 --------------------------------------------------------------------------------
 -- Class renaming
 
-renameClass :: MonadSupply Int m => Class ParsedType Identifier l -> m (Class Type Name l)
-renameClass cls = do
+renameClass
+  :: (MonadSupply Int m, MonadThrow m)
+  => Map Identifier Name
+  -> [DataType Type Name]
+  -> Class ParsedType Identifier l
+  -> m (Class Type Name l)
+renameClass subs types cls = do
   name <- supplyClassName (className cls)
   identToVars <-
     mapM
@@ -144,7 +155,7 @@ renameClass cls = do
          i' <- supplyTypeName i
          pure (i, TypeVariable i' k))
       (classTypeVariables cls)
-  instances <- mapM renameInstance (classInstances cls)
+  instances <- mapM (renameInstance subs types) (classInstances cls)
   pure
     (Class
      { className = name
@@ -158,13 +169,78 @@ renameClass cls = do
 -- Instance renaming
 
 renameInstance
-  :: Applicative f
-  => Instance ParsedType Identifier t -> f (Instance Type Name l)
-renameInstance (Instance pred dict) =
-  pure (Instance undefined undefined)
+  :: (MonadThrow m, MonadSupply Int m)
+  => Map Identifier Name
+  -> [DataType Type Name]
+  -> Instance ParsedType Identifier l
+  -> m (Instance Type Name l)
+renameInstance subs types (Instance (Qualified preds ty) dict) = do
+  preds' <- mapM (renamePredicate subs types) preds
+  ty' <- renamePredicate subs types ty
+  dict' <- renameDict subs dict
+  pure (Instance (Qualified preds' ty') dict')
 
-renamePredicate (IsIn className types)
-  = undefined
+renameDict
+  :: (MonadThrow m, MonadSupply Int m)
+  => Map Identifier Name
+  -> Dictionary Identifier l
+  -> m (Dictionary Name l)
+renameDict subs (Dictionary name methods) = do
+  name' <- supplyDictName' name
+  methods' <-
+    fmap
+      M.fromList
+      (mapM
+         (\(n, alt) -> do
+            n' <- supplyMethodName n
+            alt' <- renameAlt subs alt
+            pure (n', alt'))
+         (M.toList methods))
+  pure (Dictionary name' methods')
+
+renamePredicate
+  :: (MonadThrow m)
+  => Map Identifier Name
+  -> [DataType Type Name]
+  -> Predicate ParsedType Identifier
+  -> m (Predicate Type Name)
+renamePredicate subs types (IsIn className types0) =
+  do className' <- substituteClass subs className
+     types' <- mapM (renameType subs types >=> forceStarKind) types0
+     pure (IsIn className' types')
+
+-- | Force that the type has kind *.
+forceStarKind :: MonadThrow m => Type Name -> m (Type Name)
+forceStarKind ty =
+  case typeKind ty of
+    StarKind -> pure ty
+    _ -> throwM (MustBeStarKind ty (typeKind ty))
+
+-- | Rename a type, checking kinds, taking names, etc.
+renameType
+  :: MonadThrow m
+  => Map Identifier Name
+  -> [DataType Type Name]
+  -> ParsedType Identifier
+  -> m (Type Name)
+renameType subs types =
+  \case
+    ParsedTypeConstructor i -> do
+      ms <- mapM (\p -> fmap (, p) (identifyType (dataTypeName p))) types
+      case lookup i ms of
+        Nothing ->
+          throwM (TypeNotInScope (map dataTypeToConstructor (map snd ms)) i)
+        Just dty -> pure (dataTypeConstructor dty)
+    ParsedTypeVariable i -> do
+      i' <- substituteType subs i
+      pure (VariableType (TypeVariable i' StarKind))
+    ParsedTypeApp f a -> do
+      f' <- renameType subs types f
+      a' <- renameType subs types a
+      case typeKind f' of
+        FunctionKind {} -> pure (ApplicationType f' a')
+        StarKind ->
+          throwM (RenamerKindMismatch f' (typeKind f') a' (typeKind a'))
 
 --------------------------------------------------------------------------------
 -- Value renaming
@@ -290,6 +366,22 @@ substituteVar subs i0 =
        _ -> do s <- identifyValue i
                throwM (IdentifierNotInVarScope subs s)
 
+substituteClass :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
+substituteClass subs i0 =
+  do i <- identifyValue i0
+     case M.lookup i subs of
+       Just name@ClassName{} -> pure name
+       _ -> do s <- identifyValue i
+               throwM (IdentifierNotInClassScope subs s)
+
+substituteType :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
+substituteType subs i0 =
+  do i <- identifyValue i0
+     case M.lookup i subs of
+       Just name@TypeName{} -> pure name
+       _ -> do s <- identifyValue i
+               throwM (IdentifierNotInTypeScope subs s)
+
 substituteCons :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
 substituteCons subs i0 =
   do i <- identifyValue i0
@@ -316,6 +408,12 @@ supplyDictName s = do
   i <- supply
   return (DictName i s)
 
+supplyDictName' :: (MonadSupply Int m, MonadThrow m) => Identifier -> m Name
+supplyDictName' s = do
+  i <- supply
+  Identifier s <- identifyValue s
+  return (DictName i s)
+
 supplyTypeName :: (MonadSupply Int m) => Identifier -> m Name
 supplyTypeName (Identifier s) = do
   i <- supply
@@ -325,3 +423,8 @@ supplyClassName :: (MonadSupply Int m) => Identifier -> m Name
 supplyClassName (Identifier s) = do
   i <- supply
   return (ClassName i s)
+
+supplyMethodName :: (MonadSupply Int m) => Identifier -> m Name
+supplyMethodName (Identifier s) = do
+  i <- supply
+  return (MethodName i s)

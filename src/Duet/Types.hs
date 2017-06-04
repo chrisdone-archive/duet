@@ -37,6 +37,10 @@ toTypeConstructor :: Name -> [TypeVariable Name] -> TypeConstructor Name
 toTypeConstructor name vars =
   TypeConstructor name (foldr FunctionKind StarKind (map typeVariableKind vars))
 
+dataTypeToConstructor :: DataType t Name -> TypeConstructor Name
+dataTypeToConstructor (DataType name vs _) =
+  toTypeConstructor name vs
+
 -- | A data type constructor.
 data DataTypeConstructor f i = DataTypeConstructor
   { dataTypeConstructorName :: i
@@ -87,6 +91,7 @@ data Name
   | ForallName !Int
   | DictName !Int String
   | ClassName !Int String
+  | MethodName !Int String
   deriving (Show, Eq, Ord)
 
 -- | State of inferring.
@@ -101,18 +106,23 @@ data StepException
   = CouldntFindName !Name
   | CouldntFindNameByString !String
   | TypeAtValueScope !Name
+
   deriving (Typeable, Show)
 instance Exception StepException
 
 data RenamerException
   = IdentifierNotInVarScope !(Map Identifier Name) !Identifier
   | IdentifierNotInConScope !(Map Identifier Name) !Identifier
+  | IdentifierNotInClassScope !(Map Identifier Name) !Identifier
+  | IdentifierNotInTypeScope !(Map Identifier Name) !Identifier
   | NameNotInConScope ![TypeSignature Name Name] !Name
   | TypeNotInScope ![TypeConstructor Name] !Identifier
   | RenamerKindMismatch (Type Name) Kind (Type Name) Kind
   | KindTooManyArgs (Type Name) Kind (Type Name)
   | ConstructorFieldKind Name (Type Name) Kind
+  | MustBeStarKind (Type Name) Kind
   | BuiltinNotDefined !String
+  | RenamerNameMismatch !Name
   deriving (Show, Typeable)
 instance Exception RenamerException
 
@@ -301,7 +311,7 @@ data Literal
   | CharacterLiteral Char
   | RationalLiteral Rational
   | StringLiteral String
-  deriving (Show , Eq)
+  deriving (Show, Eq)
 
 -- | A class.
 data Class f i l = Class
