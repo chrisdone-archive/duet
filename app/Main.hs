@@ -276,7 +276,7 @@ runTypeChecker decls =
                     (do putStrLn (displayRenamerException specialTypes e)
                         exitFailure))
            env <- setupEnv specialTypes mempty
-           liftIO (putStrLn "-- Inferring types")
+           liftIO (putStrLn "-- Inferring types ...")
            (bindGroups, env') <-
              lift
                (catch
