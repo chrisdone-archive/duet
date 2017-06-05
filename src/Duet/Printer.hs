@@ -23,7 +23,7 @@ instance Printable Name where
       TypeName _ string -> string  --  ++ "[type: " ++ show i ++ "]"
       ConstructorName _ string -> string
       ForallName i -> "g" ++ show i
-      DictName i string -> "("  ++ string ++ ":" ++ show i ++")"
+      DictName i string -> string -- "("  ++ string ++ ":" ++ show i ++")"
       ClassName _ s -> s
       MethodName _ s -> s
 
