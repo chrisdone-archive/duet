@@ -1,6 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE Strict #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |
@@ -22,6 +21,7 @@ import           Data.Maybe
 import           Data.Ord
 import           Data.Text (Text)
 import qualified Data.Text.IO as T
+import           Debug.Trace
 import           Duet.Infer
 import           Duet.Parser
 import           Duet.Printer
@@ -196,6 +196,19 @@ displayRenamerException specialTypes =
       curlyQuotes (printType specialTypes ty ++ " :: " ++ printKind k) ++
       " has an unexpected additional argument, " ++
       curlyQuotes (printType specialTypes ty2)
+    TypeNotInScope types i ->
+      "Unknown type " ++ curlyQuotes (printIdentifier i) ++
+      "\n" ++
+      "Closest names in scope are: " ++
+      intercalate
+        ", "
+        (map
+           curlyQuotes
+           (take
+              5
+              (sortBy
+                 (comparing (editDistance (printIdentifier i)))
+                 (map printTypeConstructor types))))
     e -> show e
 
 editDistance :: [Char] -> [Char] -> Int
@@ -203,13 +216,19 @@ editDistance = on (levenshteinDistance defaultEditCosts) (map toLower)
 
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
-  => [Decl ParsedType Identifier l]
-  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name l)], [TypeSignature Name Name], Map Identifier Name, Map Name (Class Type Name (TypeSignature Name l))), [Int])
+  => [Decl ParsedType Identifier Location]
+  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name Location)], [TypeSignature Name Name], Map Identifier Name, Map Name (Class Type Name (TypeSignature Name Location))), [Int])
 runTypeChecker decls =
   let bindings =
         mapMaybe
           (\case
              BindGroupDecl d -> Just d
+             _ -> Nothing)
+          decls
+      classes =
+        mapMaybe
+          (\case
+             ClassDecl d -> Just d
              _ -> Nothing)
           decls
       types =
@@ -223,12 +242,18 @@ runTypeChecker decls =
            (specialSigs, signatures0) <- builtInSignatures specialTypes
            liftIO (putStrLn "-- Renaming types, classes and instances ...")
            sigs' <-
-             catch (renameDataTypes specialTypes types >>=
-                    mapM (dataTypeSignatures specialTypes))
-                   (\e ->
-                      liftIO
-                        (do putStrLn (displayRenamerException specialTypes e)
-                            exitFailure))
+             catch
+               (do dataTypes <- renameDataTypes specialTypes types
+                   consSigs <- mapM (dataTypeSignatures specialTypes) dataTypes
+                   typeClasses <-
+                     mapM (renameClass specialTypes mempty dataTypes) classes
+                   methodSigs <- mapM classSignatures typeClasses
+                   trace (show typeClasses) (return ())
+                   pure (consSigs ++ methodSigs))
+               (\e ->
+                  liftIO
+                    (do putStrLn (displayRenamerException specialTypes e)
+                        exitFailure))
            let signatures = signatures0 ++ concat sigs'
            liftIO (putStrLn "-- Signatures in scope:")
            liftIO
@@ -239,7 +264,8 @@ runTypeChecker decls =
                       (\(TypeSignature name _) ->
                          case name of
                            ValueName _ ident -> (Identifier ident, name)
-                           ConstructorName _ ident -> (Identifier ident, name))
+                           ConstructorName _ ident -> (Identifier ident, name)
+                           MethodName _ ident -> (Identifier ident, name))
                       signatures)
            liftIO (putStrLn "-- Renaming variable/function declarations ...")
            (renamedBindings, subs) <-
@@ -252,14 +278,15 @@ runTypeChecker decls =
            env <- setupEnv specialTypes mempty
            liftIO (putStrLn "-- Inferring types")
            (bindGroups, env') <-
-            lift
-              (catch
-                 (typeCheckModule env signatures specialTypes renamedBindings)
-                 (\e ->
-                    liftIO
-                      (do putStrLn (displayInferException specialTypes e)
-                          exitFailure)))
-           return (specialSigs, specialTypes, bindGroups, signatures, subs, env'))
+             lift
+               (catch
+                  (typeCheckModule env signatures specialTypes renamedBindings)
+                  (\e ->
+                     liftIO
+                       (do putStrLn (displayInferException specialTypes e)
+                           exitFailure)))
+           return
+             (specialSigs, specialTypes, bindGroups, signatures, subs, env'))
        [0 ..]
 
 -- | Built-in pre-defined functions.
@@ -283,7 +310,7 @@ builtInSignatures specialTypes = do
              [StarKind]
              (Qualified
                 [IsIn (specialTypesShow specialTypes) [(GenericType 0)]]
-                (GenericType 0 --> specialTypesString specialTypes)))
+                (GenericType 0 --> ConstructorType (specialTypesString specialTypes))))
       ] ++
       sigs)
   where
@@ -302,7 +329,35 @@ builtInSignatures specialTypes = do
 
     (-->) :: Type Name -> Type Name -> Type Name
     a --> b =
-      ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
+      ApplicationType (ApplicationType (ConstructorType(specialTypesFunction specialTypes)) a) b
+
+classSignatures :: MonadThrow m => Class Type Name l -> m [TypeSignature Name Name]
+classSignatures cls =
+  mapM
+    (\(name, ty) ->
+       let gens = zip (classTypeVariables cls) [GenericType i | i <- [0 ..]]
+       in do ty' <- genify gens ty
+             vars <- mapM (genify gens . VariableType) (classTypeVariables cls)
+             pure
+               (TypeSignature
+                  name
+                  (Forall
+                     (map typeVariableKind (classTypeVariables cls))
+                     (Qualified [IsIn (className cls) vars] ty'))))
+    (M.toList (classMethods cls))
+
+genify :: MonadThrow m => [(TypeVariable Name, Type Name)] -> Type Name -> m (Type Name)
+genify table =
+  \case
+    VariableType tyvar ->
+      case lookup tyvar table of
+        Nothing -> throwM (InvalidMethodTypeVariable (map fst table) tyvar)
+        Just v -> pure v
+    ApplicationType f x -> do
+      f' <- genify table f
+      x' <- genify table x
+      pure (ApplicationType f' x')
+    x -> pure x
 
 dataTypeSignatures
   :: Monad m
@@ -341,7 +396,7 @@ dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
         makeArrow :: Type Name -> Type Name -> Type Name
         a `makeArrow` b =
           ApplicationType
-            (ApplicationType (specialTypesFunction specialTypes) a)
+            (ApplicationType (ConstructorType(specialTypesFunction specialTypes)) a)
             b
 
 -- | Setup the class environment.
@@ -359,15 +414,15 @@ setupEnv specialTypes env = do
         addClass theShow [TypeVariable show_a StarKind] [] mempty >=>
         addInstance
           []
-          (IsIn theShow [specialTypesInteger specialTypes])
+          (IsIn theShow [ConstructorType(specialTypesInteger specialTypes)])
           (Dictionary showInt mempty) >=>
         addInstance
           []
-          (IsIn theShow [specialTypesRational specialTypes])
+          (IsIn theShow [ConstructorType(specialTypesRational specialTypes)])
           (Dictionary showRational mempty) >=>
         addInstance
           []
-          (IsIn theShow [specialTypesChar specialTypes])
+          (IsIn theShow [ConstructorType(specialTypesChar specialTypes)])
           (Dictionary showChar' mempty)
   lift (update env)
   where
@@ -397,16 +452,15 @@ defaultSpecialTypes = do
   return
     (SpecialTypes
      { specialTypesBool = boolDataType
-     , specialTypesChar = ConstructorType (TypeConstructor theChar StarKind)
-     , specialTypesString = ConstructorType (TypeConstructor theString StarKind)
+     , specialTypesChar = (TypeConstructor theChar StarKind)
+     , specialTypesString = (TypeConstructor theString StarKind)
      , specialTypesFunction =
-         ConstructorType
-           (TypeConstructor
-              theArrow
-              (FunctionKind StarKind (FunctionKind StarKind StarKind)))
+         (TypeConstructor
+            theArrow
+            (FunctionKind StarKind (FunctionKind StarKind StarKind)))
      , specialTypesInteger =
-         ConstructorType (TypeConstructor theInteger StarKind)
+         (TypeConstructor theInteger StarKind)
      , specialTypesRational =
-         ConstructorType (TypeConstructor theRational StarKind)
+         (TypeConstructor theRational StarKind)
      , specialTypesShow = theShow
      })

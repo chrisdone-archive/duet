@@ -400,13 +400,13 @@ inferLiteralType
   :: Monad m
   => SpecialTypes Name -> Literal -> InferT m ([Predicate Type Name], Type Name)
 inferLiteralType specialTypes (CharacterLiteral _) =
-  return ([], specialTypesChar specialTypes)
+  return ([], ConstructorType (specialTypesChar specialTypes))
 inferLiteralType specialTypes (IntegerLiteral _) = do
-  return ([], specialTypesInteger specialTypes)
+  return ([], ConstructorType (specialTypesInteger specialTypes))
 inferLiteralType specialTypes (StringLiteral _) =
-  return ([], specialTypesString specialTypes)
+  return ([], ConstructorType (specialTypesString specialTypes))
 inferLiteralType specialTypes (RationalLiteral _) = do
-  return ([], specialTypesRational specialTypes)
+  return ([], ConstructorType (specialTypesRational specialTypes))
 
 inferPattern
   :: MonadThrow m
@@ -437,7 +437,7 @@ inferPattern signatures = go
           (Qualified qs t) <- freshInst sc
           specialTypes <- InferT (gets inferStateSpecialTypes)
           let makeArrow :: Type Name -> Type Name -> Type Name
-              a `makeArrow` b = ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
+              a `makeArrow` b = ApplicationType (ApplicationType (ConstructorType (specialTypesFunction specialTypes)) a) b
           unify t (foldr makeArrow t' ts)
           return (ConstructorPattern (TypeSignature l (toScheme t')) i pats',ps ++ qs, as, t')
 -- inferPattern (LazyPattern pat) = inferPattern pat
@@ -647,7 +647,7 @@ inferExpressionType ce as (ApplicationExpression l e f) = do
   t <- newVariableType StarKind
   specialTypes <- InferT (gets inferStateSpecialTypes)
   let makeArrow :: Type Name -> Type Name -> Type Name
-      a `makeArrow` b = ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
+      a `makeArrow` b = ApplicationType (ApplicationType (ConstructorType(specialTypesFunction specialTypes)) a) b
   unify (tf `makeArrow` t) te
   let scheme = (Forall [] (Qualified (ps++qs) t))
   return (ps ++ qs, t, ApplicationExpression (TypeSignature l scheme) e' f')
@@ -706,7 +706,7 @@ inferAltType ce as (Alternative l pats e) = do
   (qs, t, e') <- inferExpressionType ce (as' ++ as) e
   specialTypes <- InferT (gets inferStateSpecialTypes)
   let makeArrow :: Type Name -> Type Name -> Type Name
-      a `makeArrow` b = ApplicationType (ApplicationType (specialTypesFunction specialTypes) a) b
+      a `makeArrow` b = ApplicationType (ApplicationType (ConstructorType(specialTypesFunction specialTypes)) a) b
   let scheme = (Forall [] (Qualified (ps ++ qs) (foldr makeArrow t ts)))
   return (ps ++ qs, foldr makeArrow t ts, makeAlt l scheme pats' e')
 

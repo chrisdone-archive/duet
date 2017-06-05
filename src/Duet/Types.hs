@@ -58,11 +58,11 @@ data ParsedType i
 -- literals.
 data SpecialTypes i = SpecialTypes
   { specialTypesBool       :: DataType Type i
-  , specialTypesChar       :: Type i
-  , specialTypesString     :: Type i
-  , specialTypesFunction   :: Type i
-  , specialTypesInteger    :: Type i
-  , specialTypesRational   :: Type i
+  , specialTypesChar       :: TypeConstructor i
+  , specialTypesString     :: TypeConstructor i
+  , specialTypesFunction   :: TypeConstructor i
+  , specialTypesInteger    :: TypeConstructor i
+  , specialTypesRational   :: TypeConstructor i
   , specialTypesShow       :: i
   } deriving (Show)
 
@@ -117,6 +117,8 @@ data RenamerException
   | IdentifierNotInTypeScope !(Map Identifier Name) !Identifier
   | NameNotInConScope ![TypeSignature Name Name] !Name
   | TypeNotInScope ![TypeConstructor Name] !Identifier
+  | UnknownTypeVariable ![TypeVariable Name] !Identifier
+  | InvalidMethodTypeVariable ![TypeVariable Name] !(TypeVariable Name)
   | RenamerKindMismatch (Type Name) Kind (Type Name) Kind
   | KindTooManyArgs (Type Name) Kind (Type Name)
   | ConstructorFieldKind Name (Type Name) Kind

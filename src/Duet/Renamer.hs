@@ -143,11 +143,12 @@ renameField specialTypes typeConstructors vars name fe = do
 
 renameClass
   :: (MonadSupply Int m, MonadThrow m)
-  => Map Identifier Name
+  => SpecialTypes Name
+  -> Map Identifier Name
   -> [DataType Type Name]
   -> Class ParsedType Identifier l
   -> m (Class Type Name l)
-renameClass subs types cls = do
+renameClass specialTypes subs types cls = do
   name <- supplyClassName (className cls)
   identToVars <-
     mapM
@@ -155,14 +156,26 @@ renameClass subs types cls = do
          i' <- supplyTypeName i
          pure (i, TypeVariable i' k))
       (classTypeVariables cls)
-  instances <- mapM (renameInstance subs types) (classInstances cls)
+  instances <-
+    mapM
+      (renameInstance specialTypes subs types identToVars)
+      (classInstances cls)
+  methods' <-
+    fmap
+      M.fromList
+      (mapM
+         (\(name, ty) -> do
+            name' <- supplyMethodName name
+            ty' <- renameType specialTypes identToVars types ty
+            pure (name', ty'))
+         (M.toList (classMethods cls)))
   pure
     (Class
      { className = name
      , classTypeVariables = map snd identToVars
      , classSuperclasses = []
      , classInstances = instances
-     , classMethods = M.fromList []
+     , classMethods = methods'
      })
 
 --------------------------------------------------------------------------------
@@ -170,13 +183,15 @@ renameClass subs types cls = do
 
 renameInstance
   :: (MonadThrow m, MonadSupply Int m)
-  => Map Identifier Name
+  => SpecialTypes Name
+  -> Map Identifier Name
   -> [DataType Type Name]
+  -> [(Identifier, TypeVariable Name)]
   -> Instance ParsedType Identifier l
   -> m (Instance Type Name l)
-renameInstance subs types (Instance (Qualified preds ty) dict) = do
-  preds' <- mapM (renamePredicate subs types) preds
-  ty' <- renamePredicate subs types ty
+renameInstance specialTypes subs types tyVars (Instance (Qualified preds ty) dict) = do
+  preds' <- mapM (renamePredicate specialTypes subs tyVars types) preds
+  ty' <- renamePredicate specialTypes subs tyVars types ty
   dict' <- renameDict subs dict
   pure (Instance (Qualified preds' ty') dict')
 
@@ -200,13 +215,15 @@ renameDict subs (Dictionary name methods) = do
 
 renamePredicate
   :: (MonadThrow m)
-  => Map Identifier Name
+  => SpecialTypes Name
+  -> Map Identifier Name
+  -> [(Identifier, TypeVariable Name)]
   -> [DataType Type Name]
   -> Predicate ParsedType Identifier
   -> m (Predicate Type Name)
-renamePredicate subs types (IsIn className types0) =
+renamePredicate specialTypes subs tyVars types (IsIn className types0) =
   do className' <- substituteClass subs className
-     types' <- mapM (renameType subs types >=> forceStarKind) types0
+     types' <- mapM (renameType specialTypes tyVars types >=> forceStarKind) types0
      pure (IsIn className' types')
 
 -- | Force that the type has kind *.
@@ -219,28 +236,45 @@ forceStarKind ty =
 -- | Rename a type, checking kinds, taking names, etc.
 renameType
   :: MonadThrow m
-  => Map Identifier Name
+  => SpecialTypes Name
+  -> [(Identifier, TypeVariable Name)]
   -> [DataType Type Name]
   -> ParsedType Identifier
   -> m (Type Name)
-renameType subs types =
+renameType specialTypes tyVars types =
   \case
     ParsedTypeConstructor i -> do
       ms <- mapM (\p -> fmap (, p) (identifyType (dataTypeName p))) types
       case lookup i ms of
-        Nothing ->
-          throwM (TypeNotInScope (map dataTypeToConstructor (map snd ms)) i)
+        Nothing -> do
+          do specials' <- sequence specials
+             case lookup i specials' of
+               Nothing ->
+                 throwM
+                   (TypeNotInScope (map dataTypeToConstructor (map snd ms)) i)
+               Just t -> pure (ConstructorType t)
         Just dty -> pure (dataTypeConstructor dty)
     ParsedTypeVariable i -> do
-      i' <- substituteType subs i
-      pure (VariableType (TypeVariable i' StarKind))
+      case lookup i tyVars of
+        Nothing -> throwM (UnknownTypeVariable (map snd tyVars) i)
+        Just ty -> do
+          pure (VariableType ty)
     ParsedTypeApp f a -> do
-      f' <- renameType subs types f
-      a' <- renameType subs types a
+      f' <- renameType specialTypes tyVars types f
+      a' <- renameType specialTypes tyVars types a
       case typeKind f' of
         FunctionKind {} -> pure (ApplicationType f' a')
         StarKind ->
           throwM (RenamerKindMismatch f' (typeKind f') a' (typeKind a'))
+  where
+    specials =
+      [ setup specialTypesFunction
+      , setup (dataTypeToConstructor . specialTypesBool)
+      ]
+      where
+        setup f = do
+          i <- identifyType (typeConstructorIdentifier (f specialTypes))
+          pure (i, f specialTypes)
 
 --------------------------------------------------------------------------------
 -- Value renaming
@@ -363,6 +397,7 @@ substituteVar subs i0 =
   do i <- identifyValue i0
      case M.lookup i subs of
        Just name@ValueName{} -> pure name
+       Just name@MethodName{} -> pure name
        _ -> do s <- identifyValue i
                throwM (IdentifierNotInVarScope subs s)
 

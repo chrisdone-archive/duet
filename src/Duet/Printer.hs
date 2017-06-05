@@ -24,6 +24,8 @@ instance Printable Name where
       ConstructorName _ string -> string
       ForallName i -> "g" ++ show i
       DictName i string -> "("  ++ string ++ ":" ++ show i ++")"
+      ClassName _ s -> s
+      MethodName _ s -> s
 
 instance Printable Identifier where
   printit =
@@ -234,8 +236,10 @@ printKind =
 printTypeSansParens :: (Printable i, Eq i) => SpecialTypes i -> Type i -> [Char]
 printTypeSansParens specialTypes =
   \case
-    ApplicationType (ApplicationType func x') y' | func == specialTypesFunction specialTypes ->
-      printType specialTypes x' ++ " -> " ++ printTypeSansParens specialTypes y'
+    ApplicationType (ApplicationType func x') y'
+      | func == ConstructorType (specialTypesFunction specialTypes) ->
+        printType specialTypes x' ++
+        " -> " ++ printTypeSansParens specialTypes y'
     o -> printType specialTypes o
 
 printType :: (Printable i, Eq i) => SpecialTypes i -> Type i -> [Char]
@@ -244,7 +248,7 @@ printType specialTypes =
     VariableType v -> printTypeVariable v
     ConstructorType tyCon -> printTypeConstructor tyCon
     ApplicationType (ApplicationType func x') y
-      | func == specialTypesFunction specialTypes ->
+      | func == ConstructorType (specialTypesFunction specialTypes) ->
         "(" ++
         printType specialTypes x' ++
         " -> " ++ printTypeSansParens specialTypes y ++ ")"
@@ -257,11 +261,12 @@ printType specialTypes =
       \case
         x@ApplicationType {} -> "(" ++ printType specialTypes x ++ ")"
         x -> printType specialTypes x
-    printTypeConstructor (TypeConstructor identifier kind) =
-      case kind of
-        StarKind -> printIdentifier identifier
-        FunctionKind {} -> printIdentifier identifier
-            -- _ -> "(" ++ printIdentifier identifier ++ " :: " ++ printKind kind ++ ")"
+
+printTypeConstructor (TypeConstructor identifier kind) =
+  case kind of
+    StarKind -> printIdentifier identifier
+    FunctionKind {} -> printIdentifier identifier
+        -- _ -> "(" ++ printIdentifier identifier ++ " :: " ++ printKind kind ++ ")"
 
 printTypeVariable :: Printable i => TypeVariable i -> String
 printTypeVariable (TypeVariable identifier kind) =

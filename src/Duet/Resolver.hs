@@ -49,8 +49,8 @@ resolveAlt
 resolveAlt classes specialTypes (Alternative l ps e) = do
   dicts <-
     mapM
-      (\pred ->
-         (pred, ) <$> supplyDictName (predicateToString specialTypes pred))
+      (\pred' ->
+         (pred', ) <$> supplyDictName (predicateToString specialTypes pred'))
       (filter (\p -> (not (isJust (byInst classes p)))) predicates)
   (Alternative l <$> pure ps <*>
    resolveExp
