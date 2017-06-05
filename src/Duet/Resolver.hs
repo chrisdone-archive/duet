@@ -13,8 +13,6 @@ import Control.Monad.Catch
 import Control.Monad.Supply
 import Data.Map.Strict (Map)
 import Data.Maybe
-import Debug.Trace
-
 import Duet.Infer
 import Duet.Printer
 import Duet.Renamer
@@ -48,13 +46,13 @@ resolveAlt
   -> Alternative Name (TypeSignature Name l)
   -> m (Alternative Name (TypeSignature Name l))
 resolveAlt classes specialTypes (Alternative l ps e) = do
-  trace
+  {-trace
     (unlines
        [ "Predicates: " ++ show predicates
        , "By instances: " ++ show (map (\p -> (byInst classes p)) predicates)
        , "Classes: " ++ show classes
        ])
-    (return ())
+    (return ())-}
   dicts <-
     mapM
       (\pred' ->
@@ -78,7 +76,7 @@ predicateToString
   => SpecialTypes i -> Predicate Type i -> String
 predicateToString specialTypes (IsIn name ts) =
   -- printIdentifier name ++ " " ++ unwords (map (printType specialTypes) ts)
-  "$dict" ++ printIdentifier name
+  "?dict" ++ printIdentifier name
 
 resolveExp
   :: (MonadThrow m, MonadSupply Int m, Show l)
@@ -101,13 +99,10 @@ resolveExp classes specialTypes dicts = go
           LambdaExpression l0 <$> (Alternative l vs <$> go b)
         e -> pure e
     lookupDictionary l p =
-      trace
-        ("lookupDictionary " ++ show classes ++ " <= " ++ show p)
-        (case byInst classes p of
-           Just (_, dict) -> do
-             trace ("WINRAR!") (return ())
-             pure (VariableExpression l (dictionaryName dict))
-           Nothing ->
-             case lookup p dicts of
-               Nothing -> throwM (NoInstanceFor p)
-               Just v -> pure (VariableExpression l v))
+      (case byInst classes p of
+         Just (_, dict) -> do
+           pure (VariableExpression l (dictionaryName dict))
+         Nothing ->
+           case lookup p dicts of
+             Nothing -> throwM (NoInstanceFor p)
+             Just v -> pure (VariableExpression l v))

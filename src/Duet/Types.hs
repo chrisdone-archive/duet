@@ -156,6 +156,8 @@ data InferException
   | ClassMismatch
   | MergeFail
   | AmbiguousInstance [Ambiguity Name]
+  | MissingMethod
+
   deriving (Show, Typeable)
 instance Exception InferException
 

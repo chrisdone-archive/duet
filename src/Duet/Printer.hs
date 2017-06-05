@@ -126,6 +126,7 @@ printPat =
       (if null ps
          then ""
          else " " ++ unwords (map inner ps))
+    WildcardPattern{} -> "_"
   where
     inner =
       \case

@@ -1,3 +1,5 @@
+{-# LANGUAGE Strict #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
@@ -51,7 +53,6 @@ import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
-import           Debug.Trace
 import           Duet.Types
 
 --------------------------------------------------------------------------------
@@ -81,13 +82,77 @@ typeCheckModule
 typeCheckModule ce as specialTypes bgs =
   evalStateT
     (runInferT $ do
-       (ps, _, bgs') <- inferSequenceTypes inferBindGroupTypes ce as bgs
+       (ps, _, bgs') <-
+         inferSequenceTypes
+           inferBindGroupTypes
+           ce
+           as
+           (bgs ++ classMethodsToGroups ce)
        s <- InferT (gets inferStateSubstitutions)
        let rs = reduce ce (map (substitutePredicate s) ps)
        s' <- defaultSubst ce [] rs
-       return (map (fmap (substituteTypeSignature (s' @@ s))) bgs'
-              ,mempty)) -- TODO: next step: type check also the instance methods.
+       let bgsFinal = map (fmap (substituteTypeSignature (s' @@ s))) bgs'
+       ce' <- collectMethods bgsFinal ce
+       return
+         ( bgsFinal
+         , ce' -- TODO: next step: type check also the instance methods.
+          ))
     (InferState nullSubst 0 specialTypes)
+
+collectMethods
+  :: MonadThrow m
+  => [BindGroup Name (TypeSignature Name l)]
+  -> Map Name (Class Type Name l)
+  -> m (Map Name (Class Type Name (TypeSignature Name l)))
+collectMethods binds =
+  fmap M.fromList .
+  mapM
+    (\(name, cls) -> do
+       insts <-
+         mapM
+           (\inst -> do
+              methods <-
+                mapM
+                  (\(key, _oldAlt) ->
+                     case listToMaybe
+                            (mapMaybe
+                               (\(BindGroup _ is) ->
+                                  listToMaybe
+                                    (mapMaybe
+                                       (listToMaybe .
+                                        mapMaybe
+                                          (\i ->
+                                             if implicitlyTypedBindingId i ==
+                                                key
+                                               then listToMaybe
+                                                      (implicitlyTypedBindingAlternatives
+                                                         i)
+                                               else Nothing))
+                                       is))
+                               binds) of
+                       Just alt -> pure (key, alt)
+                       Nothing -> throwM MissingMethod)
+                  (M.toList (dictionaryMethods (instanceDictionary inst)))
+              pure
+                inst
+                { instanceDictionary =
+                    (instanceDictionary inst)
+                    {dictionaryMethods = M.fromList methods}
+                })
+           (classInstances cls)
+       pure (name, cls {classInstances = insts})) .
+  M.toList
+
+classMethodsToGroups :: Map Name (Class Type Name l) -> [BindGroup Name l]
+classMethodsToGroups =
+  map
+    (BindGroup [] .
+     map
+       (map
+          (\(name, alt) ->
+             ImplicitlyTypedBinding (alternativeLabel alt) name [alt])) .
+     map (M.toList . dictionaryMethods . instanceDictionary)) .
+  map classInstances . M.elems
 
 --------------------------------------------------------------------------------
 -- Substitution
@@ -195,8 +260,8 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
           getTypeSignatureTypeVariables
           (map (substituteTypeSignature s) as)
       vss = map getTypeTypeVariables ts'
-      gs = foldr1 union vss \\ fs
-  (ds, rs) <- split ce fs (foldr1 intersect vss) ps'
+      gs = foldr1' union vss \\ fs
+  (ds, rs) <- split ce fs (foldr1' intersect vss) ps'
   if restrictImplicitlyTypedBindings bs
     then let gs' = gs \\ getTypeVariablesOf getPredicateTypeVariables rs
              scs' = map (quantify gs' . (Qualified [])) ts'
@@ -217,6 +282,11 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
                      ImplicitlyTypedBinding (TypeSignature l scheme) tid binds')
                   (zip bs binds')
                   scs')
+  where
+    foldr1' f xs =
+      if null xs
+        then []
+        else foldr1 f xs
 
 inferBindGroupTypes
   :: (MonadThrow m, Show l)
@@ -577,22 +647,14 @@ byInst ce p@(IsIn i _) =
   case M.lookup i ce of
     Nothing -> throwM NoSuchClassForInstance
     Just typeClass ->
-      trace
-        ("byInst: instances " ++
-         show (classInstances typeClass) ++ ", for " ++ show i)
-        (msum [tryInst it | it <- classInstances typeClass])
+      (msum [tryInst it | it <- classInstances typeClass])
   where
     tryInst (Instance (Qualified ps h) dict) = do
-      trace
-        ("byInst:\n" ++
-         intercalate "\n" (["  Pred: " ++ show p, "  Head: " ++ show h]))
-        (return ())
+      (return ())
       case oneWayMatchPredicate h p of
         Just u ->
-          trace
-            ("matched: " ++ show u ++ ", dict: " ++ show (fmap (const ()) dict))
-            (Just (map (substitutePredicate u) ps, dict))
-        Nothing -> trace ("NO MATCH") (Nothing)
+          (Just (map (substitutePredicate u) ps, dict))
+        Nothing -> Nothing
 
 entail :: Show l =>  Map Name (Class Type Name l) -> [Predicate Type Name] -> Predicate Type Name -> Bool
 entail ce ps p =

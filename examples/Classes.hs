@@ -31,4 +31,8 @@ instance Equal Nat where
             Succ m -> equal n m
             _ -> False
         _ -> False
+not = \b -> case b of
+              True -> False
+              False -> True
+notEqual = \x y -> not (equal x y)
 demo = equal (reader (shower (Succ Zero))) (Succ Zero)

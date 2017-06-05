@@ -23,10 +23,12 @@ import           Control.Monad.Catch
 import           Control.Monad.Supply
 import           Control.Monad.Trans
 import           Control.Monad.Writer
+import           Data.Char
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Duet.Infer
+import           Duet.Printer
 import           Duet.Types
 
 class Identifiable i where
@@ -223,16 +225,20 @@ renameInstance'
 renameInstance' specialTypes subs types tyVars (Instance (Qualified preds ty) dict) = do
   preds' <- mapM (renamePredicate specialTypes subs tyVars types) preds
   ty' <- renamePredicate specialTypes subs tyVars types ty
-  dict' <- renameDict subs dict
+  dict' <- renameDict specialTypes subs dict ty'
   pure (Instance (Qualified preds' ty') dict')
 
 renameDict
   :: (MonadThrow m, MonadSupply Int m)
-  => Map Identifier Name
+  => SpecialTypes Name
+  -> Map Identifier Name
   -> Dictionary Identifier l
+  -> Predicate Type Name
   -> m (Dictionary Name l)
-renameDict subs (Dictionary name methods) = do
-  name' <- supplyDictName' name
+renameDict specialTypes subs (Dictionary _ methods) predicate = do
+  name' <-
+    supplyDictName'
+      (Identifier (predicateToDict specialTypes predicate))
   methods' <-
     fmap
       M.fromList
@@ -243,6 +249,14 @@ renameDict subs (Dictionary name methods) = do
             pure (n', alt'))
          (M.toList methods))
   pure (Dictionary name' methods')
+
+predicateToDict :: SpecialTypes Name -> ((Predicate Type Name)) -> String
+predicateToDict specialTypes (pred) =
+  "$dict" ++ map normalize (printPredicate specialTypes pred)
+  where
+    normalize c
+      | isDigit c || isLetter c = c
+      | otherwise = '_'
 
 renamePredicate
   :: (MonadThrow m)

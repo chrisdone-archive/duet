@@ -22,8 +22,6 @@ import           Data.Monoid
 import           Data.Ord
 import           Data.Text (Text)
 import qualified Data.Text.IO as T
-import           Debug.Trace
-import           Debug.Trace
 import           Duet.Infer
 import           Duet.Parser
 import           Duet.Printer
@@ -62,7 +60,7 @@ compileStepText file i text =
                    (\x -> Just (specialTypes, fmap (const ()) x))))
              is)
         bindGroups
-      trace ("Compiled classes: " ++ show env) (return ())
+      {-trace ("Compiled classes: " ++ show env) (return ())-}
       bindGroups' <-
         catch
           (evalSupplyT
@@ -282,7 +280,7 @@ runTypeChecker decls =
                      mapM
                        (renameInstance specialTypes subs dataTypes typeClasses)
                        instances
-                   trace ("Instances: " ++ show allInstances) (return ())
+                   {-trace ("Instances: " ++ show allInstances) (return ())-}
                    pure
                      ( map
                          (\typeClass ->
@@ -321,7 +319,7 @@ runTypeChecker decls =
                        e0 >>= \e ->
                        foldM
                          (\e1 i@(Instance (Qualified ps p) dict) ->
-                            do liftIO (putStrLn ("Add instance: " ++ show i))
+                            do {-liftIO (putStrLn ("Add instance: " ++ show i))-}
                                addInstance ps p dict e1)
                          e
                          (classInstances typeClass))
