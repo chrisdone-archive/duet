@@ -32,10 +32,12 @@ import           Duet.Types
 class Identifiable i where
   identifyValue :: MonadThrow m => i -> m Identifier
   identifyType :: MonadThrow m => i -> m Identifier
+  identifyClass :: MonadThrow m => i -> m Identifier
 
 instance Identifiable Identifier where
   identifyValue = pure
   identifyType = pure
+  identifyClass = pure
 
 instance Identifiable Name where
   identifyValue =
@@ -48,6 +50,9 @@ instance Identifiable Name where
     \case
       TypeName _ i -> pure (Identifier i)
       n -> throwM (RenamerNameMismatch n)
+  identifyClass =
+    \case
+       ClassName _ i -> pure (Identifier i)
 
 --------------------------------------------------------------------------------
 -- Data type renaming (this includes kind checking)
@@ -158,7 +163,7 @@ renameClass specialTypes subs types cls = do
       (classTypeVariables cls)
   instances <-
     mapM
-      (renameInstance specialTypes subs types identToVars)
+      (renameInstance' specialTypes subs types identToVars)
       (classInstances cls)
   methods' <-
     fmap
@@ -182,6 +187,32 @@ renameClass specialTypes subs types cls = do
 -- Instance renaming
 
 renameInstance
+  :: (MonadThrow m, MonadSupply Int m, Show l)
+  => SpecialTypes Name
+  -> Map Identifier Name
+  -> [DataType Type Name]
+  -> [Class Type Name l]
+  -> Instance ParsedType Identifier l
+  -> m (Instance Type Name l)
+renameInstance specialTypes subs types classes inst@(Instance (Qualified _ (IsIn className' _)) _) = do
+  {-trace ("renameInstance: Classes: " ++ show (map className classes)) (return ())-}
+  table <- mapM (\c -> fmap (, c) (identifyClass (className c))) classes
+  {-trace ("renameInstance: Table: " ++ show table) (return ())-}
+  case lookup className' table of
+    Nothing ->
+      do {-trace ("renameInstance: ???" ++ show className') (return ())-}
+         throwM
+           (IdentifierNotInClassScope
+              (M.fromList (map (second className) table))
+              className')
+    Just typeClass -> do
+      vars <-
+        mapM
+          (\v@(TypeVariable i _) -> fmap (, v) (identifyType i))
+          (classTypeVariables typeClass)
+      renameInstance' specialTypes subs types vars inst
+
+renameInstance'
   :: (MonadThrow m, MonadSupply Int m)
   => SpecialTypes Name
   -> Map Identifier Name
@@ -189,7 +220,7 @@ renameInstance
   -> [(Identifier, TypeVariable Name)]
   -> Instance ParsedType Identifier l
   -> m (Instance Type Name l)
-renameInstance specialTypes subs types tyVars (Instance (Qualified preds ty) dict) = do
+renameInstance' specialTypes subs types tyVars (Instance (Qualified preds ty) dict) = do
   preds' <- mapM (renamePredicate specialTypes subs tyVars types) preds
   ty' <- renamePredicate specialTypes subs tyVars types ty
   dict' <- renameDict subs dict

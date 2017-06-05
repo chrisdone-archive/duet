@@ -330,6 +330,9 @@ data Instance f i l = Instance
   , instanceDictionary :: !(Dictionary i l)
   } deriving (Show)
 
+instanceClassName :: Instance t1 i t -> i
+instanceClassName (Instance (Qualified _ (IsIn x _)) _) = x
+
 -- | A dictionary for a class.
 data Dictionary i l = Dictionary
   { dictionaryName :: i

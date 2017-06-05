@@ -9,19 +9,20 @@
 
 module Duet.Resolver where
 
-import           Control.Monad.Catch
-import           Control.Monad.Supply
-import           Data.Map.Strict (Map)
-import           Data.Maybe
+import Control.Monad.Catch
+import Control.Monad.Supply
+import Data.Map.Strict (Map)
+import Data.Maybe
+import Debug.Trace
 
-import           Duet.Infer
-import           Duet.Printer
-import           Duet.Renamer
-import           Duet.Types
+import Duet.Infer
+import Duet.Printer
+import Duet.Renamer
+import Duet.Types
 
 
 resolveBindGroup
-  :: (MonadSupply Int m, MonadThrow m)
+  :: (MonadSupply Int m, MonadThrow m ,Show l)
   => Map Name (Class Type Name (TypeSignature Name l))
   -> SpecialTypes Name
   -> BindGroup Name (TypeSignature Name l)
@@ -32,7 +33,7 @@ resolveBindGroup classes specialTypes (BindGroup explicit implicit) = do
   pure (BindGroup explicits implicits)
 
 resolveImplicit
-  :: (MonadSupply Int m, MonadThrow m)
+  :: (MonadSupply Int m, MonadThrow m ,Show l)
   => Map Name (Class Type Name (TypeSignature Name l))
   -> SpecialTypes Name
   -> ImplicitlyTypedBinding Name (TypeSignature Name l)
@@ -41,12 +42,18 @@ resolveImplicit classes specialTypes (ImplicitlyTypedBinding l name alts) =
   ImplicitlyTypedBinding l name <$> mapM (resolveAlt classes specialTypes) alts
 
 resolveAlt
-  :: (MonadSupply Int m, MonadThrow m)
+  :: (MonadSupply Int m, MonadThrow m, Show l)
   => Map Name (Class Type Name (TypeSignature Name l))
   -> SpecialTypes Name
   -> Alternative Name (TypeSignature Name l)
   -> m (Alternative Name (TypeSignature Name l))
 resolveAlt classes specialTypes (Alternative l ps e) = do
+  trace
+    (unlines
+       [ "Predicates: " ++ show predicates
+       , "By instances: " ++ show (map (\p -> (byInst classes p)) predicates)
+       ])
+    (return ())
   dicts <-
     mapM
       (\pred' ->

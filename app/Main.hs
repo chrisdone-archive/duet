@@ -18,6 +18,7 @@ import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
+import           Data.Monoid
 import           Data.Ord
 import           Data.Text (Text)
 import qualified Data.Text.IO as T
@@ -231,6 +232,12 @@ runTypeChecker decls =
              ClassDecl d -> Just d
              _ -> Nothing)
           decls
+      instances =
+        mapMaybe
+          (\case
+             InstanceDecl d -> Just d
+             _ -> Nothing)
+          decls
       types =
         mapMaybe
           (\case
@@ -241,41 +248,85 @@ runTypeChecker decls =
        (do specialTypes <- defaultSpecialTypes
            (specialSigs, signatures0) <- builtInSignatures specialTypes
            liftIO (putStrLn "-- Renaming types, classes and instances ...")
-           sigs' <-
+           (typeClasses, signatures, subs) <-
              catch
                (do dataTypes <- renameDataTypes specialTypes types
-                   consSigs <- mapM (dataTypeSignatures specialTypes) dataTypes
-                   typeClasses <-
-                     mapM (renameClass specialTypes mempty dataTypes) classes
-                   methodSigs <- mapM classSignatures typeClasses
-                   trace (show typeClasses) (return ())
-                   pure (consSigs ++ methodSigs))
+                   consSigs <-
+                     fmap
+                       concat
+                       (mapM (dataTypeSignatures specialTypes) dataTypes)
+                   typeClasses0 <-
+                     mapM
+                       (\c -> do
+                          renamed <- renameClass specialTypes mempty dataTypes c
+                          pure (className c, renamed))
+                       classes
+                   let typeClasses = map snd typeClasses0
+                   methodSigs <- fmap concat (mapM classSignatures typeClasses)
+                   let signatures = signatures0 <> consSigs <> methodSigs
+                       subs =
+                         M.fromList
+                           (map
+                              (\(TypeSignature name _) ->
+                                 case name of
+                                   ValueName _ ident -> (Identifier ident, name)
+                                   ConstructorName _ ident ->
+                                     (Identifier ident, name)
+                                   MethodName _ ident ->
+                                     (Identifier ident, name))
+                              signatures) <>
+                         M.fromList (map (second className) typeClasses0)
+                   allInstances <-
+                     mapM
+                       (renameInstance specialTypes subs dataTypes typeClasses)
+                       instances
+                   trace ("Instances: " ++ show allInstances) (return ())
+                   pure
+                     ( map
+                         (\typeClass ->
+                            typeClass
+                            { classInstances =
+                                filter ((== className typeClass) . instanceClassName) allInstances
+                            })
+                         typeClasses
+                     , signatures
+                     , subs))
                (\e ->
                   liftIO
                     (do putStrLn (displayRenamerException specialTypes e)
                         exitFailure))
-           let signatures = signatures0 ++ concat sigs'
            liftIO (putStrLn "-- Signatures in scope:")
            liftIO
-             (mapM_ (putStrLn . printTypeSignature specialTypes) (concat sigs'))
-           let signatureSubs =
-                 M.fromList
-                   (map
-                      (\(TypeSignature name _) ->
-                         case name of
-                           ValueName _ ident -> (Identifier ident, name)
-                           ConstructorName _ ident -> (Identifier ident, name)
-                           MethodName _ ident -> (Identifier ident, name))
-                      signatures)
+             (mapM_ (putStrLn . printTypeSignature specialTypes) signatures)
            liftIO (putStrLn "-- Renaming variable/function declarations ...")
-           (renamedBindings, subs) <-
+           (renamedBindings, subs') <-
              catch
-               (renameBindGroups signatureSubs bindings)
+               (renameBindGroups subs bindings)
                (\e ->
                   liftIO
                     (do putStrLn (displayRenamerException specialTypes e)
                         exitFailure))
-           env <- setupEnv specialTypes mempty
+           env0 <- setupEnv specialTypes mempty
+           env <-
+             lift
+               (foldM
+                  (\e0 typeClass ->
+                     addClass
+                       (className typeClass)
+                       (classTypeVariables typeClass)
+                       (classSuperclasses typeClass)
+                       (classMethods typeClass)
+                       e0 >>= \e ->
+                       foldM
+                         (\e1 i@(Instance (Qualified ps p) dict) ->
+                            do liftIO (putStrLn ("Add instance: " ++ show i))
+                               addInstance ps p dict e1)
+                         e
+                         (classInstances typeClass))
+                  env0
+                  typeClasses)
+           liftIO (putStrLn "-- Type class environment:")
+           liftIO (print env)
            liftIO (putStrLn "-- Inferring types ...")
            (bindGroups, env') <-
              lift
@@ -286,7 +337,7 @@ runTypeChecker decls =
                        (do putStrLn (displayInferException specialTypes e)
                            exitFailure)))
            return
-             (specialSigs, specialTypes, bindGroups, signatures, subs, env'))
+             (specialSigs, specialTypes, bindGroups, signatures, subs', env'))
        [0 ..]
 
 -- | Built-in pre-defined functions.

@@ -569,6 +569,8 @@ byInst ce p@(IsIn i _) = msum [tryInst it | it <- lookupClassInstances ce i]
       u <- oneWayMatchPredicate h p
       Just (map (substitutePredicate u) ps, dict)
 
+
+
 entail :: Map Name (Class Type Name l) -> [Predicate Type Name] -> Predicate Type Name -> Bool
 entail ce ps p =
   any (p `elem`) (map (bySuper ce) ps) ||
