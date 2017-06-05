@@ -23,6 +23,7 @@ import           Data.Ord
 import           Data.Text (Text)
 import qualified Data.Text.IO as T
 import           Debug.Trace
+import           Debug.Trace
 import           Duet.Infer
 import           Duet.Parser
 import           Duet.Printer
@@ -61,6 +62,7 @@ compileStepText file i text =
                    (\x -> Just (specialTypes, fmap (const ()) x))))
              is)
         bindGroups
+      trace ("Compiled classes: " ++ show env) (return ())
       bindGroups' <-
         catch
           (evalSupplyT

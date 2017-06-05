@@ -51,6 +51,7 @@ import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
+import           Debug.Trace
 import           Duet.Types
 
 --------------------------------------------------------------------------------
@@ -71,7 +72,7 @@ import           Duet.Types
 --
 -- Throws 'InferException' in case of a type error.
 typeCheckModule
-  :: MonadThrow m
+  :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l) -- ^ Set of defined type-classes.
   -> [(TypeSignature Name Name)] -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
   -> SpecialTypes Name -- ^ Special types that Haskell uses for pattern matching and literals.
@@ -145,7 +146,7 @@ newVariableType k =
           (VariableType (TypeVariable (enumId (inferStateCounter inferState)) k)))
 
 inferExplicitlyTypedBindingType
-  :: MonadThrow m
+  :: (MonadThrow m, Show l  )
   => Map Name (Class Type Name l)
   -> [TypeSignature Name Name]
   -> (ExplicitlyTypedBinding Name l)
@@ -168,7 +169,7 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding identifier sc alts
            else return (ds, ExplicitlyTypedBinding identifier sc alts')
 
 inferImplicitlyTypedBindingsTypes
-  :: MonadThrow m
+  :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> [ImplicitlyTypedBinding Name l]
@@ -218,7 +219,7 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
                   scs')
 
 inferBindGroupTypes
-  :: MonadThrow m
+  :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> (BindGroup Name l)
@@ -482,21 +483,21 @@ lift' m (IsIn i ts) (IsIn i' ts')
   | i == i' = m ts ts'
   | otherwise = throwM ClassMismatch
 
-lookupClassTypeVariables :: Map Name (Class Type Name l) -> Name -> [TypeVariable Name]
-lookupClassTypeVariables ce i =
-  fromMaybe
-    []
-    (fmap classTypeVariables (M.lookup i ce))
+-- lookupClassTypeVariables :: Map Name (Class Type Name l) -> Name -> [TypeVariable Name]
+-- lookupClassTypeVariables ce i =
+--   fromMaybe
+--     []
+--     (fmap classTypeVariables (M.lookup i ce))
 
-lookupClassSuperclasses :: Map Name (Class Type Name l) -> Name -> [Predicate Type Name]
-lookupClassSuperclasses ce i = maybe [] classSuperclasses (M.lookup i ce)
+-- lookupClassSuperclasses :: Map Name (Class Type Name l) -> Name -> [Predicate Type Name]
+-- lookupClassSuperclasses ce i = maybe [] classSuperclasses (M.lookup i ce)
 
-lookupClassMethods :: Map Name (Class Type Name l) -> Name -> Map Name (Type Name)
-lookupClassMethods ce i = maybe mempty classMethods (M.lookup i ce)
+-- lookupClassMethods :: Map Name (Class Type Name l) -> Name -> Map Name (Type Name)
+-- lookupClassMethods ce i = maybe mempty classMethods (M.lookup i ce)
 
-lookupClassInstances :: Map Name (Class Type Name l) -> Name -> [Instance Type Name l]
-lookupClassInstances ce i =
-  maybe [] classInstances (M.lookup i ce)
+-- lookupClassInstances :: Map Name (Class Type Name l) -> Name -> [Instance Type Name l]
+-- lookupClassInstances ce i =
+--   maybe [] classInstances (M.lookup i ce)
 
 defined :: Maybe a -> Bool
 defined (Just _) = True
@@ -538,20 +539,21 @@ addInstance
   -> Dictionary Name l
   -> Map Name (Class Type Name l)
   -> m (Map Name (Class Type Name l))
-addInstance ps p@(IsIn i _) dict ce
-  | not (defined (M.lookup i ce)) = throwM NoSuchClassForInstance
-  | any (overlap p) qs = throwM OverlappingInstance
-  | otherwise = return (M.insert i c ce)
-  where
-    its = lookupClassInstances ce i
-    qs = [q | Instance (Qualified _ q) _ <- its]
-    c =
-      (Class
-         (lookupClassTypeVariables ce i)
-         (lookupClassSuperclasses ce i)
-         (Instance (Qualified ps p) dict : its)
-         i
-         (lookupClassMethods ce i))
+addInstance ps p@(IsIn i _) dict ce =
+  case M.lookup i ce of
+    Nothing -> throwM NoSuchClassForInstance
+    Just typeClass
+      | any (overlap p) qs -> throwM OverlappingInstance
+      | otherwise -> return (M.insert i c ce)
+      where its = classInstances typeClass
+            qs = [q | Instance (Qualified _ q) _ <- its]
+            c =
+              (Class
+                 (classTypeVariables typeClass)
+                 (classSuperclasses typeClass)
+                 (Instance (Qualified ps p) dict : its)
+                 i
+                 (classMethods typeClass))
 
 overlap :: Predicate Type Name -> Predicate Type Name -> Bool
 overlap p q = defined (unifyPredicates p q)
@@ -559,19 +561,40 @@ overlap p q = defined (unifyPredicates p q)
 bySuper :: Map Name (Class Type Name l) -> Predicate Type Name -> [Predicate Type Name]
 bySuper ce p@(IsIn i ts) = p : concat (map (bySuper ce) supers)
   where
-    supers = map (substitutePredicate substitutions) (lookupClassSuperclasses ce i)
-    substitutions = zipWith Substitution (lookupClassTypeVariables ce i) ts
+    supers =
+      map
+        (substitutePredicate substitutions)
+        (maybe [] classSuperclasses (M.lookup i ce))
+    substitutions =
+      zipWith Substitution (maybe [] classTypeVariables (M.lookup i ce)) ts
 
-byInst :: Map Name (Class Type Name l) -> Predicate Type Name -> Maybe ([Predicate Type Name], Dictionary Name l)
-byInst ce p@(IsIn i _) = msum [tryInst it | it <- lookupClassInstances ce i]
+byInst
+  :: Show l
+  => Map Name (Class Type Name l)
+  -> Predicate Type Name
+  -> Maybe ([Predicate Type Name], Dictionary Name l)
+byInst ce p@(IsIn i _) =
+  case M.lookup i ce of
+    Nothing -> throwM NoSuchClassForInstance
+    Just typeClass ->
+      trace
+        ("byInst: instances " ++
+         show (classInstances typeClass) ++ ", for " ++ show i)
+        (msum [tryInst it | it <- classInstances typeClass])
   where
     tryInst (Instance (Qualified ps h) dict) = do
-      u <- oneWayMatchPredicate h p
-      Just (map (substitutePredicate u) ps, dict)
+      trace
+        ("byInst:\n" ++
+         intercalate "\n" (["  Pred: " ++ show p, "  Head: " ++ show h]))
+        (return ())
+      case oneWayMatchPredicate h p of
+        Just u ->
+          trace
+            ("matched: " ++ show u ++ ", dict: " ++ show (fmap (const ()) dict))
+            (Just (map (substitutePredicate u) ps, dict))
+        Nothing -> trace ("NO MATCH") (Nothing)
 
-
-
-entail :: Map Name (Class Type Name l) -> [Predicate Type Name] -> Predicate Type Name -> Bool
+entail :: Show l =>  Map Name (Class Type Name l) -> [Predicate Type Name] -> Predicate Type Name -> Bool
 entail ce ps p =
   any (p `elem`) (map (bySuper ce) ps) ||
   case byInst ce p of
@@ -586,10 +609,10 @@ simplify ent = loop []
       | ent (rs ++ ps) p = loop rs ps
       | otherwise = loop (p : rs) ps
 
-reduce :: Map Name (Class Type Name l) -> [Predicate Type Name] -> [Predicate Type Name]
+reduce :: Show l => Map Name (Class Type Name l) -> [Predicate Type Name] -> [Predicate Type Name]
 reduce ce = simplify (scEntail ce) . elimTauts ce
 
-elimTauts :: Map Name (Class Type Name l) -> [Predicate Type Name] -> [Predicate Type Name]
+elimTauts :: Show l => Map Name (Class Type Name l) -> [Predicate Type Name] -> [Predicate Type Name]
 elimTauts ce ps = [p | p <- ps, not (entail ce [] p)]
 
 scEntail :: Map Name (Class Type Name l) -> [Predicate Type Name] -> Predicate Type Name -> Bool
@@ -620,7 +643,7 @@ merge s1 s2 =
          map substitutionTypeVariable s2)
 
 inferExpressionType
-  :: MonadThrow m
+  :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> (Expression Name l)
@@ -698,7 +721,7 @@ inferExpressionType ce as (CaseExpression l e branches) = do
   return (ps0 ++ concat pss, v, CaseExpression (TypeSignature l scheme) e' branches')
 
 inferAltType
-  :: MonadThrow m
+  :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> Alternative Name l
@@ -738,7 +761,7 @@ makeAlt l scheme pats' e' =
               (Alternative (TypeSignature l scheme) pats' e'))
 
 inferAltTypes
-  :: MonadThrow m
+  :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> [Alternative Name l]
@@ -753,7 +776,7 @@ inferAltTypes ce as alts t = do
         fst3 (x,_,_) = x
 
 split
-  :: MonadThrow m
+  :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l) -> [TypeVariable Name] -> [TypeVariable Name] -> [Predicate Type Name] -> m ([Predicate Type Name], [Predicate Type Name])
 split ce fs gs ps = do
   let ps' = reduce ce ps
@@ -761,7 +784,7 @@ split ce fs gs ps = do
   rs' <- defaultedPredicates ce (fs ++ gs) rs
   return (ds, rs \\ rs')
 
-candidates :: Map Name (Class Type Name l) -> Ambiguity Name -> [Type Name]
+candidates :: (Show l)=> Map Name (Class Type Name l) -> Ambiguity Name -> [Type Name]
 candidates ce (Ambiguity v qs) =
   [ t'
   | let is = [i | IsIn i _ <- qs]
@@ -777,8 +800,13 @@ candidates ce (Ambiguity v qs) =
         stdClasses = [ForallName (-1)]
 
 withDefaults
-  :: MonadThrow m
-  => String->([Ambiguity Name] -> [Type Name] -> a) -> Map Name (Class Type Name l) -> [TypeVariable Name] -> [Predicate Type Name] -> m a
+  :: (MonadThrow m, Show l)
+  => String
+  -> ([Ambiguity Name] -> [Type Name] -> a)
+  -> Map Name (Class Type Name l)
+  -> [TypeVariable Name]
+  -> [Predicate Type Name]
+  -> m a
 withDefaults _label f ce vs ps
   | any null tss = throwM (AmbiguousInstance vps)
   | otherwise = do
@@ -790,12 +818,12 @@ withDefaults _label f ce vs ps
     tss = map (candidates ce) vps
 
 defaultedPredicates
-  :: MonadThrow m
+  :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l) -> [TypeVariable Name] -> [Predicate Type Name] -> m [Predicate Type Name]
 defaultedPredicates = withDefaults "defaultedPredicates" (\vps _ -> concat (map ambiguityPredicates vps))
 
 defaultSubst
-  :: MonadThrow m
+  :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l) -> [TypeVariable Name] -> [Predicate Type Name] -> m [Substitution Name]
 defaultSubst = withDefaults "defaultSubst" (\vps ts -> zipWith Substitution (map ambiguityTypeVariable vps) ts)
 

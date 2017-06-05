@@ -52,6 +52,7 @@ resolveAlt classes specialTypes (Alternative l ps e) = do
     (unlines
        [ "Predicates: " ++ show predicates
        , "By instances: " ++ show (map (\p -> (byInst classes p)) predicates)
+       , "Classes: " ++ show classes
        ])
     (return ())
   dicts <-
@@ -80,7 +81,7 @@ predicateToString specialTypes (IsIn name ts) =
   "$dict" ++ printIdentifier name
 
 resolveExp
-  :: (MonadThrow m, MonadSupply Int m)
+  :: (MonadThrow m, MonadSupply Int m, Show l)
   => Map Name (Class Type Name (TypeSignature Name l))
   -> SpecialTypes Name
   -> [(Predicate Type Name, Name)]
@@ -92,16 +93,21 @@ resolveExp classes specialTypes dicts = go
       \case
         VariableExpression l i -> do
           dictArgs <- mapM (lookupDictionary l) predicates
-          pure (foldl (ApplicationExpression l) (VariableExpression l i) dictArgs)
+          pure
+            (foldl (ApplicationExpression l) (VariableExpression l i) dictArgs)
           where Forall _ (Qualified predicates _) = typeSignatureScheme l
         ApplicationExpression l f x -> ApplicationExpression l <$> go f <*> go x
         LambdaExpression l0 (Alternative l vs b) ->
           LambdaExpression l0 <$> (Alternative l vs <$> go b)
         e -> pure e
     lookupDictionary l p =
-      case byInst classes p of
-        Just (_, dict) -> pure (VariableExpression l (dictionaryName dict))
-        Nothing ->
-          case lookup p dicts of
-            Nothing -> throwM (NoInstanceFor p)
-            Just v -> pure (VariableExpression l v)
+      trace
+        ("lookupDictionary " ++ show classes ++ " <= " ++ show p)
+        (case byInst classes p of
+           Just (_, dict) -> do
+             trace ("WINRAR!") (return ())
+             pure (VariableExpression l (dictionaryName dict))
+           Nothing ->
+             case lookup p dicts of
+               Nothing -> throwM (NoInstanceFor p)
+               Just v -> pure (VariableExpression l v))
