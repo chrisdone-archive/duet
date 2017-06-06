@@ -115,7 +115,7 @@ renameField specialTypes typeConstructors vars name fe = do
           pure (ConstructorType (toTypeConstructor name' (map snd vars')))
         ParsedTypeVariable v ->
           case lookup v vars of
-            Nothing -> throwM (TypeNotInScope [] v)
+            Nothing -> throwM (UnknownTypeVariable (map snd vars) v)
             Just tyvar -> pure (VariableType tyvar)
         ParsedTypeApp f x -> do
           f' <- go f
