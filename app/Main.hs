@@ -210,6 +210,17 @@ displayRenamerException specialTypes =
               (sortBy
                  (comparing (editDistance (printIdentifier i)))
                  (map printTypeConstructor types))))
+    UnknownTypeVariable types i ->
+      "Unknown type variable " ++ curlyQuotes (printIdentifier i) ++
+      "\n" ++
+      "Type variables in scope are: " ++
+      intercalate
+        ", "
+        (map
+           curlyQuotes
+           (sortBy
+              (comparing (editDistance (printIdentifier i)))
+              (map printTypeVariable types)))
     e -> show e
 
 editDistance :: [Char] -> [Char] -> Int
@@ -325,8 +336,8 @@ runTypeChecker decls =
                          (classInstances typeClass))
                   env0
                   typeClasses)
-           liftIO (putStrLn "-- Type class environment:")
-           liftIO (print env)
+           -- liftIO (putStrLn "-- Type class environment:")
+           -- liftIO (print env)
            liftIO (putStrLn "-- Inferring types ...")
            (bindGroups, env') <-
              lift
