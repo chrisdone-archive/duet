@@ -1,8 +1,6 @@
-{-# LANGUAGE Strict #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -173,8 +171,8 @@ substituteQualified substitutions (Qualified predicates t) =
 substituteTypeSignature :: [Substitution Name] -> (TypeSignature Name l) -> (TypeSignature Name l)
 substituteTypeSignature substitutions (TypeSignature l scheme) =
     TypeSignature l (substituteInScheme substitutions scheme)
-  where substituteInScheme substitutions (Forall kinds qualified) =
-          Forall kinds (substituteQualified substitutions qualified)
+  where substituteInScheme subs' (Forall kinds qualified) =
+          Forall kinds (substituteQualified subs' qualified)
 
 substitutePredicate :: [Substitution Name] -> Predicate Type Name -> Predicate Type Name
 substitutePredicate substitutions (IsIn identifier types) =
@@ -200,7 +198,7 @@ unify t1 t2 = do
   u <- unifyTypes (substituteType s t1) (substituteType s t2)
   InferT
     (modify
-       (\s -> s {inferStateSubstitutions = u @@ inferStateSubstitutions s}))
+       (\s' -> s' {inferStateSubstitutions = u @@ inferStateSubstitutions s'}))
 
 newVariableType :: Monad m => Kind -> InferT m (Type Name)
 newVariableType k =
@@ -269,8 +267,8 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
               ( ds ++ rs
               , zipWith (\x y -> TypeSignature x y) is scs'
               , zipWith
-                  (\(ImplicitlyTypedBinding l tid _, binds') scheme ->
-                     ImplicitlyTypedBinding (TypeSignature l scheme) tid binds')
+                  (\(ImplicitlyTypedBinding l tid _, binds'') scheme ->
+                     ImplicitlyTypedBinding (TypeSignature l scheme) tid binds'')
                   (zip bs binds')
                   scs')
     else let scs' = map (quantify gs . (Qualified rs)) ts'
@@ -278,8 +276,8 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
               ( ds
               , zipWith (\x y -> TypeSignature x y) is scs'
               , zipWith
-                  (\(ImplicitlyTypedBinding l tid _, binds') scheme ->
-                     ImplicitlyTypedBinding (TypeSignature l scheme) tid binds')
+                  (\(ImplicitlyTypedBinding l tid _, binds'') scheme ->
+                     ImplicitlyTypedBinding (TypeSignature l scheme) tid binds'')
                   (zip bs binds')
                   scs')
   where
@@ -457,8 +455,8 @@ oneWayMatchLists ts ts' = do
 lookupName
   :: MonadThrow m
   => Name -> [(TypeSignature Name Name)] -> m (Scheme Name)
-lookupName name candidates = go name candidates where
-  go n [] = throwM (NotInScope candidates n)
+lookupName name cands = go name cands where
+  go n [] = throwM (NotInScope cands n)
   go i ((TypeSignature i'  sc):as) =
     if i == i'
       then return sc
@@ -586,7 +584,7 @@ addClass
   => Name
   -> [TypeVariable Name]
   -> [Predicate Type Name]
-  -> Map Name (Type Name)
+  -> Map Name (([TypeVariable Name], Type Name))
   -> Map Name (Class Type Name l)
   -> m (Map Name (Class Type Name l))
 addClass i vs ps methods ce
@@ -739,12 +737,12 @@ inferExpressionType ce as (ApplicationExpression l e f) = do
   let scheme = (Forall [] (Qualified (ps++qs) t))
   return (ps ++ qs, t, ApplicationExpression (TypeSignature l scheme) e' f')
 inferExpressionType ce as (InfixExpression l x op y) = do
-  (ps, ts, ApplicationExpression l (ApplicationExpression _ (VariableExpression _ op) x) y) <-
+  (ps, ts, ApplicationExpression l' (ApplicationExpression _ (VariableExpression _ op') x') y') <-
     inferExpressionType
       ce
       as
       (ApplicationExpression l (ApplicationExpression l (VariableExpression l op) x) y)
-  pure (ps, ts, InfixExpression l x op y)
+  pure (ps, ts, InfixExpression l' x' op' y')
 inferExpressionType ce as (LetExpression l bg e) = do
   (ps, as', bg') <- inferBindGroupTypes ce as bg
   (qs, t, e') <- inferExpressionType ce (as' ++ as) e
@@ -776,9 +774,9 @@ inferExpressionType ce as (CaseExpression l e branches) = do
         (qs, t'', f') <- inferExpressionType ce (as' ++ as) f
         unify v t''
         return (ps ++ qs, (pat', f'))
-  branches <- mapM tiBr branches
-  let pss = map fst branches
-      branches' = map snd branches
+  branchs <- mapM tiBr branches
+  let pss = map fst branchs
+      branches' = map snd branchs
   let scheme = (Forall [] (Qualified (ps0 ++ concat pss) v))
   return (ps0 ++ concat pss, v, CaseExpression (TypeSignature l scheme) e' branches')
 
