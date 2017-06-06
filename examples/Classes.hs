@@ -20,6 +20,9 @@ data Maybe a = Nothing | Just a
 class F (a :: Type -> Type) where
   fm :: a Nat
 
+class Functor f where
+  map :: forall a b. (a -> b) -> f a -> f b
+
 data Ch = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z
 class Equal a where
   equal :: a -> a -> Bool

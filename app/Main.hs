@@ -163,80 +163,81 @@ displayInferException specialTypes =
 
 displayRenamerException :: SpecialTypes Name -> RenamerException -> [Char]
 displayRenamerException specialTypes =
-  \case
-    IdentifierNotInVarScope scope name ->
-      "Not in variable scope " ++
-      curlyQuotes (printit name) ++
-      "\n" ++
-      "Nearest names in scope:\n\n" ++
-      intercalate
-        ", "
-        (map
-           curlyQuotes
-           (take
-              5
-              (sortBy
-                 (comparing (editDistance (printit name)))
-                 (map printit (M.elems scope)))))
-    IdentifierNotInConScope scope name ->
-      "Not in constructors scope " ++
-      curlyQuotes (printit name) ++
-      "\n" ++
-      "Nearest names in scope:\n\n" ++
-      intercalate
-        ", "
-        (map
-           curlyQuotes
-           (take
-              5
-              (sortBy
-                 (comparing (editDistance (printit name)))
-                 (map printit (M.elems scope)))))
-    KindTooManyArgs ty k ty2 ->
-      "The type " ++
-      curlyQuotes (printType specialTypes ty ++ " :: " ++ printKind k) ++
-      " has an unexpected additional argument, " ++
-      curlyQuotes (printType specialTypes ty2)
-    ConstructorFieldKind cons typ kind ->
-      "The type " ++
-      curlyQuotes (printType specialTypes typ ++ " :: " ++ printKind kind) ++
-      " is used in a field in the " ++
-      curlyQuotes (printit cons) ++
-      " constructor, but all fields \
-      \should have types of kind " ++
-      curlyQuotes (printKind StarKind)
-    KindArgMismatch t1 k1 t2 k2 ->
-      "The type " ++
-      curlyQuotes (printType specialTypes t1 ++ " :: " ++ printKind k1) ++
-      " has been given an argument of the wrong kind " ++
-      curlyQuotes (printType specialTypes t2 ++ " :: " ++ printKind k2)
-    TypeNotInScope types i ->
-      "Unknown type " ++
-      curlyQuotes (printIdentifier i) ++
-      "\n" ++
-      "Closest names in scope are: " ++
-      intercalate
-        ", "
-        (map
-           curlyQuotes
-           (take
-              5
-              (sortBy
-                 (comparing (editDistance (printIdentifier i)))
-                 (map printTypeConstructor types))))
-    UnknownTypeVariable types i ->
-      "Unknown type variable " ++
-      curlyQuotes (printIdentifier i) ++
-      "\n" ++
-      "Type variables in scope are: " ++
-      intercalate
-        ", "
-        (map
-           curlyQuotes
-           (sortBy
-              (comparing (editDistance (printIdentifier i)))
-              (map printTypeVariable types)))
-    e -> show e
+  wrap (\case
+          IdentifierNotInVarScope scope name ->
+            "Not in variable scope " ++
+            curlyQuotes (printit name) ++
+            "\n" ++
+            "Nearest names in scope:\n\n" ++
+            intercalate
+              ", "
+              (map
+                 curlyQuotes
+                 (take
+                    5
+                    (sortBy
+                       (comparing (editDistance (printit name)))
+                       (map printit (M.elems scope)))))
+          IdentifierNotInConScope scope name ->
+            "Not in constructors scope " ++
+            curlyQuotes (printit name) ++
+            "\n" ++
+            "Nearest names in scope:\n\n" ++
+            intercalate
+              ", "
+              (map
+                 curlyQuotes
+                 (take
+                    5
+                    (sortBy
+                       (comparing (editDistance (printit name)))
+                       (map printit (M.elems scope)))))
+          KindTooManyArgs ty k ty2 ->
+            "The type " ++
+            curlyQuotes (printType specialTypes ty ++ " :: " ++ printKind k) ++
+            " has an unexpected additional argument, " ++
+            curlyQuotes (printType specialTypes ty2)
+          ConstructorFieldKind cons typ kind ->
+            "The type " ++
+            curlyQuotes (printType specialTypes typ ++ " :: " ++ printKind kind) ++
+            " is used in a field in the " ++
+            curlyQuotes (printit cons) ++
+            " constructor, but all fields \
+            \should have types of kind " ++
+            curlyQuotes (printKind StarKind)
+          KindArgMismatch t1 k1 t2 k2 ->
+            "The type " ++
+            curlyQuotes (printType specialTypes t1 ++ " :: " ++ printKind k1) ++
+            " has been given an argument of the wrong kind " ++
+            curlyQuotes (printType specialTypes t2 ++ " :: " ++ printKind k2)
+          TypeNotInScope types i ->
+            "Unknown type " ++
+            curlyQuotes (printIdentifier i) ++
+            "\n" ++
+            "Closest names in scope are: " ++
+            intercalate
+              ", "
+              (map
+                 curlyQuotes
+                 (take
+                    5
+                    (sortBy
+                       (comparing (editDistance (printIdentifier i)))
+                       (map printTypeConstructor types))))
+          UnknownTypeVariable types i ->
+            "Unknown type variable " ++
+            curlyQuotes (printIdentifier i) ++
+            "\n" ++
+            "Type variables in scope are: " ++
+            intercalate
+              ", "
+              (map
+                 curlyQuotes
+                 (sortBy
+                    (comparing (editDistance (printIdentifier i)))
+                    (map printTypeVariable types)))
+          e -> show e)
+  where wrap f e = (f e) ++ "\n(" ++ show e ++ ")"
 
 editDistance :: [Char] -> [Char] -> Int
 editDistance = on (levenshteinDistance defaultEditCosts) (map toLower)
