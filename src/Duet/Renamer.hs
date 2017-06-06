@@ -126,7 +126,7 @@ renameField specialTypes typeConstructors vars name fe = do
               let xKind = typeKind x'
               if xKind == argKind
                 then pure (ApplicationType f' x')
-                else throwM (RenamerKindMismatch f' fKind x' xKind)
+                else throwM (KindArgMismatch f' fKind x' xKind)
             StarKind -> do
               x' <- go x
               throwM (KindTooManyArgs f' fKind x')
@@ -306,11 +306,15 @@ renameType specialTypes tyVars types =
           pure (VariableType ty)
     ParsedTypeApp f a -> do
       f' <- renameType specialTypes tyVars types f
-      a' <- renameType specialTypes tyVars types a
       case typeKind f' of
-        FunctionKind {} -> pure (ApplicationType f' a')
-        StarKind ->
-          throwM (RenamerKindMismatch f' (typeKind f') a' (typeKind a'))
+        FunctionKind argKind _ -> do
+          a' <- renameType specialTypes tyVars types a
+          if typeKind a' == argKind
+            then pure (ApplicationType f' a')
+            else throwM (KindArgMismatch f' (typeKind f') a' (typeKind a'))
+        StarKind -> do
+          a' <- renameType specialTypes tyVars types a
+          throwM (KindTooManyArgs f' (typeKind f') a')
   where
     specials =
       [ setup specialTypesFunction

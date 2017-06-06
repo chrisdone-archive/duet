@@ -119,7 +119,7 @@ data RenamerException
   | TypeNotInScope ![TypeConstructor Name] !Identifier
   | UnknownTypeVariable ![TypeVariable Name] !Identifier
   | InvalidMethodTypeVariable ![TypeVariable Name] !(TypeVariable Name)
-  | RenamerKindMismatch (Type Name) Kind (Type Name) Kind
+  | KindArgMismatch (Type Name) Kind (Type Name) Kind
   | KindTooManyArgs (Type Name) Kind (Type Name)
   | ConstructorFieldKind Name (Type Name) Kind
   | MustBeStarKind (Type Name) Kind

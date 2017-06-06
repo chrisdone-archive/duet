@@ -205,6 +205,11 @@ displayRenamerException specialTypes =
       " constructor, but all fields \
       \should have types of kind " ++
       curlyQuotes (printKind StarKind)
+    KindArgMismatch t1 k1 t2 k2 ->
+      "The type " ++
+      curlyQuotes (printType specialTypes t1 ++ " :: " ++ printKind k1) ++
+      " has been given an argument of the wrong kind " ++
+      curlyQuotes (printType specialTypes t2 ++ " :: " ++ printKind k2)
     TypeNotInScope types i ->
       "Unknown type " ++
       curlyQuotes (printIdentifier i) ++
