@@ -197,8 +197,16 @@ displayRenamerException specialTypes =
       curlyQuotes (printType specialTypes ty ++ " :: " ++ printKind k) ++
       " has an unexpected additional argument, " ++
       curlyQuotes (printType specialTypes ty2)
+    ConstructorFieldKind cons typ kind ->
+      "The type " ++
+      curlyQuotes (printType specialTypes typ) ++
+      " has kind " ++
+      curlyQuotes (printKind kind) ++
+      ", but the field in constructor " ++
+      curlyQuotes (printit cons) ++ " should have kind " ++ curlyQuotes "*"
     TypeNotInScope types i ->
-      "Unknown type " ++ curlyQuotes (printIdentifier i) ++
+      "Unknown type " ++
+      curlyQuotes (printIdentifier i) ++
       "\n" ++
       "Closest names in scope are: " ++
       intercalate
@@ -211,7 +219,8 @@ displayRenamerException specialTypes =
                  (comparing (editDistance (printIdentifier i)))
                  (map printTypeConstructor types))))
     UnknownTypeVariable types i ->
-      "Unknown type variable " ++ curlyQuotes (printIdentifier i) ++
+      "Unknown type variable " ++
+      curlyQuotes (printIdentifier i) ++
       "\n" ++
       "Type variables in scope are: " ++
       intercalate
