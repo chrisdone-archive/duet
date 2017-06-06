@@ -282,7 +282,8 @@ renamePredicate
   -> m (Predicate Type Name)
 renamePredicate specialTypes subs tyVars types (IsIn className types0) =
   do className' <- substituteClass subs className
-     types' <- mapM (renameType specialTypes tyVars types >=> forceStarKind) types0
+     types' <- mapM (renameType specialTypes tyVars types -- >=> forceStarKind
+                    ) types0
      pure (IsIn className' types')
 
 -- | Force that the type has kind *.
