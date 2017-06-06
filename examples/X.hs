@@ -1,3 +1,9 @@
-{-# LANGUAGE ExplicitForAll #-}
-class Functor f where
-  map :: forall a b. (a -> b) -> f a -> f b
+class X a where
+ f :: a -> D
+data D = D | C
+instance X D where
+ f = \x -> case x of
+             D -> D
+             C -> f D
+
+demo = f C

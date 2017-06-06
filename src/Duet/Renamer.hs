@@ -35,11 +35,13 @@ class Identifiable i where
   identifyValue :: MonadThrow m => i -> m Identifier
   identifyType :: MonadThrow m => i -> m Identifier
   identifyClass :: MonadThrow m => i -> m Identifier
+  nonrenamableName :: i -> Maybe Name
 
 instance Identifiable Identifier where
   identifyValue = pure
   identifyType = pure
   identifyClass = pure
+  nonrenamableName _ = Nothing
 
 instance Identifiable Name where
   identifyValue =
@@ -47,6 +49,7 @@ instance Identifiable Name where
       ValueName _ i -> pure (Identifier i)
       ConstructorName _ c -> pure (Identifier c)
       DictName _ i -> pure (Identifier i)
+      MethodName _ i -> pure (Identifier i)
       n -> throwM (TypeAtValueScope n)
   identifyType =
     \case
@@ -54,7 +57,17 @@ instance Identifiable Name where
       n -> throwM (RenamerNameMismatch n)
   identifyClass =
     \case
-       ClassName _ i -> pure (Identifier i)
+      ClassName _ i -> pure (Identifier i)
+      n -> throwM (RenamerNameMismatch n)
+  nonrenamableName n =
+    case n of
+      ValueName {} -> Nothing
+      ConstructorName {} -> pure n
+      TypeName {} -> pure n
+      ForallName {} -> pure n
+      DictName {} -> pure n
+      ClassName {} -> pure n
+      MethodName {} -> pure n
 
 --------------------------------------------------------------------------------
 -- Data type renaming (this includes kind checking)
@@ -458,12 +471,15 @@ renameExpression subs = go
 
 substituteVar :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
 substituteVar subs i0 =
-  do i <- identifyValue i0
-     case M.lookup i subs of
-       Just name@ValueName{} -> pure name
-       Just name@MethodName{} -> pure name
-       _ -> do s <- identifyValue i
-               throwM (IdentifierNotInVarScope subs s)
+  case nonrenamableName i0 of
+    Nothing -> do i <- identifyValue i0
+                  case M.lookup i subs of
+                    Just name@ValueName{} -> pure name
+                    Just name@MethodName{} -> pure name
+                    Just name@DictName {} -> pure name
+                    _ -> do s <- identifyValue i
+                            throwM (IdentifierNotInVarScope subs s)
+    Just n -> pure n
 
 substituteClass :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
 substituteClass subs i0 =

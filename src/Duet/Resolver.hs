@@ -97,7 +97,13 @@ resolveExp classes specialTypes dicts = go
         ApplicationExpression l f x -> ApplicationExpression l <$> go f <*> go x
         LambdaExpression l0 (Alternative l vs b) ->
           LambdaExpression l0 <$> (Alternative l vs <$> go b)
-        e -> pure e
+        CaseExpression l e alts ->
+          CaseExpression l <$> go e <*>
+          mapM (\(p, e') -> fmap (p, ) (go e')) alts
+        e@ConstructorExpression {} -> pure e
+        e@ConstantExpression {} -> pure e
+        IfExpression l a b c -> IfExpression l <$> go a <*> go b <*> go c
+        e@LiteralExpression {} -> pure e
     lookupDictionary l p =
       (case byInst classes p of
          Just (_, dict) -> do

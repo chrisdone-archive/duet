@@ -19,13 +19,13 @@ class Eq a => Printable a where
 instance Printable Name where
   printit =
     \case
-      ValueName _ string -> string --  ++ "[value: " ++ show i ++ "]"
-      TypeName _ string -> string  --  ++ "[type: " ++ show i ++ "]"
+      ValueName i string -> string  -- ++ "[value: " ++ show i ++ "]"
+      TypeName i string -> string --    ++ "[type: " ++ show i ++ "]"
       ConstructorName _ string -> string
       ForallName i -> "g" ++ show i
       DictName i string -> string -- "("  ++ string ++ ":" ++ show i ++")"
       ClassName _ s -> s
-      MethodName _ s -> s
+      MethodName i s -> s -- ++ "[method: " ++ show i ++ "]"
 
 instance Printable Identifier where
   printit =

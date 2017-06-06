@@ -1,3 +1,5 @@
+{-# LANGUAGE Strict #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
@@ -13,10 +15,10 @@ import           Control.Monad.State
 import           Control.Monad.Supply
 import           Data.List
 import           Data.Map.Strict (Map)
+import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
 import           Data.Semigroup
-import           Duet.Renamer
 import           Duet.Types
 
 --------------------------------------------------------------------------------
@@ -24,13 +26,14 @@ import           Duet.Types
 
 expandSeq1
   :: (MonadThrow m, MonadSupply Int m)
-  => SpecialSigs Name
+  => Map Name (Class Type Name (TypeSignature Name Location))
+  -> SpecialSigs Name
   -> [TypeSignature Name Name]
   -> Expression Name (TypeSignature Name Location)
   -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
   -> Map Identifier Name
   -> m (Expression Name (TypeSignature Name Location))
-expandSeq1 specialSigs signatures e b subs =
+expandSeq1 typeClassEnv specialSigs signatures e b _ =
   evalStateT (go e) False
   where
     go =
@@ -47,22 +50,23 @@ expandSeq1 specialSigs signatures e b subs =
             if alreadyExpanded
               then pure e0
               else do
-                e' <- lift (expandWhnf specialSigs signatures e0 b)
+                e' <- lift (expandWhnf typeClassEnv specialSigs signatures e0 b)
                 put True
                 pure e'
 
 expandWhnf
   :: MonadThrow m
-  => SpecialSigs Name
+  => Map Name (Class Type Name (TypeSignature Name Location))
+  -> SpecialSigs Name
   -> [TypeSignature Name Name]
   -> Expression Name (TypeSignature Name Location)
   -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
   -> m (Expression Name (TypeSignature Name Location))
-expandWhnf specialSigs signatures e b = go e
+expandWhnf typeClassEnv specialSigs signatures e b = go e
   where
     go x =
       case x of
-        VariableExpression loc i -> do
+        VariableExpression _ i -> do
           case find ((== i) . typeSignatureA) signatures of
             Nothing -> do
               e' <- lookupName i b
@@ -83,6 +87,27 @@ expandWhnf specialSigs signatures e b = go e
                          pure
                            (LambdaExpression l0 (Alternative l' params' body'))
                 [] -> error "Unsupported lambda."
+            VariableExpression _ (MethodName _ methodName) ->
+              case arg of
+                VariableExpression _ dictName@DictName {} ->
+                  case find
+                         ((== dictName) . dictionaryName)
+                         (concatMap
+                            (map instanceDictionary . classInstances)
+                            (M.elems typeClassEnv)) of
+                    Nothing -> error "Dictionary missing."
+                    Just dict ->
+                      case M.lookup
+                             methodName
+                             (M.mapKeys
+                                (\(MethodName _ s) -> s)
+                                (dictionaryMethods dict)) of
+                        Nothing ->
+                          error
+                            ("Missing method " ++
+                             show methodName ++ " in dictionary: " ++ show dict)
+                        Just (Alternative _ _ e) ->
+                          pure e
             _ -> do
               func' <- go func
               pure (ApplicationExpression l func' arg)
@@ -111,23 +136,24 @@ expandWhnf specialSigs signatures e b = go e
                       expr
                       subs)
                Just (NeedsMoreEval is, _) -> do
-                 e' <- expandAt is specialSigs signatures e0 b
+                 e' <- expandAt typeClassEnv is specialSigs signatures e0 b
                  pure (CaseExpression l e' alts)
                Nothing -> error ("Incomplete pattern match... " ++ show matches)
 
 expandAt
   :: MonadThrow m
-  => [Int]
+  => Map Name (Class Type Name (TypeSignature Name Location))
+  -> [Int]
   -> SpecialSigs Name
   -> [TypeSignature Name Name]
   -> Expression Name (TypeSignature Name Location)
   -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
   -> m (Expression Name (TypeSignature Name Location))
-expandAt is specialSigs signatures e0 b = go [0] e0
+expandAt typeClassEnv is specialSigs signatures e0 b = go [0] e0
   where
     go js e =
       if is == js
-        then expandWhnf specialSigs signatures e b
+        then expandWhnf typeClassEnv specialSigs signatures e b
         else case e of
                _
                  | (ce@(ConstructorExpression l _), args) <- fargs e -> do

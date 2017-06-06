@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -48,7 +49,7 @@ compileStepText file i text =
   case parseText file text of
     Left e -> error (show e)
     Right decls -> do
-      ((specialSigs, specialTypes, bindGroups, signatures, subs, env), supplies) <-
+      ((specialSigs, specialTypes, bindGroups, signatures, subs, typeClassEnv), supplies) <-
         runTypeChecker decls
       putStrLn "-- Type-checked bindings:"
       mapM_
@@ -61,10 +62,42 @@ compileStepText file i text =
              is)
         bindGroups
       {-trace ("Compiled classes: " ++ show env) (return ())-}
+      typeClassEnv' <-
+        catch
+          (evalSupplyT
+             (fmap
+                M.fromList
+                (mapM
+                   (\(name, cls) -> do
+                      is <-
+                        mapM
+                          (\inst -> do
+                             ms <-
+                               mapM
+                                 (\(nam, alt) ->
+                                    fmap
+                                      (nam, )
+                                      (resolveAlt typeClassEnv specialTypes alt))
+                                 (M.toList
+                                    (dictionaryMethods (instanceDictionary inst)))
+                             pure
+                               inst
+                               { instanceDictionary =
+                                   (instanceDictionary inst)
+                                   {dictionaryMethods = M.fromList ms}
+                               })
+                          (classInstances cls)
+                      pure (name, cls {classInstances = is}))
+                   (M.toList typeClassEnv)))
+             supplies)
+          (\e ->
+             liftIO
+               (do putStrLn (displayResolveException specialTypes e)
+                   exitFailure))
       bindGroups' <-
         catch
           (evalSupplyT
-             (mapM (resolveBindGroup env specialTypes) bindGroups)
+             (mapM (resolveBindGroup typeClassEnv' specialTypes) bindGroups)
              supplies)
           (\e ->
              liftIO
@@ -86,7 +119,14 @@ compileStepText file i text =
                     when
                       (True || cleanExpression e)
                       (liftIO (putStrLn (printExpression (const Nothing) e)))
-                    e' <- expandSeq1 specialSigs signatures e bindGroups subs
+                    e' <-
+                      expandSeq1
+                        typeClassEnv'
+                        specialSigs
+                        signatures
+                        e
+                        bindGroups
+                        subs
                     if fmap (const ()) e' /= fmap (const ()) e
                       then do
                         renameExpression subs e' >>= loopy
@@ -313,7 +353,9 @@ runTypeChecker decls =
                          (\typeClass ->
                             typeClass
                             { classInstances =
-                                filter ((== className typeClass) . instanceClassName) allInstances
+                                filter
+                                  ((== className typeClass) . instanceClassName)
+                                  allInstances
                             })
                          typeClasses
                      , signatures
@@ -345,9 +387,9 @@ runTypeChecker decls =
                        (classMethods typeClass)
                        e0 >>= \e ->
                        foldM
-                         (\e1 i@(Instance (Qualified ps p) dict) ->
-                            do {-liftIO (putStrLn ("Add instance: " ++ show i))-}
-                               addInstance ps p dict e1)
+                         (\e1 i@(Instance (Qualified ps p) dict)
+                               {-liftIO (putStrLn ("Add instance: " ++ show i))-}
+                           -> do addInstance ps p dict e1)
                          e
                          (classInstances typeClass))
                   env0
