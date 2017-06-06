@@ -415,13 +415,13 @@ classSignatures cls =
     (\(name, (methodVars, ty)) ->
        let gens = zip methodVars [GenericType i | i <- [0 ..]]
        in do ty' <- genify gens ty
-             vars <- mapM (genify gens . VariableType) (classTypeVariables cls)
+             headVars <- mapM (genify gens . VariableType) (classTypeVariables cls)
              pure
                (TypeSignature
                   name
                   (Forall
-                     (map typeVariableKind (classTypeVariables cls))
-                     (Qualified [IsIn (className cls) vars] ty'))))
+                     (map typeVariableKind methodVars)
+                     (Qualified [IsIn (className cls) headVars] ty'))))
     (M.toList (classMethods cls))
 
 genify :: MonadThrow m => [(TypeVariable Name, Type Name)] -> Type Name -> m (Type Name)

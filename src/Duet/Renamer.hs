@@ -158,7 +158,7 @@ renameClass
   -> m (Class Type Name l)
 renameClass specialTypes subs types cls = do
   name <- supplyClassName (className cls)
-  identToVars <-
+  classVars <-
     mapM
       (\(TypeVariable i k) -> do
          i' <- supplyTypeName i
@@ -166,7 +166,7 @@ renameClass specialTypes subs types cls = do
       (classTypeVariables cls)
   instances <-
     mapM
-      (renameInstance' specialTypes subs types identToVars)
+      (renameInstance' specialTypes subs types classVars)
       (classInstances cls)
   methods' <-
     fmap
@@ -174,14 +174,15 @@ renameClass specialTypes subs types cls = do
       (mapM
          (\(name, (vars, ty)) -> do
             name' <- supplyMethodName name
-            classAndMethodVars <- mapM (renameMethodTyVar identToVars) vars
+            methodVars <- mapM (renameMethodTyVar classVars) vars
+            let classAndMethodVars = classVars ++ methodVars
             ty' <- renameType specialTypes classAndMethodVars types ty
             pure (name', (map snd classAndMethodVars, ty')))
          (M.toList (classMethods cls)))
   pure
     (Class
      { className = name
-     , classTypeVariables = map snd identToVars
+     , classTypeVariables = map snd classVars
      , classSuperclasses = []
      , classInstances = instances
      , classMethods = methods'
