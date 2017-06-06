@@ -202,8 +202,9 @@ displayRenamerException specialTypes =
       curlyQuotes (printType specialTypes typ) ++
       " has kind " ++
       curlyQuotes (printKind kind) ++
-      ", but the field in constructor " ++
-      curlyQuotes (printit cons) ++ " should have kind " ++ curlyQuotes "*"
+      ", but all values (e.g. the field in " ++
+      curlyQuotes (printit cons) ++
+      ") should have types of kind " ++ curlyQuotes (printKind StarKind)
     TypeNotInScope types i ->
       "Unknown type " ++
       curlyQuotes (printIdentifier i) ++

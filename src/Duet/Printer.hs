@@ -231,7 +231,7 @@ printPredicate specialTypes (IsIn identifier types) =
 printKind :: Kind -> [Char]
 printKind =
   \case
-    StarKind -> "*"
+    StarKind -> "Type"
     FunctionKind x' y -> printKind x' ++ " -> " ++ printKind y
 
 printTypeSansParens :: (Printable i, Eq i) => SpecialTypes i -> Type i -> [Char]
