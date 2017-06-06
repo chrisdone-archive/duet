@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE Strict #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE RankNTypes #-}
@@ -13,7 +14,7 @@ import qualified Data.Map.Strict as M
 import           Duet.Types
 import           Text.Printf
 
-class Eq a => Printable a where
+class (Eq a, Identifiable a) => Printable a where
   printit :: a -> String
 
 instance Printable Name where
@@ -91,8 +92,9 @@ printExpression getType e =
                  (\(p, e') -> printPat p ++ " -> " ++ printExpression getType e')
                  alts))
        ApplicationExpression _ f x ->
-         printExpressionAppOp getType f ++
-         " " ++ printExpressionAppArg getType x
+         case x of
+           VariableExpression _ (nonrenamableName -> Just (DictName {})) -> printExpressionAppOp getType f
+           _ -> printExpressionAppOp getType f ++ " " ++ printExpressionAppArg getType x
        LambdaExpression _ (Alternative _ args e) ->
          "\\" ++
          concat (map (\x -> printPattern x ++ " ") args) ++

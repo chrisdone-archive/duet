@@ -371,3 +371,41 @@ instance Semigroup (Match i l) where
   NeedsMoreEval is <> _ = NeedsMoreEval is
   _ <> NeedsMoreEval is = NeedsMoreEval is
   Success xs <> Success ys = Success (xs <> ys)
+
+class Identifiable i where
+  identifyValue :: MonadThrow m => i -> m Identifier
+  identifyType :: MonadThrow m => i -> m Identifier
+  identifyClass :: MonadThrow m => i -> m Identifier
+  nonrenamableName :: i -> Maybe Name
+
+instance Identifiable Identifier where
+  identifyValue = pure
+  identifyType = pure
+  identifyClass = pure
+  nonrenamableName _ = Nothing
+
+instance Identifiable Name where
+  identifyValue =
+    \case
+      ValueName _ i -> pure (Identifier i)
+      ConstructorName _ c -> pure (Identifier c)
+      DictName _ i -> pure (Identifier i)
+      MethodName _ i -> pure (Identifier i)
+      n -> throwM (TypeAtValueScope n)
+  identifyType =
+    \case
+      TypeName _ i -> pure (Identifier i)
+      n -> throwM (RenamerNameMismatch n)
+  identifyClass =
+    \case
+      ClassName _ i -> pure (Identifier i)
+      n -> throwM (RenamerNameMismatch n)
+  nonrenamableName n =
+    case n of
+      ValueName {} -> Nothing
+      ConstructorName {} -> pure n
+      TypeName {} -> pure n
+      ForallName {} -> pure n
+      DictName {} -> pure n
+      ClassName {} -> pure n
+      MethodName {} -> pure n

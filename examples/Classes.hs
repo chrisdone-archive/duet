@@ -15,14 +15,6 @@ instance Reader Nat where
       Cons S xs  -> Succ (reader xs)
       _ -> Zero
 data List a = Nil | Cons a (List a)
-data Maybe a = Nothing | Just a
-
-class F (a :: Type -> Type) where
-  fm :: a Nat
-
-class Functor (functor :: Type -> Type) where
-  map :: forall before after. (before -> after) -> functor before -> functor after
-
 data Ch = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z
 class Equal a where
   equal :: a -> a -> Bool
