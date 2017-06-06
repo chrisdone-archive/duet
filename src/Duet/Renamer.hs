@@ -149,7 +149,8 @@ renameField specialTypes typeConstructors vars name fe = do
 -- Class renaming
 
 renameClass
-  :: (MonadSupply Int m, MonadThrow m)
+  :: forall m l.
+     (MonadSupply Int m, MonadThrow m)
   => SpecialTypes Name
   -> Map Identifier Name
   -> [DataType Type Name]
@@ -171,10 +172,11 @@ renameClass specialTypes subs types cls = do
     fmap
       M.fromList
       (mapM
-         (\(name, ty) -> do
+         (\(name, (vars, ty)) -> do
             name' <- supplyMethodName name
-            ty' <- renameType specialTypes identToVars types ty
-            pure (name', ty'))
+            classAndMethodVars <- mapM (renameMethodTyVar identToVars) vars
+            ty' <- renameType specialTypes classAndMethodVars types ty
+            pure (name', (map snd classAndMethodVars, ty')))
          (M.toList (classMethods cls)))
   pure
     (Class
@@ -184,6 +186,17 @@ renameClass specialTypes subs types cls = do
      , classInstances = instances
      , classMethods = methods'
      })
+  where
+    renameMethodTyVar
+      :: [(Identifier, TypeVariable Name)]
+      -> TypeVariable Identifier
+      -> m (Identifier, TypeVariable Name)
+    renameMethodTyVar classTable (TypeVariable ident k) =
+      case lookup ident classTable of
+        Nothing -> do
+          i' <- supplyTypeName ident
+          pure (ident, TypeVariable i' k)
+        Just v -> pure (ident, v)
 
 --------------------------------------------------------------------------------
 -- Instance renaming

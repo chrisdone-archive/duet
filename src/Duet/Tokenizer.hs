@@ -23,6 +23,7 @@ data Token
   = If
   | Then
   | Data
+  | ForallToken
   | Else
   | Case
   | Where
@@ -40,6 +41,7 @@ data Token
   | Character !Char
   | String !Text
   | Operator !Text
+  | Period
   | Comma
   | Integer !Integer
   | Decimal !Double
@@ -77,8 +79,10 @@ tokenTokenizer prespaces =
     , atomThenSpace Where "where"
     , atomThenSpace Data "data"
     , atomThenSpace Else "else"
+    , atomThenSpace ForallToken "forall"
     , atomThenSpace Case "case"
     , atomThenSpace Of "of"
+    , atom Period "."
     , atom Backslash "\\"
     , atom OpenParen "("
     , atom CloseParen ")"
@@ -369,6 +373,7 @@ tokenStr tok =
     CloseParen -> "closing parenthesis " ++ curlyQuotes ")"
     Equals -> curlyQuotes "="
     Colons -> curlyQuotes "::"
+    ForallToken -> curlyQuotes "forall"
     Variable t -> "variable " ++ curlyQuotes (T.unpack t)
     Constructor t -> "constructor " ++ curlyQuotes (T.unpack t)
     Character !c -> "character '" ++  (T.unpack (T.singleton c)) ++ "'"
@@ -378,6 +383,7 @@ tokenStr tok =
     Integer !i -> "integer " ++ show i
     Decimal !d -> "decimal " ++ printf "%f" d
     Bar -> curlyQuotes "|"
+    Period -> curlyQuotes "."
 
 -- | Update the position by the token.
 tokenPosition :: SourcePos -> (Token, Location) -> t -> SourcePos

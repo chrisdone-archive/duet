@@ -206,9 +206,14 @@ printClass specialTypes (Class vars supers instances i methods) =
   intercalate "\n  " (map (printMethod specialTypes) (M.toList methods)) ++
   "\n" ++ intercalate "\n" (map (printInstance specialTypes) instances)
 
-printMethod :: Printable i =>  SpecialTypes i -> (i, Type i) -> String
-printMethod specialTypes (i, ty) =
-  printit i ++ " :: " ++ printType specialTypes ty
+printMethod :: Printable i =>  SpecialTypes i -> (i, ([TypeVariable i], Type i)) -> String
+printMethod specialTypes (i, (vars, ty)) =
+  printit i ++ " :: " ++ vars' ++ printType specialTypes ty
+  where
+    vars' =
+      if null vars
+        then ""
+        else "forall " ++ unwords (map printTypeVariable vars) ++ ". "
 
 printInstance :: Printable i =>  SpecialTypes i -> Instance Type i l -> String
 printInstance specialTypes (Instance (Qualified predicates typ) _) =

@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -56,7 +57,7 @@ classdecl =
           (\case
              Constructor c -> Just c
              _ -> Nothing) <?> "new class name e.g. Show"
-      vars <- many1 typeVariableP
+      vars <- many1 kindableTypeVariable
       mwhere <-
         fmap (const True) (equalToken Where) <|> fmap (const False) endOfDecl
       methods <-
@@ -84,15 +85,7 @@ classdecl =
       where
         endOfDecl =
           (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
-        typeVariableP = go' <?> "type variable (e.g. ‘a’, ‘f’, etc.)"
-          where
-            go' = do
-              (v, _) <-
-                consumeToken
-                  (\case
-                     Variable i -> Just i
-                     _ -> Nothing)
-              pure (TypeVariable (Identifier (T.unpack v)) StarKind)
+
         methodParser startCol = go' <?> "method signature e.g. foo :: a -> Y"
           where
             go' = do
@@ -111,9 +104,62 @@ classdecl =
                     " to match the others"))
               setState startCol
               _ <- equalToken Colons <?> "‘::’ for method signature"
-              ty <- parsedType <?> "method type signature e.g. foo :: Int"
+              (vars, ty) <- parseScheme <?> "method type signature e.g. foo :: Int"
               setState u
-              pure (Identifier (T.unpack v), ty)
+              pure (Identifier (T.unpack v), (vars, ty))
+
+kindableTypeVariable :: Stream s m (Token, Location) => ParsecT s Int m (TypeVariable Identifier)
+kindableTypeVariable = (unkinded <|> kinded) <?> "type variable (e.g. ‘a’, ‘f’, etc.)"
+  where
+    kinded =
+      kparens
+        (do t <- unkinded
+            _ <- equalToken Colons
+            k <- kindParser
+            pure (TypeVariable (typeVariableIdentifier t) k))
+      where
+        kparens :: TokenParser a -> TokenParser a
+        kparens p = g <?> "parens e.g. (x)"
+          where
+            g = do
+              _ <- equalToken OpenParen
+              e <-
+                p <?> "type with kind inside parentheses e.g. (t :: Type)"
+              _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
+              pure e
+    unkinded = do
+      (v, _) <-
+        consumeToken
+          (\case
+             Variable i -> Just i
+             _ -> Nothing) <?>
+        "variable name"
+      pure (TypeVariable (Identifier (T.unpack v)) StarKind)
+
+parseScheme
+  :: Stream s m (Token, Location)
+  => ParsecT s Int m ([TypeVariable Identifier], ParsedType Identifier)
+parseScheme = do
+  explicit <-
+    fmap (const True) (lookAhead (equalToken ForallToken)) <|> pure False
+  if explicit
+    then quantified
+    else  do ty <- parsedType
+             pure (collectTypeVariables ty, ty)
+  where
+    quantified = do
+      _ <- equalToken ForallToken
+      vars <- many1 kindableTypeVariable <?> "type variables"
+      _ <- equalToken Period
+      ty <- parsedType
+      pure (vars, ty)
+
+collectTypeVariables :: ParsedType i -> [TypeVariable i]
+collectTypeVariables =
+  \case
+     ParsedTypeConstructor {} -> []
+     ParsedTypeVariable i -> [TypeVariable i StarKind]
+     ParsedTypeApp f x -> collectTypeVariables f ++ collectTypeVariables x
 
 instancedecl :: TokenParser (Instance ParsedType Identifier Location)
 instancedecl =
@@ -241,32 +287,6 @@ parseType = infix' <|> app <|> unambiguous
 datadecl :: TokenParser (DataType ParsedType Identifier)
 datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
   where
-    tyvar = unkinded <|> kinded
-      where
-        kinded =
-          kparens
-            (do t <- unkinded
-                _ <- equalToken Colons
-                k <- kindParser
-                pure (TypeVariable (typeVariableIdentifier t) k))
-          where
-            kparens :: TokenParser a -> TokenParser a
-            kparens p = g <?> "parens e.g. (x)"
-              where
-                g = do
-                  _ <- equalToken OpenParen
-                  e <-
-                    p <?> "type with kind inside parentheses e.g. (t :: Type)"
-                  _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
-                  pure e
-        unkinded = do
-          (v, _) <-
-            consumeToken
-              (\case
-                 Variable i -> Just i
-                 _ -> Nothing) <?>
-            "variable name"
-          pure (TypeVariable (Identifier (T.unpack v)) StarKind)
     go = do
       _ <- equalToken Data
       (v, _) <-
@@ -275,7 +295,7 @@ datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
              Constructor i -> Just i
              _ -> Nothing) <?>
         "new type name (e.g. Foo)"
-      vs <- many tyvar
+      vs <- many kindableTypeVariable
       _ <- equalToken Equals
       cs <- sepBy1 consp (equalToken Bar)
       _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens

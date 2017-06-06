@@ -323,7 +323,7 @@ data Class f i l = Class
   , classSuperclasses :: ![Predicate f i]
   , classInstances :: ![Instance f i l]
   , className :: i
-  , classMethods :: Map i (f i)
+  , classMethods :: Map i ([TypeVariable i], f i)
   } deriving (Show)
 
 -- | Class instance.

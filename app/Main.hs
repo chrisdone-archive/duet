@@ -411,8 +411,8 @@ builtInSignatures specialTypes = do
 classSignatures :: MonadThrow m => Class Type Name l -> m [TypeSignature Name Name]
 classSignatures cls =
   mapM
-    (\(name, ty) ->
-       let gens = zip (classTypeVariables cls) [GenericType i | i <- [0 ..]]
+    (\(name, (methodVars, ty)) ->
+       let gens = zip methodVars [GenericType i | i <- [0 ..]]
        in do ty' <- genify gens ty
              vars <- mapM (genify gens . VariableType) (classTypeVariables cls)
              pure
