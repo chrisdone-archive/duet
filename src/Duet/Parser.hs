@@ -241,14 +241,32 @@ parseType = infix' <|> app <|> unambiguous
 datadecl :: TokenParser (DataType ParsedType Identifier)
 datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
   where
-    tyvar = do
-      (v, _) <-
-        consumeToken
-          (\case
-             Variable i -> Just i
-             _ -> Nothing) <?>
-        "variable name"
-      pure (TypeVariable (Identifier (T.unpack v)) StarKind)
+    tyvar = unkinded <|> kinded
+      where
+        kinded =
+          kparens
+            (do t <- unkinded
+                _ <- equalToken Colons
+                k <- kindParser
+                pure (TypeVariable (typeVariableIdentifier t) k))
+          where
+            kparens :: TokenParser a -> TokenParser a
+            kparens p = g <?> "parens e.g. (x)"
+              where
+                g = do
+                  _ <- equalToken OpenParen
+                  e <-
+                    p <?> "type with kind inside parentheses e.g. (t :: Type)"
+                  _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
+                  pure e
+        unkinded = do
+          (v, _) <-
+            consumeToken
+              (\case
+                 Variable i -> Just i
+                 _ -> Nothing) <?>
+            "variable name"
+          pure (TypeVariable (Identifier (T.unpack v)) StarKind)
     go = do
       _ <- equalToken Data
       (v, _) <-
@@ -260,8 +278,37 @@ datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
       vs <- many tyvar
       _ <- equalToken Equals
       cs <- sepBy1 consp (equalToken Bar)
-      _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
+      _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
       pure (DataType (Identifier (T.unpack v)) vs cs)
+
+kindParser :: Stream s m (Token, Location) => ParsecT s Int m Kind
+kindParser = infix'
+  where
+    infix' = do
+      left <- star
+      tok <-
+        fmap Just (operator <?> ("arrow " ++ curlyQuotes "->")) <|> pure Nothing
+      case tok of
+        Just (RightArrow, _) -> do
+          right <-
+            kindParser <?>
+            ("right-hand side of function arrow " ++ curlyQuotes "->")
+          pure (FunctionKind left right)
+        _ -> pure left
+      where
+        operator =
+          satisfyToken
+            (\case
+               RightArrow {} -> True
+               _ -> False)
+    star = do
+      (c, _) <-
+        consumeToken
+          (\case
+             Constructor c
+               | c == "Type" -> Just StarKind
+             _ -> Nothing)
+      pure c
 
 consp :: TokenParser (DataTypeConstructor ParsedType Identifier)
 consp = do c <- consParser

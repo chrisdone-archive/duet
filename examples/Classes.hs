@@ -16,7 +16,7 @@ instance Reader Nat where
       _ -> Zero
 data List a = Nil | Cons a (List a)
 data Maybe a = Nothing | Just a
-data Apply f a = Apply Maybe
+data Apply (f :: Type -> Type) a = Apply (f a)
 class Functor f where
   map :: f
 data Ch = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z
