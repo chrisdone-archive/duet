@@ -150,7 +150,7 @@ renameClass specialTypes subs types cls = do
          (\(name, (vars, ty)) -> do
             name' <- supplyMethodName name
             methodVars <- mapM (renameMethodTyVar classVars) vars
-            let classAndMethodVars = classVars ++ methodVars
+            let classAndMethodVars = nub (classVars ++ methodVars)
             ty' <- renameType specialTypes classAndMethodVars types ty
             pure (name', (map snd classAndMethodVars, ty')))
          (M.toList (classMethods cls)))

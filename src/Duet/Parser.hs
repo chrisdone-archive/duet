@@ -85,7 +85,6 @@ classdecl =
       where
         endOfDecl =
           (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
-
         methodParser startCol = go' <?> "method signature e.g. foo :: a -> Y"
           where
             go' = do
@@ -145,7 +144,7 @@ parseScheme = do
   if explicit
     then quantified
     else  do ty <- parsedType
-             pure (collectTypeVariables ty, ty)
+             pure (nub (collectTypeVariables ty), ty)
   where
     quantified = do
       _ <- equalToken ForallToken
