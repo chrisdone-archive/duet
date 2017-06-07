@@ -44,6 +44,14 @@ far:
 ``` haskell
 data List a = Nil | Cons a (List a)
 data Tuple a b = Tuple a b
+class Functor (f :: Type -> Type) where
+  map :: forall a b. (a -> b) -> f a -> f b
+instance Functor Maybe where
+  map = \f m ->
+    case m of
+      Nothing -> Nothing
+      Just a -> Just (f a)
+data Maybe a = Nothing | Just a
 id = \x -> x
 not = \p -> if p then False else True
 foldr = \cons nil l ->
