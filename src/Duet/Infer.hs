@@ -93,7 +93,7 @@ typeCheckModule ce as specialTypes bgs =
        ce' <- collectMethods bgsFinal ce
        return
          ( bgsFinal
-         , ce' -- TODO: next step: type check also the instance methods.
+         , ce'
           ))
     (InferState nullSubst 0 specialTypes)
 
