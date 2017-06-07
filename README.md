@@ -105,7 +105,23 @@ _f (_f _nil True) False
 
 ## Type-classes
 
-What remains to implement is a resolver of instances. An expression
-like `show 'a'` currently has type `Show Char => String` in my
-AST. Now I have to insert instance dictionaries as arguments (or
-annotations) to expressions, and then type-classes will be good to go.
+Type-classes are supported, as in this example:
+
+``` haskell
+data Maybe a = Nothing | Just a
+class Functor (f :: Type -> Type) where
+  map :: forall a b. (a -> b) -> f a -> f b
+instance Functor Maybe where
+  map = \f m ->
+    case m of
+      Nothing -> Nothing
+      Just a -> Just (f a)
+not = \b -> case b of
+              True -> False
+              False -> True
+main = map not (Just True)
+```
+
+Kind inference is not implemented, so if you want a kind other than
+`Type` (aka `*` in Haskell), you have to put a kind signature on the
+type variable.
