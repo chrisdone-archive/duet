@@ -6,4 +6,4 @@ instance X D where
              D -> D
              C -> f D
 
-demo = f C
+main = f C

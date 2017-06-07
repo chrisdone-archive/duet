@@ -35,4 +35,4 @@ not = \b -> case b of
               True -> False
               False -> True
 notEqual = \x y -> not (equal x y)
-demo = equal (reader (shower (Succ Zero))) (Succ Zero)
+main = equal (reader (shower (Succ Zero))) (Succ Zero)

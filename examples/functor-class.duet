@@ -9,4 +9,4 @@ instance Functor Maybe where
 not = \b -> case b of
               True -> False
               False -> True
-demo = map not (Just True)
+main = map not (Just True)
