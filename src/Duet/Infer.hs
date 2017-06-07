@@ -749,7 +749,7 @@ inferExpressionType ce as (LetExpression l bg e) = do
   let scheme = (Forall [] (Qualified (ps++qs) t))
   return (ps ++ qs, t, LetExpression (TypeSignature l scheme) bg' e')
 inferExpressionType ce as (LambdaExpression l alt) = do
-  (x, y, s) <- inferAltType ce as alt
+  (x, y, s) <- inferAltTypeForLambda ce as alt
   pure
     ( x
     , y
@@ -780,13 +780,36 @@ inferExpressionType ce as (CaseExpression l e branches) = do
   let scheme = (Forall [] (Qualified (ps0 ++ concat pss) v))
   return (ps0 ++ concat pss, v, CaseExpression (TypeSignature l scheme) e' branches')
 
-inferAltType
+inferAltTypeForLambda
   :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
   -> [(TypeSignature Name Name)]
   -> Alternative Name l
   -> InferT m ([Predicate Type Name], Type Name, Alternative Name (TypeSignature Name l))
-inferAltType ce as (Alternative l pats e) = do
+inferAltTypeForLambda ce as alt =
+  inferAltType0
+    ce
+    as
+    (\l scheme pats ex -> Alternative (TypeSignature l scheme) pats ex)
+    alt
+
+inferAltTypeForBind
+  :: (MonadThrow m, Show l)
+  => Map Name (Class Type Name l)
+  -> [(TypeSignature Name Name)]
+  -> Alternative Name l
+  -> InferT m ([Predicate Type Name], Type Name, Alternative Name (TypeSignature Name l))
+inferAltTypeForBind ce as alt =
+  inferAltType0 ce as makeAltForDecl alt
+
+inferAltType0
+  :: (Show t1, MonadThrow m)
+  => Map Name (Class Type Name t1)
+  -> [TypeSignature Name Name]
+  -> (t1 -> Scheme Name -> [Pattern Name (TypeSignature Name t1)] -> Expression Name (TypeSignature Name t1) -> t)
+  -> Alternative Name t1
+  -> InferT m ([Predicate Type Name], Type Name, t)
+inferAltType0 ce as makeAlt (Alternative l pats e) = do
   (pats', ps, as', ts) <- inferPatterns as pats
   (qs, t, e') <- inferExpressionType ce (as' ++ as) e
   specialTypes <- InferT (gets inferStateSpecialTypes)
@@ -804,13 +827,13 @@ inferAltType ce as (Alternative l pats e) = do
 -- f = \x -> x
 --
 -- But type-checked and generalized.
-makeAlt
+makeAltForDecl
   :: a
   -> Scheme i1
   -> [Pattern i (TypeSignature i1 a)]
   -> Expression i (TypeSignature i1 a)
   -> Alternative i (TypeSignature i1 a)
-makeAlt l scheme pats' e' =
+makeAltForDecl l scheme pats' e' =
   if null pats'
     then Alternative (TypeSignature l scheme) pats' e'
     else Alternative
@@ -828,7 +851,7 @@ inferAltTypes
   -> Type Name
   -> InferT m ([Predicate Type Name], [Alternative Name (TypeSignature Name l)])
 inferAltTypes ce as alts t = do
-  psts <- mapM (inferAltType ce as) alts
+  psts <- mapM (inferAltTypeForBind ce as) alts
   mapM_ (unify t) (map snd3 psts)
   return (concat (map fst3 psts), map thd3 psts)
   where snd3 (_,x,_) = x

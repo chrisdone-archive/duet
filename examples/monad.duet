@@ -1,0 +1,32 @@
+class Monad (m :: Type -> Type) where
+  bind :: m a -> (a -> m b) -> m b
+  return :: a -> m a
+class Functor (f :: Type -> Type) where
+  map :: forall a b. (a -> b) -> f a -> f b
+data Maybe a = Nothing | Just a
+instance Functor Maybe where
+  map =
+    \f m ->
+      case m of
+        Nothing -> Nothing
+        Just a -> Just (f a)
+instance Monad Maybe where
+  bind =
+    \m f ->
+      case m of
+        Nothing -> Nothing
+        Just v -> f v
+  return = \v -> Just v
+not =
+  \b ->
+    case b of
+      True -> False
+      False -> True
+main =
+  bind
+    (map not (Just True))
+    (\v ->
+       return
+         (if v
+            then "OK!"
+            else "Boo!"))

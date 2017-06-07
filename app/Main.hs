@@ -49,9 +49,29 @@ compileStepText file i text =
   case parseText file text of
     Left e -> error (show e)
     Right decls -> do
+      putStrLn "-- Parsed code:"
+      mapM_
+        (\case
+           BindGroupDecl (BindGroup _ is) ->
+             mapM_
+               (mapM_
+                  (putStrLn . printImplicitlyTypedBinding (const Nothing)))
+               is
+           _-> return ())
+        decls
       ((specialSigs, specialTypes, bindGroups, signatures, subs, typeClassEnv), supplies) <-
         runTypeChecker decls
       putStrLn "-- Type-checked bindings:"
+      mapM_
+        (\(BindGroup _ is) ->
+           mapM_
+             (mapM_
+                (putStrLn .
+                 printImplicitlyTypedBinding
+                   (const Nothing)))
+             is)
+        bindGroups
+      putStrLn "-- With type-annotations:"
       mapM_
         (\(BindGroup _ is) ->
            mapM_
@@ -277,7 +297,7 @@ displayRenamerException specialTypes =
                     (comparing (editDistance (printIdentifier i)))
                     (map printTypeVariable types)))
           e -> show e)
-  where wrap f e = (f e) ++ "\n(" ++ show e ++ ")"
+  where wrap f e = (f e)-- ++ "\n(" ++ show e ++ ")"
 
 editDistance :: [Char] -> [Char] -> Int
 editDistance = on (levenshteinDistance defaultEditCosts) (map toLower)
