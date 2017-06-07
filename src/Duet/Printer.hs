@@ -132,7 +132,7 @@ printExpression printer e =
        ApplicationExpression _ f x ->
          case x of
            VariableExpression _ (nonrenamableName -> Just (DictName {}))
-             | not (printDictionaries printer) -> printExpressionAppOp printer f
+             | not (printDictionaries printer) -> printExpression printer f
            _ ->
              printExpressionAppOp printer f ++
              " " ++ printExpressionAppArg printer x
@@ -183,14 +183,21 @@ printPat printer=
             "(" ++ printit printer i ++ " " ++ unwords (map inner ps) ++ ")"
 
 printExpressionAppArg :: Printable i => Print i l ->(Expression i l) -> String
-printExpressionAppArg printer=
+printExpressionAppArg printer =
   \case
-    e@(ApplicationExpression {}) -> paren (printExpression printer e)
+    e@(ApplicationExpression {})
+      | nodict e -> paren (printExpression printer e)
     e@(IfExpression {}) -> paren (printExpression printer e)
     e@(InfixExpression {}) -> paren (printExpression printer e)
     e@(LambdaExpression {}) -> paren (printExpression printer e)
     e@(CaseExpression {}) -> paren (printExpression printer e)
     e -> printExpression printer e
+  where
+    nodict =
+      \case
+        ApplicationExpression _ _ (VariableExpression _ (nonrenamableName -> Just (DictName {})))
+          | not (printDictionaries printer) -> False
+        _ -> True
 
 printExpressionIfPred :: Printable i => Print i l -> (Expression i l) -> String
 printExpressionIfPred printer=
