@@ -76,7 +76,7 @@ predicateToString
   => SpecialTypes i -> Predicate Type i -> String
 predicateToString specialTypes (IsIn name ts) =
   -- printIdentifier name ++ " " ++ unwords (map (printType specialTypes) ts)
-  "?dict" ++ printIdentifier name
+  "?dict" ++ printIdentifier defaultPrint name
 
 resolveExp
   :: (MonadThrow m, MonadSupply Int m, Show l)

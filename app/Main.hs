@@ -1,3 +1,4 @@
+
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -54,10 +55,9 @@ compileStepText file i text =
         (\case
            BindGroupDecl (BindGroup _ is) ->
              mapM_
-               (mapM_
-                  (putStrLn . printImplicitlyTypedBinding (const Nothing)))
+               (mapM_ (putStrLn . printImplicitlyTypedBinding (defaultPrint)))
                is
-           _-> return ())
+           _ -> return ())
         decls
       ((specialSigs, specialTypes, bindGroups, signatures, subs, typeClassEnv), supplies) <-
         runTypeChecker decls
@@ -65,10 +65,7 @@ compileStepText file i text =
       mapM_
         (\(BindGroup _ is) ->
            mapM_
-             (mapM_
-                (putStrLn .
-                 printImplicitlyTypedBinding
-                   (const Nothing)))
+             (mapM_ (putStrLn . printImplicitlyTypedBinding (defaultPrint)))
              is)
         bindGroups
       putStrLn "-- With type-annotations:"
@@ -78,7 +75,8 @@ compileStepText file i text =
              (mapM_
                 (putStrLn .
                  printImplicitlyTypedBinding
-                   (\x -> Just (specialTypes, fmap (const ()) x))))
+                   defaultPrint
+                   {printTypes = \x -> Just (specialTypes, fmap (const ()) x)}))
              is)
         bindGroups
       {-trace ("Compiled classes: " ++ show env) (return ())-}
@@ -127,7 +125,10 @@ compileStepText file i text =
       mapM_
         (\(BindGroup _ is) ->
            mapM_
-             (mapM_ (putStrLn . printImplicitlyTypedBinding (const Nothing)))
+             (mapM_
+                (putStrLn .
+                 printImplicitlyTypedBinding
+                   defaultPrint {printDictionaries = True}))
              is)
         bindGroups'
       putStrLn "-- Stepping ..."
@@ -138,7 +139,7 @@ compileStepText file i text =
                  (\loopy e -> do
                     when
                       (True || cleanExpression e)
-                      (liftIO (putStrLn (printExpression (const Nothing) e)))
+                      (liftIO (putStrLn (printExpression (defaultPrint) e)))
                     e' <-
                       expandSeq1
                         typeClassEnv'
@@ -175,12 +176,12 @@ cleanExpression =
 displayResolveException :: SpecialTypes Name -> ResolveException -> String
 displayResolveException specialTypes =
   \case
-    NoInstanceFor p -> "No instance for " ++ printPredicate specialTypes p
+    NoInstanceFor p -> "No instance for " ++ printPredicate defaultPrint specialTypes p
 
 displayStepperException :: a -> StepException -> String
 displayStepperException _ =
   \case
-    CouldntFindName n -> "Not in scope: " ++ curlyQuotes (printit n)
+    CouldntFindName n -> "Not in scope: " ++ curlyQuotes (printit defaultPrint n)
     CouldntFindNameByString n ->
       "The starter variable isn't defined: " ++
       curlyQuotes n ++
@@ -192,7 +193,7 @@ displayInferException specialTypes =
   \case
     NotInScope scope name ->
       "Not in scope " ++
-      curlyQuotes (printit name) ++
+      curlyQuotes (printit defaultPrint name) ++
       "\n" ++
       "Nearest names in scope:\n\n" ++
       intercalate
@@ -202,13 +203,13 @@ displayInferException specialTypes =
            (take
               5
               (sortBy
-                 (comparing (editDistance (printit name)))
-                 (map (printTypeSignature specialTypes) scope))))
+                 (comparing (editDistance (printit defaultPrint name)))
+                 (map (printTypeSignature defaultPrint specialTypes) scope))))
     TypeMismatch t1 t2 ->
       "Couldn't match type " ++
-      curlyQuotes (printType specialTypes t1) ++
+      curlyQuotes (printType defaultPrint specialTypes t1) ++
       "\n" ++
-      "against inferred type " ++ curlyQuotes (printType specialTypes t2)
+      "against inferred type " ++ curlyQuotes (printType defaultPrint specialTypes t2)
     OccursCheckFails ->
       "Infinite type (occurs check failed). \nYou \
                         \probably have a self-referential value!"
@@ -217,7 +218,7 @@ displayInferException specialTypes =
       unlines
         (map
            (\(Ambiguity _ ps) ->
-              intercalate ", " (map (printPredicate specialTypes) ps))
+              intercalate ", " (map (printPredicate defaultPrint specialTypes) ps))
            ambiguities)
     e -> show e
 
@@ -226,7 +227,7 @@ displayRenamerException specialTypes =
   wrap (\case
           IdentifierNotInVarScope scope name ->
             "Not in variable scope " ++
-            curlyQuotes (printit name) ++
+            curlyQuotes (printit defaultPrint name) ++
             "\n" ++
             "Nearest names in scope:\n\n" ++
             intercalate
@@ -236,11 +237,11 @@ displayRenamerException specialTypes =
                  (take
                     5
                     (sortBy
-                       (comparing (editDistance (printit name)))
-                       (map printit (M.elems scope)))))
+                       (comparing (editDistance (printit defaultPrint name)))
+                       (map (printit defaultPrint) (M.elems scope)))))
           IdentifierNotInConScope scope name ->
             "Not in constructors scope " ++
-            curlyQuotes (printit name) ++
+            curlyQuotes (printit defaultPrint name) ++
             "\n" ++
             "Nearest names in scope:\n\n" ++
             intercalate
@@ -250,29 +251,29 @@ displayRenamerException specialTypes =
                  (take
                     5
                     (sortBy
-                       (comparing (editDistance (printit name)))
-                       (map printit (M.elems scope)))))
+                       (comparing (editDistance (printit defaultPrint name)))
+                       (map (printit defaultPrint) (M.elems scope)))))
           KindTooManyArgs ty k ty2 ->
             "The type " ++
-            curlyQuotes (printType specialTypes ty ++ " :: " ++ printKind k) ++
+            curlyQuotes (printType defaultPrint specialTypes ty ++ " :: " ++ printKind k) ++
             " has an unexpected additional argument, " ++
-            curlyQuotes (printType specialTypes ty2)
+            curlyQuotes (printType defaultPrint specialTypes ty2)
           ConstructorFieldKind cons typ kind ->
             "The type " ++
-            curlyQuotes (printType specialTypes typ ++ " :: " ++ printKind kind) ++
+            curlyQuotes (printType defaultPrint specialTypes typ ++ " :: " ++ printKind kind) ++
             " is used in a field in the " ++
-            curlyQuotes (printit cons) ++
+            curlyQuotes (printit defaultPrint cons) ++
             " constructor, but all fields \
             \should have types of kind " ++
             curlyQuotes (printKind StarKind)
           KindArgMismatch t1 k1 t2 k2 ->
             "The type " ++
-            curlyQuotes (printType specialTypes t1 ++ " :: " ++ printKind k1) ++
+            curlyQuotes (printType defaultPrint specialTypes t1 ++ " :: " ++ printKind k1) ++
             " has been given an argument of the wrong kind " ++
-            curlyQuotes (printType specialTypes t2 ++ " :: " ++ printKind k2)
+            curlyQuotes (printType defaultPrint specialTypes t2 ++ " :: " ++ printKind k2)
           TypeNotInScope types i ->
             "Unknown type " ++
-            curlyQuotes (printIdentifier i) ++
+            curlyQuotes (printIdentifier defaultPrint i) ++
             "\n" ++
             "Closest names in scope are: " ++
             intercalate
@@ -282,11 +283,11 @@ displayRenamerException specialTypes =
                  (take
                     5
                     (sortBy
-                       (comparing (editDistance (printIdentifier i)))
-                       (map printTypeConstructor types))))
+                       (comparing (editDistance (printIdentifier defaultPrint i)))
+                       (map (printTypeConstructor defaultPrint) types))))
           UnknownTypeVariable types i ->
             "Unknown type variable " ++
-            curlyQuotes (printIdentifier i) ++
+            curlyQuotes (printIdentifier defaultPrint i) ++
             "\n" ++
             "Type variables in scope are: " ++
             intercalate
@@ -294,8 +295,8 @@ displayRenamerException specialTypes =
               (map
                  curlyQuotes
                  (sortBy
-                    (comparing (editDistance (printIdentifier i)))
-                    (map printTypeVariable types)))
+                    (comparing (editDistance (printIdentifier defaultPrint i)))
+                    (map (printTypeVariable defaultPrint) types)))
           e -> show e)
   where wrap f e = (f e)-- ++ "\n(" ++ show e ++ ")"
 
@@ -386,7 +387,7 @@ runTypeChecker decls =
                         exitFailure))
            liftIO (putStrLn "-- Signatures in scope:")
            liftIO
-             (mapM_ (putStrLn . printTypeSignature specialTypes) signatures)
+             (mapM_ (putStrLn . printTypeSignature defaultPrint specialTypes) signatures)
            liftIO (putStrLn "-- Renaming variable/function declarations ...")
            (renamedBindings, subs') <-
              catch

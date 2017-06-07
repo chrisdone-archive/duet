@@ -488,7 +488,9 @@ altParser e' startCol =
       pure (p, e)) <?>
   "indented case alternative e.g.\n\n\
   \case " ++
-  printExpression (const Nothing) e' ++
+  printExpression
+    defaultPrint
+    e' ++
   " of\n\
   \  Just bar -> bar"
 
@@ -568,18 +570,18 @@ expParser = case' <|> lambda <|> ifParser <|> infix' <|> app <|> atomic
                           ". When more than one operator is used\n"
                         , "in the same expression, use parentheses, like this:\n"
                         , "(" ++
-                          printExpression (const Nothing) infixexp ++
+                          printExpression defaultPrint infixexp ++
                           ") " ++
                           (case op of
                              (Operator i, _) -> T.unpack i ++ " ..."
                              _ -> "* ...") ++
                           "\n"
                         , "Or like this:\n"
-                        , printExpressionAppArg (const Nothing) left ++
+                        , printExpressionAppArg defaultPrint left ++
                           " " ++
                           T.unpack t ++
                           " (" ++
-                          printExpressionAppArg (const Nothing) right ++
+                          printExpressionAppArg defaultPrint right ++
                           " " ++
                           case op of
                             (Operator i, _) -> T.unpack i ++ " ...)"

@@ -241,7 +241,7 @@ renameDict specialTypes subs (Dictionary _ methods) predicate = do
 
 predicateToDict :: SpecialTypes Name -> ((Predicate Type Name)) -> String
 predicateToDict specialTypes (pred) =
-  "$dict" ++ map normalize (printPredicate specialTypes pred)
+  "$dict" ++ map normalize (printPredicate defaultPrint specialTypes pred)
   where
     normalize c
       | isDigit c || isLetter c = c
