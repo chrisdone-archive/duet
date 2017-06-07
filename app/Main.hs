@@ -40,12 +40,12 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    [file, i] -> do
+    (file:is) -> do
       text <- T.readFile file
-      compileStepText "<interactive>" i text
+      compileStepText "<interactive>" (listToMaybe is) text
     _ -> error "usage: duet <file>"
 
-compileStepText :: String -> String -> Text -> IO ()
+compileStepText :: String -> Maybe String -> Text -> IO ()
 compileStepText file i text =
   case parseText file text of
     Left e -> error (show e)
@@ -131,33 +131,36 @@ compileStepText file i text =
                    defaultPrint {printDictionaries = True}))
              is)
         bindGroups'
-      putStrLn "-- Stepping ..."
-      catch
-        (do e0 <- lookupNameByString i bindGroups'
-            evalSupplyT
-              (fix
-                 (\loopy e -> do
-                    when
-                      (True || cleanExpression e)
-                      (liftIO (putStrLn (printExpression (defaultPrint) e)))
-                    e' <-
-                      expandSeq1
-                        typeClassEnv'
-                        specialSigs
-                        signatures
-                        e
-                        bindGroups
-                        subs
-                    if fmap (const ()) e' /= fmap (const ()) e
-                      then do
-                        renameExpression subs e' >>= loopy
-                      else pure ())
-                 e0)
-              supplies)
-        (\e ->
-           liftIO
-             (do putStrLn (displayStepperException specialTypes e)
-                 exitFailure))
+      case i of
+        Nothing -> return ()
+        Just i' -> do
+          putStrLn "-- Stepping ..."
+          catch
+            (do e0 <- lookupNameByString i' bindGroups'
+                evalSupplyT
+                  (fix
+                     (\loopy e -> do
+                        when
+                          (True || cleanExpression e)
+                          (liftIO (putStrLn (printExpression (defaultPrint) e)))
+                        e' <-
+                          expandSeq1
+                            typeClassEnv'
+                            specialSigs
+                            signatures
+                            e
+                            bindGroups
+                            subs
+                        if fmap (const ()) e' /= fmap (const ()) e
+                          then do
+                            renameExpression subs e' >>= loopy
+                          else pure ())
+                     e0)
+                  supplies)
+            (\e ->
+               liftIO
+                 (do putStrLn (displayStepperException specialTypes e)
+                     exitFailure))
 
 --------------------------------------------------------------------------------
 -- Clean expressions
