@@ -45,7 +45,7 @@ far:
 data List a = Nil | Cons a (List a)
 data Tuple a b = Tuple a b
 class Functor (f :: Type -> Type) where
-  map :: forall a b. (a -> b) -> f a -> f b
+  map :: (a -> b) -> f a -> f b
 instance Functor Maybe where
   map = \f m ->
     case m of
