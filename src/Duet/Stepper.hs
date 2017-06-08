@@ -51,7 +51,7 @@ expandSeq1 typeClassEnv specialSigs signatures e b _ =
               then pure e0
               else do
                 e' <- lift (expandWhnf typeClassEnv specialSigs signatures e0 b)
-                put True
+                put (e' /= e0)
                 pure e'
 
 expandWhnf
