@@ -15,18 +15,18 @@ import Data.String
 import Data.Typeable
 
 -- | A declaration.
-data Decl f i l
-  = DataDecl (DataType f i)
+data Decl t i l
+  = DataDecl (DataType t i)
   | BindGroupDecl (BindGroup i l)
-  | ClassDecl (Class f i l)
-  | InstanceDecl (Instance f i l)
+  | ClassDecl (Class t i l)
+  | InstanceDecl (Instance t i l)
   deriving (Show)
 
 -- | Data type.
-data DataType f i = DataType
+data DataType t i = DataType
   { dataTypeName :: i
   , dataTypeVariables :: [TypeVariable i]
-  , dataTypeConstructors :: [DataTypeConstructor f i]
+  , dataTypeConstructors :: [DataTypeConstructor t i]
   } deriving (Show)
 
 dataTypeConstructor :: DataType Type Name -> Type Name
@@ -42,9 +42,9 @@ dataTypeToConstructor (DataType name vs _) =
   toTypeConstructor name vs
 
 -- | A data type constructor.
-data DataTypeConstructor f i = DataTypeConstructor
+data DataTypeConstructor t i = DataTypeConstructor
   { dataTypeConstructorName :: i
-  , dataTypeConstructorFields :: [f i]
+  , dataTypeConstructorFields :: [t i]
   } deriving (Show)
 
 -- | Type for a data typed parsed from user input.
@@ -236,14 +236,14 @@ newtype Identifier = Identifier
 -- | Haskell types can be qualified by adding a (possibly empty) list
 -- of predicates, or class constraints, to restrict the ways in which
 -- type variables are instantiated.
-data Qualified f i typ = Qualified
-  { qualifiedPredicates :: ![Predicate f i]
+data Qualified t i typ = Qualified
+  { qualifiedPredicates :: ![Predicate t i]
   , qualifiedType :: !typ
   } deriving (Eq, Show)
 
 -- | One of potentially many predicates.
-data Predicate f i =
-  IsIn i [f i]
+data Predicate t i =
+  IsIn i [t i]
   deriving (Eq, Show)
 
 -- | A simple Haskell type.
@@ -318,17 +318,17 @@ data Literal
   deriving (Show, Eq)
 
 -- | A class.
-data Class f i l = Class
+data Class t i l = Class
   { classTypeVariables :: ![TypeVariable i]
-  , classSuperclasses :: ![Predicate f i]
-  , classInstances :: ![Instance f i l]
+  , classSuperclasses :: ![Predicate t i]
+  , classInstances :: ![Instance t i l]
   , className :: i
-  , classMethods :: Map i ([TypeVariable i], f i)
+  , classMethods :: Map i ([TypeVariable i], t i)
   } deriving (Show)
 
 -- | Class instance.
-data Instance f i l = Instance
-  { instancePredicate :: !(Qualified f i (Predicate f i))
+data Instance t i l = Instance
+  { instancePredicate :: !(Qualified t i (Predicate t i))
   , instanceDictionary :: !(Dictionary i l)
   } deriving (Show)
 
