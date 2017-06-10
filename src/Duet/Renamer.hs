@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -221,9 +222,9 @@ renameDict
   :: (MonadThrow m, MonadSupply Int m)
   => SpecialTypes Name
   -> Map Identifier Name
-  -> Dictionary Identifier l
+  -> Dictionary Type Identifier l
   -> Predicate Type Name
-  -> m (Dictionary Name l)
+  -> m (Dictionary Type Name l)
 renameDict specialTypes subs (Dictionary _ methods) predicate = do
   name' <-
     supplyDictName'
@@ -321,8 +322,8 @@ renameType specialTypes tyVars types =
 renameBindGroups
   :: (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i)
   => Map Identifier Name
-  -> [BindGroup i l]
-  -> m ([BindGroup Name l], Map Identifier Name)
+  -> [BindGroup Type i l]
+  -> m ([BindGroup Type Name l], Map Identifier Name)
 renameBindGroups subs groups = do
   subs' <-
     fmap
@@ -330,11 +331,14 @@ renameBindGroups subs groups = do
       (mapM (\(BindGroup ex implicit) -> getImplicitSubs subs implicit) groups) -- TODO: explicit
   fmap (second mconcat . unzip) (mapM (renameBindGroup subs') groups)
 
+castTy :: BindGroup t i l -> BindGroup Type i l
+castTy (BindGroup x y) = BindGroup x y
+
 renameBindGroup
   :: (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i)
   => Map Identifier Name
-  -> BindGroup i l
-  -> m (BindGroup Name l, Map Identifier Name)
+  -> BindGroup Type i l
+  -> m (BindGroup Type Name l, Map Identifier Name)
 renameBindGroup subs (BindGroup explicit implicit) = do
   bindGroup' <-
     BindGroup <$> renameExplicit subs explicit <*>
@@ -344,7 +348,7 @@ renameBindGroup subs (BindGroup explicit implicit) = do
 getImplicitSubs
   :: (MonadSupply Int m, Ord i, Identifiable i, MonadThrow m)
   => Map Identifier Name
-  -> [[ImplicitlyTypedBinding i l]]
+  -> [[ImplicitlyTypedBinding Type i l]]
   -> m (Map Identifier Name)
 getImplicitSubs subs implicit =
   fmap
@@ -361,15 +365,15 @@ renameExplicit _ _ = pure [] -- TODO:
 renameImplicit
   :: (MonadThrow m,MonadSupply Int m,Ord i, Identifiable i)
   => Map Identifier Name
-  -> ImplicitlyTypedBinding i t
-  -> m (ImplicitlyTypedBinding Name t)
+  -> ImplicitlyTypedBinding Type i t
+  -> m (ImplicitlyTypedBinding Type Name t)
 renameImplicit subs (ImplicitlyTypedBinding l id' alts) =
   do name <- substituteVar subs id'
      ImplicitlyTypedBinding l name <$> mapM (renameAlt subs) alts
 
 renameAlt
   :: (MonadSupply Int m, MonadThrow m, Ord i , Ord i, Identifiable i)
-  => Map Identifier Name -> Alternative i l -> m (Alternative Name l)
+  => Map Identifier Name -> Alternative Type i l -> m (Alternative Type Name l)
 renameAlt subs (Alternative l ps e) =
   do (ps', subs') <- runWriterT (mapM (renamePattern subs) ps)
      let subs'' = M.fromList subs' <> subs
@@ -378,8 +382,8 @@ renameAlt subs (Alternative l ps e) =
 renamePattern
   :: (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i)
   => Map Identifier Name
-  -> Pattern i l
-  -> WriterT [(Identifier, Name)] m (Pattern Name l)
+  -> Pattern Type i l
+  -> WriterT [(Identifier, Name)] m (Pattern Type Name l)
 renamePattern subs =
   \case
     VariablePattern l i -> do
@@ -400,10 +404,10 @@ renamePattern subs =
 
 renameExpression
   :: forall i m l. (MonadThrow m, MonadSupply Int m , Ord i, Identifiable i)
-  => Map Identifier Name -> Expression i l -> m (Expression Name l)
+  => Map Identifier Name -> Expression Type i l -> m (Expression Type Name l)
 renameExpression subs = go
   where
-    go :: Expression i l -> m (Expression Name l)
+    go :: Expression Type i l -> m (Expression Type Name l)
     go =
       \case
         VariableExpression l i -> VariableExpression l <$> substituteVar subs i
@@ -427,6 +431,7 @@ renameExpression subs = go
                e' <- renameExpression (M.fromList subs' <> subs) ex
                pure (pat', e'))
             pat_exps
+
 
 --------------------------------------------------------------------------------
 -- Provide a substitution

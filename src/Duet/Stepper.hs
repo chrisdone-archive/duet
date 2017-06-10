@@ -26,13 +26,13 @@ import           Duet.Types
 
 expandSeq1
   :: (MonadThrow m, MonadSupply Int m)
-  => Map Name (Class Type Name (TypeSignature Name Location))
+  => Map Name (Class Type Name (TypeSignature Type Name Location))
   -> SpecialSigs Name
-  -> [TypeSignature Name Name]
-  -> Expression Name (TypeSignature Name Location)
-  -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
+  -> [TypeSignature Type Name Name]
+  -> Expression Type Name (TypeSignature Type Name Location)
+  -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
   -> Map Identifier Name
-  -> m (Expression Name (TypeSignature Name Location))
+  -> m (Expression Type Name (TypeSignature Type Name Location))
 expandSeq1 typeClassEnv specialSigs signatures e b _ =
   evalStateT (go e) False
   where
@@ -56,12 +56,12 @@ expandSeq1 typeClassEnv specialSigs signatures e b _ =
 
 expandWhnf
   :: MonadThrow m
-  => Map Name (Class Type Name (TypeSignature Name Location))
+  => Map Name (Class Type Name (TypeSignature Type Name Location))
   -> SpecialSigs Name
-  -> [TypeSignature Name Name]
-  -> Expression Name (TypeSignature Name Location)
-  -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
-  -> m (Expression Name (TypeSignature Name Location))
+  -> [TypeSignature Type Name Name]
+  -> Expression Type Name (TypeSignature Type Name Location)
+  -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
+  -> m (Expression Type Name (TypeSignature Type Name Location))
 expandWhnf typeClassEnv specialSigs signatures e b = go e
   where
     go x =
@@ -142,13 +142,13 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
 
 expandAt
   :: MonadThrow m
-  => Map Name (Class Type Name (TypeSignature Name Location))
+  => Map Name (Class Type Name (TypeSignature Type Name Location))
   -> [Int]
   -> SpecialSigs Name
-  -> [TypeSignature Name Name]
-  -> Expression Name (TypeSignature Name Location)
-  -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
-  -> m (Expression Name (TypeSignature Name Location))
+  -> [TypeSignature Type Name Name]
+  -> Expression Type Name (TypeSignature Type Name Location)
+  -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
+  -> m (Expression Type Name (TypeSignature Type Name Location))
 expandAt typeClassEnv is specialSigs signatures e0 b = go [0] e0
   where
     go js e =
@@ -168,7 +168,7 @@ expandAt typeClassEnv is specialSigs signatures e0 b = go [0] e0
 
 match
   :: (Show l, Show i, Eq i)
-  => Expression i l -> Pattern i l -> Result (Match i l)
+  => Expression Type i l -> Pattern Type i l -> Result (Match Type i l)
 match = go [0]
   where
     go is val pat =
@@ -194,7 +194,7 @@ match = go [0]
 -- Expression manipulators
 
 -- | Flatten an application f x y into (f,[x,y]).
-fargs :: Expression i l -> (Expression i l, [(Expression i l)])
+fargs :: Expression Type i l -> (Expression Type i l, [(Expression Type i l)])
 fargs e = go e []
   where
     go (ApplicationExpression _ f x) args = go f (x : args)
@@ -203,7 +203,7 @@ fargs e = go e []
 --------------------------------------------------------------------------------
 -- Substitutions
 
-substitute :: Eq i => i -> Expression i l -> Expression i l -> Expression i l
+substitute :: Eq i => i -> Expression Type i l -> Expression Type i l -> Expression Type i l
 substitute i arg = go
   where
     go =
@@ -229,8 +229,8 @@ substitute i arg = go
 lookupName
   :: (MonadThrow m)
   => Name
-  -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
-  -> m (Expression Name (TypeSignature Name Location))
+  -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
+  -> m (Expression Type Name (TypeSignature Type Name Location))
 lookupName identifier binds =
   case listToMaybe (mapMaybe findIdent binds) of
     Nothing -> throwM (CouldntFindName identifier)
@@ -248,8 +248,8 @@ lookupName identifier binds =
 lookupNameByString
   :: (MonadThrow m)
   => String
-  -> [BindGroup Name (TypeSignature Name Duet.Types.Location)]
-  -> m (Expression Name (TypeSignature Name Location))
+  -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
+  -> m (Expression Type Name (TypeSignature Type Name Location))
 lookupNameByString identifier binds =
   case listToMaybe (mapMaybe findIdent binds) of
     Nothing -> throwM (CouldntFindNameByString identifier)

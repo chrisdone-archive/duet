@@ -73,10 +73,10 @@ import           Duet.Types
 typeCheckModule
   :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l) -- ^ Set of defined type-classes.
-  -> [(TypeSignature Name Name)] -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
+  -> [(TypeSignature Type Name Name)] -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
   -> SpecialTypes Name -- ^ Special types that Haskell uses for pattern matching and literals.
-  -> [BindGroup Name l] -- ^ Bindings in the module.
-  -> m ([BindGroup Name (TypeSignature Name l)], Map Name (Class Type Name (TypeSignature Name l)))
+  -> [BindGroup Type Name l] -- ^ Bindings in the module.
+  -> m ([BindGroup Type Name (TypeSignature Type Name l)], Map Name (Class Type Name (TypeSignature Type Name l)))
 typeCheckModule ce as specialTypes bgs =
   evalStateT
     (runInferT $ do
@@ -99,9 +99,9 @@ typeCheckModule ce as specialTypes bgs =
 
 collectMethods
   :: MonadThrow m
-  => [BindGroup Name (TypeSignature Name l)]
+  => [BindGroup Type Name (TypeSignature Type Name l)]
   -> Map Name (Class Type Name l)
-  -> m (Map Name (Class Type Name (TypeSignature Name l)))
+  -> m (Map Name (Class Type Name (TypeSignature Type Name l)))
 collectMethods binds =
   fmap M.fromList .
   mapM
@@ -141,7 +141,7 @@ collectMethods binds =
        pure (name, cls {classInstances = insts})) .
   M.toList
 
-classMethodsToGroups :: Map Name (Class Type Name l) -> [BindGroup Name l]
+classMethodsToGroups :: Map Name (Class Type Name l) -> [BindGroup Type Name l]
 classMethodsToGroups =
   map
     (BindGroup [] .
@@ -168,7 +168,7 @@ substituteQualified substitutions (Qualified predicates t) =
     (map (substitutePredicate substitutions) predicates)
     (substituteType substitutions t)
 
-substituteTypeSignature :: [Substitution Name] -> (TypeSignature Name l) -> (TypeSignature Name l)
+substituteTypeSignature :: [Substitution Name] -> (TypeSignature Type Name l) -> (TypeSignature Type Name l)
 substituteTypeSignature substitutions (TypeSignature l scheme) =
     TypeSignature l (substituteInScheme substitutions scheme)
   where substituteInScheme subs' (Forall kinds qualified) =
@@ -211,9 +211,9 @@ newVariableType k =
 inferExplicitlyTypedBindingType
   :: (MonadThrow m, Show l  )
   => Map Name (Class Type Name l)
-  -> [TypeSignature Name Name]
-  -> (ExplicitlyTypedBinding Name l)
-  -> InferT m ([Predicate Type Name], ExplicitlyTypedBinding Name (TypeSignature Name l))
+  -> [TypeSignature Type Name Name]
+  -> (ExplicitlyTypedBinding Type Name l)
+  -> InferT m ([Predicate Type Name], ExplicitlyTypedBinding Type Name (TypeSignature Type Name l))
 inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding identifier sc alts) = do
   (Qualified qs t) <- freshInst sc
   (ps, alts') <- inferAltTypes ce as alts t
@@ -234,9 +234,9 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding identifier sc alts
 inferImplicitlyTypedBindingsTypes
   :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
-  -> [(TypeSignature Name Name)]
-  -> [ImplicitlyTypedBinding Name l]
-  -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], [ImplicitlyTypedBinding Name (TypeSignature Name l)])
+  -> [(TypeSignature Type Name Name)]
+  -> [ImplicitlyTypedBinding Type Name l]
+  -> InferT m ([Predicate Type Name], [(TypeSignature Type Name Name)], [ImplicitlyTypedBinding Type Name (TypeSignature Type Name l)])
 inferImplicitlyTypedBindingsTypes ce as bs = do
   ts <- mapM (\_ -> newVariableType StarKind) bs
   let is = map implicitlyTypedBindingId bs
@@ -289,9 +289,9 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
 inferBindGroupTypes
   :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
-  -> [(TypeSignature Name Name)]
-  -> (BindGroup Name l)
-  -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], BindGroup Name (TypeSignature Name l))
+  -> [(TypeSignature Type Name Name)]
+  -> (BindGroup Type Name l)
+  -> InferT m ([Predicate Type Name], [(TypeSignature Type Name Name)], BindGroup Type Name (TypeSignature Type Name l))
 inferBindGroupTypes ce as (BindGroup es iss) = do
   let as' = [TypeSignature v sc | ExplicitlyTypedBinding v sc _alts <- es]
   (ps, as'', iss') <-
@@ -301,11 +301,11 @@ inferBindGroupTypes ce as (BindGroup es iss) = do
 
 inferSequenceTypes0
   :: Monad m
-  => (Map Name (Class Type Name l) -> [(TypeSignature Name Name)] -> [bg l] -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], [bg (TypeSignature Name l)]))
+  => (Map Name (Class Type Name l) -> [(TypeSignature Type Name Name)] -> [bg l] -> InferT m ([Predicate Type Name], [(TypeSignature Type Name Name)], [bg (TypeSignature Type Name l)]))
   -> Map Name (Class Type Name l)
-  -> [(TypeSignature Name Name)]
+  -> [(TypeSignature Type Name Name)]
   -> [[bg l]]
-  -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], [[bg (TypeSignature Name l)]])
+  -> InferT m ([Predicate Type Name], [(TypeSignature Type Name Name)], [[bg (TypeSignature Type Name l)]])
 inferSequenceTypes0 _ _ _ [] = return ([], [], [])
 inferSequenceTypes0 ti ce as (bs:bss) = do
   (ps, as', bs') <- ti ce as bs
@@ -314,11 +314,11 @@ inferSequenceTypes0 ti ce as (bs:bss) = do
 
 inferSequenceTypes
   :: Monad m
-  => (Map Name (Class Type Name l) -> [(TypeSignature Name Name)] -> bg l -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], bg (TypeSignature Name l)))
+  => (Map Name (Class Type Name l) -> [(TypeSignature Type Name Name)] -> bg l -> InferT m ([Predicate Type Name], [(TypeSignature Type Name Name)], bg (TypeSignature Type Name l)))
   -> Map Name (Class Type Name l)
-  -> [(TypeSignature Name Name)]
+  -> [(TypeSignature Type Name Name)]
   -> [bg l]
-  -> InferT m ([Predicate Type Name], [(TypeSignature Name Name)], [bg (TypeSignature Name l)])
+  -> InferT m ([Predicate Type Name], [(TypeSignature Type Name Name)], [bg (TypeSignature Type Name l)])
 inferSequenceTypes _ _ _ [] = return ([], [], [])
 inferSequenceTypes ti ce as (bs:bss) = do
   (ps, as', bs') <- ti ce as bs
@@ -344,7 +344,7 @@ instantiatePredicate ts (IsIn c t) = IsIn c (map (instantiateType ts) t)
 --------------------------------------------------------------------------------
 -- Type variables
 
-getTypeSignatureTypeVariables :: (TypeSignature Name Name) -> [TypeVariable Name]
+getTypeSignatureTypeVariables :: (TypeSignature Type Name Name) -> [TypeVariable Name]
 getTypeSignatureTypeVariables = getTypeVariables where
   getTypeVariables (TypeSignature _  scheme) = getSchemeTypeVariables scheme
     where getSchemeTypeVariables (Forall _ qualified) = getQualifiedTypeVariables qualified
@@ -384,7 +384,7 @@ typeKind (ApplicationType typ _) =
 -- entries in a list of implicitly typed bindings is simple, meaning
 -- that it has an alternative with no left-hand side patterns. The
 -- following function provides a way to test for this:
-restrictImplicitlyTypedBindings :: [(ImplicitlyTypedBinding Name l)] -> Bool
+restrictImplicitlyTypedBindings :: [(ImplicitlyTypedBinding t Name l)] -> Bool
 restrictImplicitlyTypedBindings = any simple
   where
     simple =
@@ -454,7 +454,7 @@ oneWayMatchLists ts ts' = do
 
 lookupName
   :: MonadThrow m
-  => Name -> [(TypeSignature Name Name)] -> m (Scheme Name)
+  => Name -> [(TypeSignature Type Name Name)] -> m (Scheme Type Name)
 lookupName name cands = go name cands where
   go n [] = throwM (NotInScope cands n)
   go i ((TypeSignature i'  sc):as) =
@@ -479,8 +479,8 @@ inferLiteralType specialTypes (RationalLiteral _) = do
 
 inferPattern
   :: MonadThrow m
-  => [TypeSignature Name Name] -> Pattern Name l
-  -> InferT m (Pattern Name (TypeSignature Name l), [Predicate Type Name], [(TypeSignature Name Name)], Type Name)
+  => [TypeSignature Type Name Name] -> Pattern Type Name l
+  -> InferT m (Pattern Type Name (TypeSignature Type Name l), [Predicate Type Name], [(TypeSignature Type Name Name)], Type Name)
 inferPattern signatures = go
   where go (VariablePattern l i) = do
           v <- newVariableType StarKind
@@ -505,7 +505,7 @@ inferPattern signatures = go
           t' <- newVariableType StarKind
           (Qualified qs t) <- freshInst sc
           specialTypes <- InferT (gets inferStateSpecialTypes)
-          let makeArrow :: Type Name -> Type Name -> Type Name
+          let makeArrow :: Type Name -> Type  Name -> Type  Name
               a `makeArrow` b = ApplicationType (ApplicationType (ConstructorType (specialTypesFunction specialTypes)) a) b
           unify t (foldr makeArrow t' ts)
           return (ConstructorPattern (TypeSignature l (toScheme t')) i pats',ps ++ qs, as, t')
@@ -513,7 +513,7 @@ inferPattern signatures = go
 
 substituteConstr
   :: MonadThrow m
-  => [TypeSignature Name Name] -> Name -> m (TypeSignature Name Name)
+  => [TypeSignature Type Name Name] -> Name -> m (TypeSignature Type Name Name)
 substituteConstr subs i =
   case find
          (\case
@@ -532,7 +532,7 @@ substituteConstr subs i =
 
 inferPatterns
   :: MonadThrow m
-  => [TypeSignature Name Name] -> [Pattern Name l] -> InferT m ([Pattern Name (TypeSignature Name l)], [Predicate Type Name], [(TypeSignature Name Name)], [Type Name])
+  => [TypeSignature Type Name Name] -> [Pattern Type Name l] -> InferT m ([Pattern Type Name (TypeSignature Type Name l)], [Predicate Type Name], [(TypeSignature Type Name Name)], [Type Name])
 inferPatterns ss pats = do
   psasts <- mapM (inferPattern ss) pats
   let ps = concat [ps' | (_,ps', _, _) <- psasts]
@@ -604,7 +604,7 @@ addInstance
   :: MonadThrow m
   => [Predicate Type Name]
   -> Predicate Type Name
-  -> Dictionary Name l
+  -> Dictionary Type Name l
   -> Map Name (Class Type Name l)
   -> m (Map Name (Class Type Name l))
 addInstance ps p@(IsIn i _) dict ce =
@@ -640,7 +640,7 @@ byInst
   :: Show l
   => Map Name (Class Type Name l)
   -> Predicate Type Name
-  -> Maybe ([Predicate Type Name], Dictionary Name l)
+  -> Maybe ([Predicate Type Name], Dictionary Type Name l)
 byInst ce p@(IsIn i _) =
   case M.lookup i ce of
     Nothing -> throwM NoSuchClassForInstance
@@ -678,14 +678,14 @@ elimTauts ce ps = [p | p <- ps, not (entail ce [] p)]
 scEntail :: Map Name (Class Type Name l) -> [Predicate Type Name] -> Predicate Type Name -> Bool
 scEntail ce ps p = any (p `elem`) (map (bySuper ce) ps)
 
-quantify :: [TypeVariable Name] -> Qualified Type Name (Type Name) -> Scheme Name
+quantify :: [TypeVariable Name] -> Qualified Type Name (Type Name) -> Scheme Type Name
 quantify vs qt = Forall ks (substituteQualified s qt)
   where
     vs' = [v | v <- getQualifiedTypeVariables qt, v `elem` vs]
     ks = map typeVariableKind vs'
     s = zipWith Substitution vs' (map GenericType [0 ..])
 
-toScheme :: Type Name -> Scheme Name
+toScheme :: Type Name -> Scheme Type Name
 toScheme t = Forall [] (Qualified [] t)
 
 merge
@@ -705,9 +705,9 @@ merge s1 s2 =
 inferExpressionType
   :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
-  -> [(TypeSignature Name Name)]
-  -> (Expression Name l)
-  -> InferT m ([Predicate Type Name], Type Name, Expression Name (TypeSignature Name l))
+  -> [(TypeSignature Type Name Name)]
+  -> (Expression Type Name l)
+  -> InferT m ([Predicate Type Name], Type Name, Expression Type Name (TypeSignature Type Name l))
 inferExpressionType _ as (VariableExpression l i) = do
   sc <- lookupName i as
   qualified@(Qualified ps t) <- freshInst sc
@@ -731,7 +731,7 @@ inferExpressionType ce as (ApplicationExpression l e f) = do
   (qs, tf, f') <- inferExpressionType ce as f
   t <- newVariableType StarKind
   specialTypes <- InferT (gets inferStateSpecialTypes)
-  let makeArrow :: Type Name -> Type Name -> Type Name
+  let makeArrow :: Type Name -> Type  Name -> Type  Name
       a `makeArrow` b = ApplicationType (ApplicationType (ConstructorType(specialTypesFunction specialTypes)) a) b
   unify (tf `makeArrow` t) te
   let scheme = (Forall [] (Qualified (ps++qs) t))
@@ -783,9 +783,9 @@ inferExpressionType ce as (CaseExpression l e branches) = do
 inferAltTypeForLambda
   :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
-  -> [(TypeSignature Name Name)]
-  -> Alternative Name l
-  -> InferT m ([Predicate Type Name], Type Name, Alternative Name (TypeSignature Name l))
+  -> [(TypeSignature Type Name Name)]
+  -> Alternative Type Name l
+  -> InferT m ([Predicate Type Name], Type Name, Alternative Type Name (TypeSignature Type Name l))
 inferAltTypeForLambda ce as alt =
   inferAltType0
     ce
@@ -796,18 +796,18 @@ inferAltTypeForLambda ce as alt =
 inferAltTypeForBind
   :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
-  -> [(TypeSignature Name Name)]
-  -> Alternative Name l
-  -> InferT m ([Predicate Type Name], Type Name, Alternative Name (TypeSignature Name l))
+  -> [(TypeSignature Type Name Name)]
+  -> Alternative Type Name l
+  -> InferT m ([Predicate Type Name], Type Name, Alternative Type Name (TypeSignature Type Name l))
 inferAltTypeForBind ce as alt =
   inferAltType0 ce as makeAltForDecl alt
 
 inferAltType0
   :: (Show t1, MonadThrow m)
   => Map Name (Class Type Name t1)
-  -> [TypeSignature Name Name]
-  -> (t1 -> Scheme Name -> [Pattern Name (TypeSignature Name t1)] -> Expression Name (TypeSignature Name t1) -> t)
-  -> Alternative Name t1
+  -> [TypeSignature Type Name Name]
+  -> (t1 -> Scheme Type Name -> [Pattern Type Name (TypeSignature Type Name t1)] -> Expression Type Name (TypeSignature Type Name t1) -> t)
+  -> Alternative Type Name t1
   -> InferT m ([Predicate Type Name], Type Name, t)
 inferAltType0 ce as makeAlt (Alternative l pats e) = do
   (pats', ps, as', ts) <- inferPatterns as pats
@@ -829,10 +829,10 @@ inferAltType0 ce as makeAlt (Alternative l pats e) = do
 -- But type-checked and generalized.
 makeAltForDecl
   :: a
-  -> Scheme i1
-  -> [Pattern i (TypeSignature i1 a)]
-  -> Expression i (TypeSignature i1 a)
-  -> Alternative i (TypeSignature i1 a)
+  -> Scheme Type i1
+  -> [Pattern Type i (TypeSignature Type i1 a)]
+  -> Expression Type i (TypeSignature Type i1 a)
+  -> Alternative Type i (TypeSignature Type i1 a)
 makeAltForDecl l scheme pats' e' =
   if null pats'
     then Alternative (TypeSignature l scheme) pats' e'
@@ -846,10 +846,10 @@ makeAltForDecl l scheme pats' e' =
 inferAltTypes
   :: (MonadThrow m, Show l)
   => Map Name (Class Type Name l)
-  -> [(TypeSignature Name Name)]
-  -> [Alternative Name l]
+  -> [(TypeSignature Type Name Name)]
+  -> [Alternative Type Name l]
   -> Type Name
-  -> InferT m ([Predicate Type Name], [Alternative Name (TypeSignature Name l)])
+  -> InferT m ([Predicate Type Name], [Alternative Type Name (TypeSignature Type Name l)])
 inferAltTypes ce as alts t = do
   psts <- mapM (inferAltTypeForBind ce as) alts
   mapM_ (unify t) (map snd3 psts)
@@ -920,7 +920,7 @@ defaultSubst = withDefaults "defaultSubst" (\vps ts -> zipWith Substitution (map
 
 freshInst
   :: Monad m
-  => Scheme Name -> InferT m (Qualified Type Name (Type Name))
+  => Scheme Type Name -> InferT m (Qualified Type Name (Type Name))
 freshInst (Forall ks qt) = do
   ts <- mapM newVariableType ks
   return (instantiateQualified ts qt)

@@ -1,3 +1,4 @@
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE Strict #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
@@ -13,6 +14,9 @@ import           Data.List
 import qualified Data.Map.Strict as M
 import           Duet.Types
 import           Text.Printf
+
+class PrintableType (t :: * -> *) where
+  printType :: Printable i => Print i l -> SpecialTypes i -> t i -> String
 
 class (Eq a, Identifiable a) => Printable a where
   printit :: Print i l -> a -> String
@@ -66,23 +70,23 @@ defaultPrint =
   }
 
 data Print i l = Print
-  { printTypes :: (l -> Maybe (SpecialTypes i, TypeSignature i ()))
+  { printTypes :: (l -> Maybe (SpecialTypes i, TypeSignature Type i ()))
   , printDictionaries :: Bool
   , printNameDetails :: Bool
   }
 
-printDataType :: (Eq i, Printable i) => Print i l -> SpecialTypes i -> DataType Type i -> String
+printDataType :: (Eq i, Printable i , PrintableType t) => Print i l -> SpecialTypes i -> DataType t i -> String
 printDataType printer specialTypes (DataType name vars cons) =
   "data " ++ printit printer name ++ " " ++ unwords (map (printTypeVariable printer) vars) ++ "\n  = " ++
     intercalate "\n  | " (map (printConstructor printer specialTypes) cons)
 
-printConstructor :: (Eq i, Printable i) => Print i l ->  SpecialTypes i -> DataTypeConstructor Type i -> [Char]
+printConstructor :: (Eq i, Printable i, PrintableType t) => Print i l ->  SpecialTypes i -> DataTypeConstructor t i -> [Char]
 printConstructor printer specialTypes (DataTypeConstructor name fields) =
   printit printer name ++ " " ++ unwords (map (printType printer specialTypes) fields)
 
 printTypeSignature
   :: (Printable i, Printable j, Eq i)
-  => Print i l ->  SpecialTypes i -> TypeSignature i j -> String
+  => Print i l ->  SpecialTypes i -> TypeSignature Type i j -> String
 printTypeSignature printer specialTypes (TypeSignature thing scheme) =
   printit printer thing ++ " :: " ++ printScheme printer specialTypes scheme
 
@@ -90,16 +94,16 @@ printIdentifier :: Printable j => Print i l ->  j -> String
 printIdentifier printer = printit printer
 
 printImplicitlyTypedBinding
-  :: Printable i
-  => Print i l -> ImplicitlyTypedBinding i l -> String
+  :: (Printable i, PrintableType t)
+  => Print i l -> ImplicitlyTypedBinding t i l -> String
 printImplicitlyTypedBinding printer (ImplicitlyTypedBinding _ i [alt]) =
   printIdentifier printer i ++ " " ++ printAlternative printer alt
 
-printAlternative :: (Eq i, Printable i) => Print i l -> Alternative i l -> [Char]
+printAlternative :: (Eq i, Printable i) => Print i l -> Alternative Type i l -> [Char]
 printAlternative printer (Alternative _ patterns expression) =
   concat (map (\p->printPattern printer p ++ " ") patterns) ++ "= " ++ printExpression printer expression
 
-printPattern :: Printable i => Print i l ->  Pattern i l -> [Char]
+printPattern :: (Printable i, PrintableType t) => Print i l ->  Pattern t i l -> [Char]
 printPattern printer =
   \case
     VariablePattern _ i -> printIdentifier printer i
@@ -109,7 +113,7 @@ printPattern printer =
     ConstructorPattern _ i pats ->
       printIdentifier printer i ++ " " ++ unwords (map (printPattern printer) pats)
 
-printExpression :: (Printable i, Eq i) => Print i l -> (Expression i l) -> String
+printExpression :: (Printable i, Eq i, PrintableType t) => Print i l -> (Expression t i l) -> String
 printExpression printer e =
   wrapType
     (case e of
@@ -162,7 +166,7 @@ printExpression printer e =
                     then "(" ++ k ++ ")"
                     else k
 
-printPat :: Printable i => Print i l ->  Pattern i l -> String
+printPat :: (Printable i, PrintableType t) => Print i l ->  Pattern t i l -> String
 printPat printer=
   \case
     VariablePattern _ i -> printit printer i
@@ -182,7 +186,7 @@ printPat printer=
           | otherwise ->
             "(" ++ printit printer i ++ " " ++ unwords (map inner ps) ++ ")"
 
-printExpressionAppArg :: Printable i => Print i l ->(Expression i l) -> String
+printExpressionAppArg :: (Printable i, PrintableType t) => Print i l ->(Expression t i l) -> String
 printExpressionAppArg printer =
   \case
     e@(ApplicationExpression {})
@@ -199,7 +203,7 @@ printExpressionAppArg printer =
           | not (printDictionaries printer) -> False
         _ -> True
 
-printExpressionIfPred :: Printable i => Print i l -> (Expression i l) -> String
+printExpressionIfPred :: (Printable i, PrintableType t) => Print i l -> (Expression t i l) -> String
 printExpressionIfPred printer=
   \case
     e@(IfExpression {}) -> paren (printExpression printer e)
@@ -207,7 +211,7 @@ printExpressionIfPred printer=
     e@(CaseExpression {}) -> paren (printExpression printer e)
     e -> printExpression printer e
 
-printExpressionAppOp :: Printable i => Print i l -> (Expression i l) -> String
+printExpressionAppOp :: (Printable i, PrintableType t) => Print i l -> (Expression t i l) -> String
 printExpressionAppOp printer=
   \case
     e@(IfExpression {}) -> paren (printExpression printer e)
@@ -224,7 +228,7 @@ printLiteral (RationalLiteral i) = printf "%f" (fromRational i :: Double)
 printLiteral (StringLiteral x) = show x
 printLiteral (CharacterLiteral x) = show x
 
-printScheme :: (Printable i, Eq i) => Print i l -> SpecialTypes i -> Scheme i -> [Char]
+printScheme :: (Printable i, Eq i) => Print i l -> SpecialTypes i -> Scheme Type i -> [Char]
 printScheme printer specialTypes (Forall kinds qualifiedType') =
   (if null kinds
      then ""
@@ -305,25 +309,34 @@ printTypeSansParens printer specialTypes =
         " -> " ++ printTypeSansParens printer specialTypes y'
     o -> printType printer specialTypes o
 
-printType :: (Printable i, Eq i) => Print i l ->  SpecialTypes i -> Type i -> [Char]
-printType printer specialTypes =
-  \case
-    VariableType v -> printTypeVariable printer v
-    ConstructorType tyCon -> printTypeConstructor printer tyCon
-    ApplicationType (ApplicationType func x') y
-      | func == ConstructorType (specialTypesFunction specialTypes) ->
-        "(" ++
-        printType printer specialTypes x' ++
-        " -> " ++ printTypeSansParens printer specialTypes y ++ ")"
+instance PrintableType Type where
+  printType printer specialTypes =
+    \case
+      VariableType v -> printTypeVariable printer v
+      ConstructorType tyCon -> printTypeConstructor printer tyCon
+      ApplicationType (ApplicationType func x') y
+        | func == ConstructorType (specialTypesFunction specialTypes) ->
+          "(" ++
+          printType printer specialTypes x' ++
+          " -> " ++ printTypeSansParens printer specialTypes y ++ ")"
     -- ApplicationType list ty | list == specialTypesList specialTypes ->
     --   "[" ++ printTypeSansParens specialTypes ty ++ "]"
-    ApplicationType x' y -> printType printer specialTypes x' ++ " " ++ printTypeArg y
-    GenericType int -> "g" ++ show int
-  where
-    printTypeArg =
-      \case
-        x@ApplicationType {} -> "(" ++ printType printer specialTypes x ++ ")"
-        x -> printType printer specialTypes x
+      ApplicationType x' y ->
+        printType printer specialTypes x' ++ " " ++ printTypeArg y
+      GenericType int -> "g" ++ show int
+    where
+      printTypeArg =
+        \case
+          x@ApplicationType {} -> "(" ++ printType printer specialTypes x ++ ")"
+          x -> printType printer specialTypes x
+
+instance PrintableType ParsedType where
+  printType printer specialTypes =
+    \case
+      ParsedTypeVariable v -> printIdentifier printer v
+      ParsedTypeConstructor tyCon -> printIdentifier printer tyCon
+      ParsedTypeApp x' y ->
+        "(" ++ printType printer specialTypes x' ++ " " ++ printType printer specialTypes y ++ ")"
 
 printTypeConstructor :: Printable j => Print i l -> TypeConstructor j -> String
 printTypeConstructor printer (TypeConstructor identifier kind) =

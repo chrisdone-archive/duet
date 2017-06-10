@@ -166,7 +166,7 @@ compileStepText file i text =
 -- Clean expressions
 
 -- | Filter out expressions with intermediate case, if and immediately-applied lambdas.
-cleanExpression :: Expression i l -> Bool
+cleanExpression :: Expression Type i l -> Bool
 cleanExpression =
   \case
     CaseExpression {} -> False
@@ -309,7 +309,7 @@ editDistance = on (levenshteinDistance defaultEditCosts) (map toLower)
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
   => [Decl ParsedType Identifier Location]
-  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Name (TypeSignature Name Location)], [TypeSignature Name Name], Map Identifier Name, Map Name (Class Type Name (TypeSignature Name Location))), [Int])
+  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Type Name (TypeSignature Type Name Location)], [TypeSignature Type Name Name], Map Identifier Name, Map Name (Class Type Name (TypeSignature Type Name Location))), [Int])
 runTypeChecker decls =
   let bindings =
         mapMaybe
@@ -394,7 +394,7 @@ runTypeChecker decls =
            liftIO (putStrLn "-- Renaming variable/function declarations ...")
            (renamedBindings, subs') <-
              catch
-               (renameBindGroups subs bindings)
+               (renameBindGroups subs (map castTy bindings))
                (\e ->
                   liftIO
                     (do putStrLn (displayRenamerException specialTypes e)
@@ -436,7 +436,7 @@ runTypeChecker decls =
 -- | Built-in pre-defined functions.
 builtInSignatures
   :: MonadThrow m
-  => SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Name Name])
+  => SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Type Name Name])
 builtInSignatures specialTypes = do
   the_show <- supplyValueName ("show" :: Identifier)
   sigs <- dataTypeSignatures specialTypes (specialTypesBool specialTypes)
@@ -475,7 +475,7 @@ builtInSignatures specialTypes = do
     a --> b =
       ApplicationType (ApplicationType (ConstructorType(specialTypesFunction specialTypes)) a) b
 
-classSignatures :: MonadThrow m => Class Type Name l -> m [TypeSignature Name Name]
+classSignatures :: MonadThrow m => Class Type Name l -> m [TypeSignature Type Name Name]
 classSignatures cls =
   mapM
     (\(name, (methodVars, ty)) ->
@@ -505,7 +505,7 @@ genify table =
 
 dataTypeSignatures
   :: Monad m
-  => SpecialTypes Name -> DataType Type Name -> m [TypeSignature Name Name]
+  => SpecialTypes Name -> DataType Type Name -> m [TypeSignature Type Name Name]
 dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
   where
     construct (DataTypeConstructor cname fs) =

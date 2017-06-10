@@ -40,9 +40,9 @@ moduleParser :: TokenParser [Decl ParsedType Identifier Location]
 moduleParser =
   many
     ((fmap (\x -> BindGroupDecl (BindGroup [] [[x]])) varfundecl) <|>
-     fmap DataDecl datadecl <|>
-     fmap ClassDecl classdecl <|>
-     fmap InstanceDecl instancedecl)
+    fmap DataDecl datadecl <|>
+    fmap ClassDecl classdecl <|>
+    fmap InstanceDecl instancedecl)
 
 classdecl :: TokenParser (Class ParsedType Identifier Location)
 classdecl =
@@ -433,7 +433,7 @@ parsedType = infix' <|> app <|> unambiguous
           _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
           pure e
 
-varfundecl :: TokenParser (ImplicitlyTypedBinding Identifier Location)
+varfundecl :: TokenParser (ImplicitlyTypedBinding Type Identifier Location)
 varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
   where
     go = do
@@ -448,13 +448,13 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
       _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
       pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [makeAlt loc e])
 
-makeAlt :: l -> Expression i l -> Alternative i l
+makeAlt :: l -> Expression Type i l -> Alternative Type i l
 makeAlt loc e =
   case e of
     LambdaExpression _ alt -> alt
     _ -> Alternative loc [] e
 
-case' :: TokenParser (Expression Identifier Location)
+case' :: TokenParser (Expression Type Identifier Location)
 case' = do
   u <- getState
   loc <- equalToken Case
@@ -467,9 +467,9 @@ case' = do
   pure (CaseExpression loc e alts)
 
 altParser
-  :: Expression Identifier Location
+  :: Expression Type Identifier Location
   -> Int
-  -> TokenParser (Pattern Identifier Location, Expression Identifier Location)
+  -> TokenParser (Pattern Type Identifier Location, Expression Type Identifier Location)
 altParser e' startCol =
   (do u <- getState
       p <- altPat
@@ -493,7 +493,7 @@ altParser e' startCol =
   " of\n\
   \  Just bar -> bar"
 
-altPat :: TokenParser (Pattern Identifier Location)
+altPat :: TokenParser (Pattern Type Identifier Location)
 altPat = varp <|> consParser
   where
     patInner = parenpat <|> varp <|> unaryConstructor
@@ -535,7 +535,7 @@ altPat = varp <|> consParser
           args <- many patInner
           pure (ConstructorPattern loc (Identifier (T.unpack c)) args)
 
-expParser :: TokenParser (Expression Identifier Location)
+expParser :: TokenParser (Expression Type Identifier Location)
 expParser = case' <|> lambda <|> ifParser <|> infix' <|> app <|> atomic
   where
     app = do
@@ -600,7 +600,7 @@ expParser = case' <|> lambda <|> ifParser <|> infix' <|> app <|> atomic
     unambiguous = parensExpr <|> atomic
     parensExpr = parens expParser
 
-lambda :: TokenParser (Expression Identifier Location)
+lambda :: TokenParser (Expression Type Identifier Location)
 lambda = do
   loc <- equalToken Backslash <?> "lambda expression (e.g. \\x -> x)"
   args <- many1 funcParam <?> "lambda parameters"
@@ -608,7 +608,7 @@ lambda = do
   e <- expParser
   pure (LambdaExpression loc (Alternative loc args e))
 
-funcParam :: TokenParser (Pattern Identifier Location)
+funcParam :: TokenParser (Pattern Type Identifier Location)
 funcParam = go <?> "function parameter (e.g. ‘x’, ‘limit’, etc.)"
   where
     go = do
@@ -619,7 +619,7 @@ funcParam = go <?> "function parameter (e.g. ‘x’, ‘limit’, etc.)"
              _ -> Nothing)
       pure (VariablePattern loc (Identifier (T.unpack v)))
 
-atomic :: TokenParser (Expression Identifier Location)
+atomic :: TokenParser (Expression Type Identifier Location)
 atomic =
   varParser <|> charParser <|> stringParser <|> integerParser <|> decimalParser <|>
   constructorParser
@@ -662,7 +662,7 @@ atomic =
                  _ -> Nothing)
           pure (LiteralExpression loc (RationalLiteral (realToFrac c)))
 
-constructorParser :: TokenParser (Expression Identifier Location)
+constructorParser :: TokenParser (Expression Type Identifier Location)
 constructorParser = go <?> "constructor (e.g. Just)"
   where
     go = do
@@ -682,7 +682,7 @@ parens p = go <?> "parens e.g. (x)"
          _ <- equalToken CloseParen<?> "closing parenthesis ‘)’"
          pure e
 
-varParser :: TokenParser (Expression Identifier Location)
+varParser :: TokenParser (Expression Type Identifier Location)
 varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
   where
     go = do
@@ -695,7 +695,7 @@ varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
                then ConstantExpression loc (Identifier (T.unpack v))
                else VariableExpression loc (Identifier (T.unpack v)))
 
-ifParser :: TokenParser (Expression Identifier Location)
+ifParser :: TokenParser (Expression Type Identifier Location)
 ifParser = go <?> "if expression (e.g. ‘if p then x else y’)"
   where
     go = do

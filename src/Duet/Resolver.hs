@@ -18,13 +18,12 @@ import Duet.Printer
 import Duet.Renamer
 import Duet.Types
 
-
 resolveBindGroup
   :: (MonadSupply Int m, MonadThrow m ,Show l)
-  => Map Name (Class Type Name (TypeSignature Name l))
+  => Map Name (Class Type Name (TypeSignature Type Name l))
   -> SpecialTypes Name
-  -> BindGroup Name (TypeSignature Name l)
-  -> m (BindGroup Name (TypeSignature Name l))
+  -> BindGroup Type Name (TypeSignature Type Name l)
+  -> m (BindGroup Type Name (TypeSignature Type Name l))
 resolveBindGroup classes specialTypes (BindGroup explicit implicit) = do
   explicits <- mapM (error "TODO: explicit bind groups not supported") explicit
   implicits <- mapM (mapM (resolveImplicit classes specialTypes)) implicit
@@ -32,19 +31,19 @@ resolveBindGroup classes specialTypes (BindGroup explicit implicit) = do
 
 resolveImplicit
   :: (MonadSupply Int m, MonadThrow m ,Show l)
-  => Map Name (Class Type Name (TypeSignature Name l))
+  => Map Name (Class Type Name (TypeSignature Type Name l))
   -> SpecialTypes Name
-  -> ImplicitlyTypedBinding Name (TypeSignature Name l)
-  -> m (ImplicitlyTypedBinding Name (TypeSignature Name l))
+  -> ImplicitlyTypedBinding Type Name (TypeSignature Type Name l)
+  -> m (ImplicitlyTypedBinding Type Name (TypeSignature Type Name l))
 resolveImplicit classes specialTypes (ImplicitlyTypedBinding l name alts) =
   ImplicitlyTypedBinding l name <$> mapM (resolveAlt classes specialTypes) alts
 
 resolveAlt
   :: (MonadSupply Int m, MonadThrow m, Show l)
-  => Map Name (Class Type Name (TypeSignature Name l))
+  => Map Name (Class Type Name (TypeSignature Type Name l))
   -> SpecialTypes Name
-  -> Alternative Name (TypeSignature Name l)
-  -> m (Alternative Name (TypeSignature Name l))
+  -> Alternative Type Name (TypeSignature Type Name l)
+  -> m (Alternative Type Name (TypeSignature Type Name l))
 resolveAlt classes specialTypes (Alternative l ps e) = do
   {-trace
     (unlines
@@ -80,11 +79,12 @@ predicateToString specialTypes (IsIn name ts) =
 
 resolveExp
   :: (MonadThrow m, MonadSupply Int m, Show l)
-  => Map Name (Class Type Name (TypeSignature Name l))
+  => Map Name (Class Type Name (TypeSignature Type Name l))
   -> SpecialTypes Name
   -> [(Predicate Type Name, Name)]
-  -> Expression Name (TypeSignature Name l)
-  -> m (Expression Name (TypeSignature Name l))
+  -> Expression Type Name (TypeSignature Type Name l)
+  -> m (Expression Type Name (TypeSignature Type Name l))
+
 resolveExp classes specialTypes dicts = go
   where
     go =

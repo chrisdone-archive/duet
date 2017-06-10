@@ -1,3 +1,4 @@
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -17,7 +18,7 @@ import Data.Typeable
 -- | A declaration.
 data Decl t i l
   = DataDecl (DataType t i)
-  | BindGroupDecl (BindGroup i l)
+  | BindGroupDecl (BindGroup t i l)
   | ClassDecl (Class t i l)
   | InstanceDecl (Instance t i l)
   deriving (Show)
@@ -115,7 +116,7 @@ data RenamerException
   | IdentifierNotInConScope !(Map Identifier Name) !Identifier
   | IdentifierNotInClassScope !(Map Identifier Name) !Identifier
   | IdentifierNotInTypeScope !(Map Identifier Name) !Identifier
-  | NameNotInConScope ![TypeSignature Name Name] !Name
+  | NameNotInConScope ![TypeSignature Type Name Name] !Name
   | TypeNotInScope ![TypeConstructor Name] !Identifier
   | UnknownTypeVariable ![TypeVariable Name] !Identifier
   | InvalidMethodTypeVariable ![TypeVariable Name] !(TypeVariable Name)
@@ -152,7 +153,7 @@ data InferException
   | TypeMismatch (Type Name) (Type Name)
   | ListsDoNotUnify
   | TypeMismatchOneWay
-  | NotInScope ![TypeSignature Name Name] !Name
+  | NotInScope ![TypeSignature Type Name Name] !Name
   | ClassMismatch
   | MergeFail
   | AmbiguousInstance [Ambiguity Name]
@@ -162,20 +163,20 @@ data InferException
 instance Exception InferException
 
 -- | Specify the type of @a@.
-data TypeSignature i a = TypeSignature
+data TypeSignature (t :: * -> *) i a = TypeSignature
   { typeSignatureA :: a
-  , typeSignatureScheme :: Scheme i
+  , typeSignatureScheme :: Scheme t i
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
-data BindGroup i l = BindGroup
-  { bindGroupExplicitlyTypedBindings :: ![ExplicitlyTypedBinding i l]
-  , bindGroupImplicitlyTypedBindings :: ![[ImplicitlyTypedBinding i l]]
+data BindGroup (t :: * -> *) i l = BindGroup
+  { bindGroupExplicitlyTypedBindings :: ![ExplicitlyTypedBinding Type i l]
+  , bindGroupImplicitlyTypedBindings :: ![[ImplicitlyTypedBinding Type i l]]
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
-data ImplicitlyTypedBinding i l = ImplicitlyTypedBinding
+data ImplicitlyTypedBinding (t :: * -> *) i l = ImplicitlyTypedBinding
   { implicitlyTypedBindingLabel :: l
   , implicitlyTypedBindingId :: !i
-  , implicitlyTypedBindingAlternatives :: ![Alternative i l]
+  , implicitlyTypedBindingAlternatives :: ![Alternative Type i l]
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | The simplest case is for explicitly typed bindings, each of which
@@ -186,10 +187,10 @@ data ImplicitlyTypedBinding i l = ImplicitlyTypedBinding
 -- Haskell requires that each Alt in the definition of a given
 -- identifier has the same number of left-hand side arguments, but we
 -- do not need to enforce that here.
-data ExplicitlyTypedBinding i l = ExplicitlyTypedBinding
+data ExplicitlyTypedBinding t i l = ExplicitlyTypedBinding
   { explicitlyTypedBindingId :: !i
-  , explicitlyTypedBindingScheme :: !(Scheme i)
-  , explicitlyTypedBindingAlternatives :: ![(Alternative i l)]
+  , explicitlyTypedBindingScheme :: !(Scheme t i)
+  , explicitlyTypedBindingAlternatives :: ![(Alternative t i l)]
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | Suppose, for example, that we are about to qualify a type with a
@@ -209,10 +210,10 @@ data Ambiguity i = Ambiguity
 -- definition. With a more complete syntax for Expr, values of type
 -- Alt might also be used in the representation of lambda and case
 -- expressions.
-data Alternative i l = Alternative
+data Alternative t i l = Alternative
   { alternativeLabel :: l
-  , alternativePatterns :: ![Pattern i l]
-  , alternativeExpression :: !(Expression i l)
+  , alternativePatterns :: ![Pattern t i l]
+  , alternativeExpression :: !(Expression t i l)
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | Substitutions-finite functions, mapping type variables to
@@ -268,20 +269,20 @@ data Location = Location
   } deriving (Show, Eq)
 
 -- | A Haskell expression.
-data Expression i l
+data Expression (t :: * -> *) i l
   = VariableExpression l i
   | ConstructorExpression l i
   | ConstantExpression l Identifier
   | LiteralExpression l Literal
-  | ApplicationExpression l (Expression i l) (Expression i l)
-  | InfixExpression l (Expression i l) i (Expression i l)
-  | LetExpression l (BindGroup i l) (Expression i l)
-  | LambdaExpression l (Alternative i l)
-  | IfExpression l (Expression i l) (Expression i l) (Expression i l)
-  | CaseExpression l (Expression i l) [(Pattern i l, (Expression i l))]
+  | ApplicationExpression l (Expression t i l) (Expression t i l)
+  | InfixExpression l (Expression t i l) i (Expression t i l)
+  | LetExpression l (BindGroup t i l) (Expression t i l)
+  | LambdaExpression l (Alternative t i l)
+  | IfExpression l (Expression t i l) (Expression t i l) (Expression t i l)
+  | CaseExpression l (Expression t i l) [(Pattern t i l, (Expression t i l))]
   deriving (Show, Functor, Traversable, Foldable, Eq)
 
-expressionLabel :: Expression i l -> l
+expressionLabel :: Expression t i l -> l
 expressionLabel =
   \case
      LiteralExpression l _ -> l
@@ -296,16 +297,16 @@ expressionLabel =
      ConstructorExpression l _ -> l
 
 -- | A pattern match.
-data Pattern i l
+data Pattern (t :: * -> *) i l
   = VariablePattern l i
   | WildcardPattern l String
-  | AsPattern l i (Pattern i l)
+  | AsPattern l i (Pattern t i l)
   | LiteralPattern l Literal
-  | ConstructorPattern l i [Pattern i l]
+  | ConstructorPattern l i [Pattern t i l]
 --  | LazyPattern Pattern
   deriving (Show , Eq , Functor, Traversable, Foldable)
 
-patternLabel :: Pattern t t1 -> t1
+patternLabel :: Pattern ty t t1 -> t1
 patternLabel (VariablePattern loc _) = loc
 patternLabel (ConstructorPattern loc _ _) = loc
 patternLabel (WildcardPattern l _) = l
@@ -329,16 +330,16 @@ data Class t i l = Class
 -- | Class instance.
 data Instance t i l = Instance
   { instancePredicate :: !(Qualified t i (Predicate t i))
-  , instanceDictionary :: !(Dictionary i l)
+  , instanceDictionary :: !(Dictionary Type i l)
   } deriving (Show)
 
 instanceClassName :: Instance t1 i t -> i
 instanceClassName (Instance (Qualified _ (IsIn x _)) _) = x
 
 -- | A dictionary for a class.
-data Dictionary i l = Dictionary
+data Dictionary (t :: * -> *) i l = Dictionary
   { dictionaryName :: i
-  , dictionaryMethods :: Map i (Alternative i l)
+  , dictionaryMethods :: Map i (Alternative Type i l)
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | A type constructor.
@@ -348,8 +349,8 @@ data TypeConstructor i = TypeConstructor
   } deriving (Eq, Show)
 
 -- | A type scheme.
-data Scheme i =
-  Forall [Kind] (Qualified Type i (Type i))
+data Scheme t i =
+  Forall [Kind] (Qualified t i (t i))
   deriving (Eq, Show)
 
 data Result a
@@ -362,12 +363,12 @@ instance Semigroup a => Semigroup (Result a) where
   _ <> Fail = Fail
   OK x <> OK y = OK (x <> y)
 
-data Match i l
-  = Success [(i, Expression i l)]
+data Match t i l
+  = Success [(i, Expression t i l)]
   | NeedsMoreEval [Int]
   deriving (Eq, Show, Functor)
 
-instance Semigroup (Match i l) where
+instance Semigroup (Match t i l) where
   NeedsMoreEval is <> _ = NeedsMoreEval is
   _ <> NeedsMoreEval is = NeedsMoreEval is
   Success xs <> Success ys = Success (xs <> ys)
