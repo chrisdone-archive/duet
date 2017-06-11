@@ -48,7 +48,7 @@ module Duet.Infer
   , classMethodScheme
   ) where
 
-import           Control.Arrow
+import           Control.Arrow (first,second)
 import           Control.Monad.Catch
 import           Control.Monad.State
 import           Data.List
@@ -473,6 +473,7 @@ typeKind (VariableType typeVariable) = typeVariableKind typeVariable
 typeKind (ApplicationType typ _) =
   case (typeKind typ) of
     (FunctionKind _ kind) -> kind
+    k -> k
 
 --------------------------------------------------------------------------------
 -- GOOD NAMING CONVENInferON, UNSORTED
