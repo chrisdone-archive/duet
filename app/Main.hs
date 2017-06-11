@@ -209,8 +209,8 @@ displayStepperException _ =
 displayInferException :: SpecialTypes Name -> InferException -> [Char]
 displayInferException specialTypes =
   \case
-    SignatureTooGeneral sc1 sc2 ->
-      "The two schemes don't match:\n\n  " ++
+    ExplicitTypeMismatch sc1 sc2 ->
+      "The two types don't match:\n\n  " ++
      printScheme defaultPrint specialTypes sc1 ++ "\n\nand\n\n  " ++
 
      printScheme defaultPrint specialTypes sc2

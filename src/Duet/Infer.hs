@@ -297,7 +297,7 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding identifier sc alts
       ps' = filter (not . entail ce qs') (map (substitutePredicate s) ps)
   (ds, rs) <- split ce fs gs ps'
   if sc /= sc'
-    then throwM (SignatureTooGeneral sc sc')
+    then throwM (ExplicitTypeMismatch sc sc')
     else if not (null rs)
            then throwM ContextTooWeak
            else return (ds, ExplicitlyTypedBinding identifier sc alts')

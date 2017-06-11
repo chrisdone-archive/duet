@@ -146,7 +146,7 @@ instance Exception ResolveException
 
 -- | A type error.
 data InferException
-  = SignatureTooGeneral (Scheme Type Name) (Scheme Type Name)
+  = ExplicitTypeMismatch (Scheme Type Name) (Scheme Type Name)
   | ContextTooWeak
   | OccursCheckFails
   | KindMismatch
