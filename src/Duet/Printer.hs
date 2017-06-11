@@ -248,14 +248,14 @@ printScheme printer specialTypes (Forall kinds qualifiedType') =
      else "forall " ++
           unwords
             (zipWith
-               (\i k ->
+               (\_i k ->
                   printTypeVariable
                     (Print
                      { printTypes = const Nothing
                      , printDictionaries = False
                      , printNameDetails = printNameDetails printer
                      })
-                    (TypeVariable (ForallName i) k))
+                    k)
                [0 :: Int ..]
                kinds) ++
           ". ") ++
@@ -337,7 +337,7 @@ instance PrintableType Type where
     --   "[" ++ printTypeSansParens specialTypes ty ++ "]"
       ApplicationType x' y ->
         printType printer specialTypes x' ++ " " ++ printTypeArg y
-      GenericType int -> "g" ++ show int
+      -- GenericType int -> "g" ++ show int
     where
       printTypeArg =
         \case

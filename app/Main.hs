@@ -210,10 +210,11 @@ displayInferException :: SpecialTypes Name -> InferException -> [Char]
 displayInferException specialTypes =
   \case
     ExplicitTypeMismatch sc1 sc2 ->
-      "The two types don't match:\n\n  " ++
+      "The type of a definition doesn't match its explicit type:\n\n  " ++
      printScheme defaultPrint specialTypes sc1 ++ "\n\nand\n\n  " ++
 
-     printScheme defaultPrint specialTypes sc2
+     printScheme defaultPrint specialTypes sc2 ++ "\n\n" ++
+       show sc1 ++ "\n" ++ show sc2
     NotInScope scope name ->
       "Not in scope " ++
       curlyQuotes (printit defaultPrint name) ++
@@ -468,13 +469,13 @@ builtInSignatures specialTypes = do
       , specialSigsFalse = the_False
       , specialSigsShow = the_show
       }
-    , [ TypeSignature
+    , [ {-TypeSignature
           the_show
           (Forall
              [StarKind]
              (Qualified
                 [IsIn (specialTypesShow specialTypes) [(GenericType 0)]]
-                (GenericType 0 --> ConstructorType (specialTypesString specialTypes))))
+                (GenericType 0 --> ConstructorType (specialTypesString specialTypes))))-}
       ] ++
       sigs)
   where
@@ -511,9 +512,9 @@ dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
       pure
         (TypeSignature
            cname
-           (let varsGens = map (second GenericType) (zip vs [0 ..])
+           (let -- varsGens = map (second GenericType) (zip vs [0 ..])
             in Forall
-                 (map typeVariableKind vs)
+                 vs
                  (Qualified
                     []
                     (foldr
@@ -521,8 +522,8 @@ dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
                        (foldl
                           ApplicationType
                           (dataTypeConstructor dt)
-                          (map snd varsGens))
-                       (map (varsToGens varsGens) fs)))))
+                          (map VariableType vs))
+                       fs))))
       where
         varsToGens :: [(TypeVariable Name, Type Name)] -> Type Name -> Type Name
         varsToGens varsGens = go
@@ -534,7 +535,7 @@ dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
                     Just gen -> gen
                     Nothing -> v
                 ApplicationType t1 t2 -> ApplicationType (go t1) (go t2)
-                g@GenericType {} -> g
+                -- g@GenericType {} -> g
                 c@ConstructorType {} -> c
         makeArrow :: Type Name -> Type Name -> Type Name
         a `makeArrow` b =

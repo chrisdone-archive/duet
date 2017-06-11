@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -46,6 +48,7 @@ module Duet.Infer
   , classMethodScheme
   ) where
 
+import           Control.Arrow
 import           Control.Monad.Catch
 import           Control.Monad.State
 import           Data.List
@@ -175,15 +178,11 @@ instanceMethodScheme
   -> Type Name
   -> Qualified Type Name (Predicate Type Name)
   -> m (Scheme Type Name)
-instanceMethodScheme _specialTypes cls methodVars0 methodType0 (Qualified preds (IsIn _ headTypes)) =
-  let gens = zip methodVars [GenericType i | i <- [0 ..]]
-  in do methodType <- instantiate methodType0
-        g_ty' <- genify gens methodType
-        g_preds <- mapM instantiatePred preds
-        pure
-          (Forall
-             (map typeVariableKind methodVars)
-             (Qualified g_preds g_ty'))
+instanceMethodScheme _specialTypes cls methodVars0 methodType0 (Qualified preds (IsIn _ headTypes)) = do
+  methodType <- instantiate methodType0
+  g_ty' <- pure methodType
+  g_preds <- mapM instantiatePred preds
+  pure (Forall methodVars (Qualified g_preds g_ty'))
   where
     methodVars = filter (not . flip elem (classTypeVariables cls)) methodVars0
     table = zip (classTypeVariables cls) headTypes
@@ -201,27 +200,24 @@ instanceMethodScheme _specialTypes cls methodVars0 methodType0 (Qualified preds 
 classMethodScheme
   :: MonadThrow m
   => Class t Name l -> [TypeVariable Name] -> Type Name -> m (Scheme Type Name)
-classMethodScheme cls methodVars methodType =
-  let gens = zip methodVars [GenericType i | i <- [0 ..]]
-  in do ty' <- genify gens methodType
-        headVars <- mapM (genify gens . VariableType) (classTypeVariables cls)
-        pure
-          (Forall
-             (map typeVariableKind methodVars)
-             (Qualified [IsIn (className cls) headVars] ty'))
+classMethodScheme cls methodVars methodType = do
+  ty' <- pure methodType
+  headVars <- mapM (pure . VariableType) (classTypeVariables cls)
+  when (null methodVars) (error "!")
+  pure (Forall methodVars (Qualified [IsIn (className cls) headVars] ty'))
 
-genify :: MonadThrow m => [(TypeVariable Name, Type Name)] -> Type Name -> m (Type Name)
-genify table =
-  \case
-    VariableType tyvar ->
-      case lookup tyvar table of
-        Nothing -> throwM (InvalidMethodTypeVariable (map fst table) tyvar)
-        Just v -> pure v
-    ApplicationType f x -> do
-      f' <- genify table f
-      x' <- genify table x
-      pure (ApplicationType f' x')
-    x -> pure x
+-- genify :: MonadThrow m => [(TypeVariable Name, Type Name)] -> Type Name -> m (Type Name)
+-- genify table =
+--   \case
+--     VariableType tyvar ->
+--       case lookup tyvar table of
+--         Nothing -> throwM (InvalidMethodTypeVariable (map fst table) tyvar)
+--         Just v -> pure v
+--     ApplicationType f x -> do
+--       f' <- genify table f
+--       x' <- genify table x
+--       pure (ApplicationType f' x')
+--     x -> pure x
 
 --------------------------------------------------------------------------------
 -- Substitution
@@ -296,11 +292,37 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding identifier sc alts
       sc' = quantify gs (Qualified qs' t')
       ps' = filter (not . entail ce qs') (map (substitutePredicate s) ps)
   (ds, rs) <- split ce fs gs ps'
-  if sc /= sc'
+  if not (sc `schemesEquivalent` sc')
     then throwM (ExplicitTypeMismatch sc sc')
     else if not (null rs)
            then throwM ContextTooWeak
            else return (ds, ExplicitlyTypedBinding identifier sc alts')
+
+-- | Are two type schemes alpha-equivalent?
+schemesEquivalent :: Scheme Type Name ->  Scheme Type Name -> Bool
+schemesEquivalent (Forall vs1 q1) (Forall vs2 q2) =
+  length vs1 == length vs2 &&
+  evalState (goQ q1 q2) (mempty,mempty)
+  where
+    goQ (Qualified ps1 t1) (Qualified ps2 t2) =
+      (&&) <$> fmap and (sequence (zipWith goPred ps1 ps2)) <*> goType t1 t2
+    goPred (IsIn x ts1) (IsIn y ts2) =
+      ((x == y) &&) <$> fmap and (sequence (zipWith goType ts1 ts2))
+    goType (VariableType tv1) (VariableType tv2) = do
+      i <- bind fst first tv1
+      j <- bind snd second tv2
+      pure (i == j)
+    goType (ConstructorType c1) (ConstructorType c2) = pure (c1 == c2)
+    goType (ApplicationType f1 a1) (ApplicationType f2 a2) =
+      (&&) <$> goType f1 f2 <*> goType a1 a2
+    goType _ _ = pure False
+    bind the upon tv = do
+      ctx <- gets the
+      case M.lookup tv ctx of
+        Nothing -> do
+          modify (upon (M.insert tv (M.size ctx)))
+          pure (M.size ctx)
+        Just j -> pure j
 
 inferImplicitlyTypedBindingsTypes
   :: (MonadThrow m, Show l)
@@ -399,17 +421,21 @@ inferSequenceTypes ti ce as (bs:bss) = do
 --------------------------------------------------------------------------------
 -- Instantiation
 
-instantiateType :: [Type Name] -> Type Name -> Type Name
+instantiateType :: [(TypeVariable Name, Type Name)] -> Type Name -> Type Name
 instantiateType ts (ApplicationType l r) =
   ApplicationType (instantiateType ts l) (instantiateType ts r)
-instantiateType ts (GenericType n) = ts !! n
+instantiateType ts ty@(VariableType tyvar) =
+  case lookup tyvar ts of
+    Nothing -> ty
+    Just ty' -> ty' -- TODO: possibly throw error here?
+-- instantiateType ts (GenericType n) = ts !! n
 instantiateType _ t = t
 
-instantiateQualified :: [Type Name] -> Qualified Type Name (Type Name) -> Qualified Type Name (Type Name)
+instantiateQualified :: [(TypeVariable Name, Type Name)] -> Qualified Type Name (Type Name) -> Qualified Type Name (Type Name)
 instantiateQualified ts (Qualified ps t) =
   Qualified (map (instantiatePredicate ts) ps) (instantiateType ts t)
 
-instantiatePredicate :: [Type Name] -> Predicate Type Name -> Predicate Type Name
+instantiatePredicate :: [(TypeVariable Name, Type Name)] -> Predicate Type Name -> Predicate Type Name
 instantiatePredicate ts (IsIn c t) = IsIn c (map (instantiateType ts) t)
 
 --------------------------------------------------------------------------------
@@ -750,11 +776,11 @@ scEntail :: Map Name (Class Type Name l) -> [Predicate Type Name] -> Predicate T
 scEntail ce ps p = any (p `elem`) (map (bySuper ce) ps)
 
 quantify :: [TypeVariable Name] -> Qualified Type Name (Type Name) -> Scheme Type Name
-quantify vs qt = Forall ks (substituteQualified s qt)
+quantify vs qt = Forall vs' qt
   where
     vs' = [v | v <- getQualifiedTypeVariables qt, v `elem` vs]
-    ks = map typeVariableKind vs'
-    s = zipWith Substitution vs' (map GenericType [0 ..])
+    {-ks = map typeVariableKind vs'-}
+    {-s = zipWith Substitution vs' (map undefined {-GenericType-} [0 ..])-}
 
 toScheme :: Type Name -> Scheme Type Name
 toScheme t = Forall [] (Qualified [] t)
@@ -953,6 +979,7 @@ candidates ce (Ambiguity v qs) =
         numClasses = [ForallName (-1)]
         stdClasses = [ForallName (-1)]
 
+
 withDefaults
   :: (MonadThrow m, Show l)
   => String
@@ -993,5 +1020,5 @@ freshInst
   :: Monad m
   => Scheme Type Name -> InferT m (Qualified Type Name (Type Name))
 freshInst (Forall ks qt) = do
-  ts <- mapM newVariableType ks
+  ts <- mapM (\vorig -> (vorig, ) <$> newVariableType (typeVariableKind vorig)) ks
   return (instantiateQualified ts qt)

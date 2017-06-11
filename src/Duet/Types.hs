@@ -228,7 +228,7 @@ data Substitution i = Substitution
 data TypeVariable i = TypeVariable
   { typeVariableIdentifier :: !i
   , typeVariableKind :: !Kind
-  } deriving (Eq, Show)
+  } deriving (Ord, Eq, Show)
 
 -- | An identifier used for variables.
 newtype Identifier = Identifier
@@ -253,14 +253,13 @@ data Type i
   = VariableType (TypeVariable i)
   | ConstructorType (TypeConstructor i)
   | ApplicationType (Type i) (Type i)
-  | GenericType Int
   deriving (Eq, Show)
 
 -- | Kind of a type.
 data Kind
   = StarKind
   | FunctionKind Kind Kind
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data Location = Location
   { locationStartLine :: !Int
@@ -353,7 +352,7 @@ data TypeConstructor i = TypeConstructor
 
 -- | A type scheme.
 data Scheme t i =
-  Forall [Kind] (Qualified t i (t i))
+  Forall [TypeVariable i] (Qualified t i (t i))
   deriving (Eq, Show)
 
 data Result a
