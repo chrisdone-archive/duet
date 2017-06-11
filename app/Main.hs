@@ -1,4 +1,3 @@
-
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -194,6 +193,11 @@ displayStepperException _ =
 displayInferException :: SpecialTypes Name -> InferException -> [Char]
 displayInferException specialTypes =
   \case
+    SignatureTooGeneral sc1 sc2 ->
+      "The two schemes don't match:\n\n  " ++
+     printScheme defaultPrint specialTypes sc1 ++ "\n\nand\n\n  " ++
+
+     printScheme defaultPrint specialTypes sc2
     NotInScope scope name ->
       "Not in scope " ++
       curlyQuotes (printit defaultPrint name) ++
@@ -308,7 +312,7 @@ editDistance = on (levenshteinDistance defaultEditCosts) (map toLower)
 
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
-  => [Decl ParsedType Identifier Location]
+  => [Decl UnkindedType Identifier Location]
   -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Type Name (TypeSignature Type Name Location)], [TypeSignature Type Name Name], Map Identifier Name, Map Name (Class Type Name (TypeSignature Type Name Location))), [Int])
 runTypeChecker decls =
   let bindings =
@@ -394,7 +398,7 @@ runTypeChecker decls =
            liftIO (putStrLn "-- Renaming variable/function declarations ...")
            (renamedBindings, subs') <-
              catch
-               (renameBindGroups subs (map castTy bindings))
+               (renameBindGroups subs bindings)
                (\e ->
                   liftIO
                     (do putStrLn (displayRenamerException specialTypes e)
@@ -479,29 +483,8 @@ classSignatures :: MonadThrow m => Class Type Name l -> m [TypeSignature Type Na
 classSignatures cls =
   mapM
     (\(name, (methodVars, ty)) ->
-       let gens = zip methodVars [GenericType i | i <- [0 ..]]
-       in do ty' <- genify gens ty
-             headVars <- mapM (genify gens . VariableType) (classTypeVariables cls)
-             pure
-               (TypeSignature
-                  name
-                  (Forall
-                     (map typeVariableKind methodVars)
-                     (Qualified [IsIn (className cls) headVars] ty'))))
+       TypeSignature <$> pure name <*> classMethodScheme cls methodVars ty)
     (M.toList (classMethods cls))
-
-genify :: MonadThrow m => [(TypeVariable Name, Type Name)] -> Type Name -> m (Type Name)
-genify table =
-  \case
-    VariableType tyvar ->
-      case lookup tyvar table of
-        Nothing -> throwM (InvalidMethodTypeVariable (map fst table) tyvar)
-        Just v -> pure v
-    ApplicationType f x -> do
-      f' <- genify table f
-      x' <- genify table x
-      pure (ApplicationType f' x')
-    x -> pure x
 
 dataTypeSignatures
   :: Monad m

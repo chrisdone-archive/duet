@@ -38,7 +38,7 @@ import           Duet.Types
 renameDataTypes
   :: (MonadSupply Int m, MonadThrow m)
   => SpecialTypes Name
-  -> [DataType ParsedType Identifier]
+  -> [DataType UnkindedType Identifier]
   -> m [DataType Type Name]
 renameDataTypes specialTypes types = do
   typeConstructors <-
@@ -61,9 +61,9 @@ renameDataTypes specialTypes types = do
 
 renameConstructor
   :: (MonadSupply Int m, MonadThrow m)
-  => SpecialTypes Name -> [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor ParsedType Identifier])]
+  => SpecialTypes Name -> [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor UnkindedType Identifier])]
   -> [(Identifier, TypeVariable Name)]
-  -> DataTypeConstructor ParsedType Identifier
+  -> DataTypeConstructor UnkindedType Identifier
   -> m (DataTypeConstructor Type Name)
 renameConstructor specialTypes typeConstructors vars (DataTypeConstructor name fields) = do
   name' <- supplyConstructorName name
@@ -73,10 +73,10 @@ renameConstructor specialTypes typeConstructors vars (DataTypeConstructor name f
 renameField
   :: MonadThrow m
   => SpecialTypes Name
-  -> [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor ParsedType Identifier])]
+  -> [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor UnkindedType Identifier])]
   -> [(Identifier, TypeVariable Name)]
   -> Name
-  -> ParsedType Identifier
+  -> UnkindedType Identifier
   -> m (Type Name)
 renameField specialTypes typeConstructors vars name fe = do
   ty <- go fe
@@ -86,14 +86,14 @@ renameField specialTypes typeConstructors vars name fe = do
   where
     go =
       \case
-        ParsedTypeConstructor i -> do
+        UnkindedTypeConstructor i -> do
           (name', vars') <- resolve i
           pure (ConstructorType (toTypeConstructor name' (map snd vars')))
-        ParsedTypeVariable v ->
+        UnkindedTypeVariable v ->
           case lookup v vars of
             Nothing -> throwM (UnknownTypeVariable (map snd vars) v)
             Just tyvar -> pure (VariableType tyvar)
-        ParsedTypeApp f x -> do
+        UnkindedTypeApp f x -> do
           f' <- go f
           let fKind = typeKind f'
           case fKind of
@@ -130,7 +130,7 @@ renameClass
   => SpecialTypes Name
   -> Map Identifier Name
   -> [DataType Type Name]
-  -> Class ParsedType Identifier l
+  -> Class UnkindedType Identifier l
   -> m (Class Type Name l)
 renameClass specialTypes subs types cls = do
   name <- supplyClassName (className cls)
@@ -184,7 +184,7 @@ renameInstance
   -> Map Identifier Name
   -> [DataType Type Name]
   -> [Class Type Name l]
-  -> Instance ParsedType Identifier l
+  -> Instance UnkindedType Identifier l
   -> m (Instance Type Name l)
 renameInstance specialTypes subs types classes inst@(Instance (Qualified _ (IsIn className' _)) _) = do
   {-trace ("renameInstance: Classes: " ++ show (map className classes)) (return ())-}
@@ -210,7 +210,7 @@ renameInstance'
   -> Map Identifier Name
   -> [DataType Type Name]
   -> [(Identifier, TypeVariable Name)]
-  -> Instance ParsedType Identifier l
+  -> Instance UnkindedType Identifier l
   -> m (Instance Type Name l)
 renameInstance' specialTypes subs types tyVars (Instance (Qualified preds ty) dict) = do
   preds' <- mapM (renamePredicate specialTypes subs tyVars types) preds
@@ -222,7 +222,7 @@ renameDict
   :: (MonadThrow m, MonadSupply Int m)
   => SpecialTypes Name
   -> Map Identifier Name
-  -> Dictionary Type Identifier l
+  -> Dictionary UnkindedType Identifier l
   -> Predicate Type Name
   -> m (Dictionary Type Name l)
 renameDict specialTypes subs (Dictionary _ methods) predicate = do
@@ -254,7 +254,7 @@ renamePredicate
   -> Map Identifier Name
   -> [(Identifier, TypeVariable Name)]
   -> [DataType Type Name]
-  -> Predicate ParsedType Identifier
+  -> Predicate UnkindedType Identifier
   -> m (Predicate Type Name)
 renamePredicate specialTypes subs tyVars types (IsIn className types0) =
   do className' <- substituteClass subs className
@@ -269,17 +269,21 @@ forceStarKind ty =
     StarKind -> pure ty
     _ -> throwM (MustBeStarKind ty (typeKind ty))
 
+renameScheme :: Scheme t1 t -> a
+renameScheme (Forall ks (Qualified ps ty)) =
+  undefined
+
 -- | Rename a type, checking kinds, taking names, etc.
 renameType
   :: MonadThrow m
   => SpecialTypes Name
   -> [(Identifier, TypeVariable Name)]
   -> [DataType Type Name]
-  -> ParsedType Identifier
+  -> UnkindedType Identifier
   -> m (Type Name)
 renameType specialTypes tyVars types =
   \case
-    ParsedTypeConstructor i -> do
+    UnkindedTypeConstructor i -> do
       ms <- mapM (\p -> fmap (, p) (identifyType (dataTypeName p))) types
       case lookup i ms of
         Nothing -> do
@@ -290,12 +294,12 @@ renameType specialTypes tyVars types =
                    (TypeNotInScope (map dataTypeToConstructor (map snd ms)) i)
                Just t -> pure (ConstructorType t)
         Just dty -> pure (dataTypeConstructor dty)
-    ParsedTypeVariable i -> do
+    UnkindedTypeVariable i -> do
       case lookup i tyVars of
         Nothing -> throwM (UnknownTypeVariable (map snd tyVars) i)
         Just ty -> do
           pure (VariableType ty)
-    ParsedTypeApp f a -> do
+    UnkindedTypeApp f a -> do
       f' <- renameType specialTypes tyVars types f
       case typeKind f' of
         FunctionKind argKind _ -> do
@@ -322,33 +326,36 @@ renameType specialTypes tyVars types =
 renameBindGroups
   :: (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i)
   => Map Identifier Name
-  -> [BindGroup Type i l]
+  -> [BindGroup UnkindedType i l]
   -> m ([BindGroup Type Name l], Map Identifier Name)
 renameBindGroups subs groups = do
   subs' <-
     fmap
       mconcat
-      (mapM (\(BindGroup ex implicit) -> getImplicitSubs subs implicit) groups) -- TODO: explicit
+      (mapM
+         (\(BindGroup explicit implicit) -> do
+            implicit' <- getImplicitSubs subs implicit
+            explicit' <- getExplicitSubs subs explicit
+            pure (explicit' <> implicit'))
+         groups
+       )
   fmap (second mconcat . unzip) (mapM (renameBindGroup subs') groups)
-
-castTy :: BindGroup t i l -> BindGroup Type i l
-castTy (BindGroup x y) = BindGroup x y
 
 renameBindGroup
   :: (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i)
   => Map Identifier Name
-  -> BindGroup Type i l
+  -> BindGroup t i l
   -> m (BindGroup Type Name l, Map Identifier Name)
 renameBindGroup subs (BindGroup explicit implicit) = do
   bindGroup' <-
-    BindGroup <$> renameExplicit subs explicit <*>
+    BindGroup <$> mapM (renameExplicit subs) explicit <*>
     mapM (mapM (renameImplicit subs)) implicit
   pure (bindGroup', subs)
 
 getImplicitSubs
   :: (MonadSupply Int m, Ord i, Identifiable i, MonadThrow m)
   => Map Identifier Name
-  -> [[ImplicitlyTypedBinding Type i l]]
+  -> [[ImplicitlyTypedBinding t i l]]
   -> m (Map Identifier Name)
 getImplicitSubs subs implicit =
   fmap
@@ -359,21 +366,39 @@ getImplicitSubs subs implicit =
           fmap (v, ) (supplyValueName i))
        (concat implicit))
 
-renameExplicit :: Applicative f => t2 -> t1 -> f [t]
-renameExplicit _ _ = pure [] -- TODO:
+getExplicitSubs
+  :: (MonadSupply Int m, Ord i, Identifiable i, MonadThrow m)
+  => Map Identifier Name
+  -> [ExplicitlyTypedBinding t i l]
+  -> m (Map Identifier Name)
+getExplicitSubs subs explicit =
+  fmap
+    ((<> subs) . M.fromList)
+    (mapM
+       (\(ExplicitlyTypedBinding i _ _) -> do
+          v <- identifyValue i
+
+          fmap (v, ) (supplyValueName i))
+       explicit)
+
+renameExplicit :: (MonadSupply Int m, MonadThrow m, Identifiable i, Ord i) => Map Identifier Name -> ExplicitlyTypedBinding t i l -> m (ExplicitlyTypedBinding Type Name l)
+renameExplicit subs (ExplicitlyTypedBinding i scheme alts) = do
+  name <- substituteVar subs i
+  ExplicitlyTypedBinding name <$> renameScheme scheme <*>
+    mapM (renameAlt subs) alts
 
 renameImplicit
   :: (MonadThrow m,MonadSupply Int m,Ord i, Identifiable i)
   => Map Identifier Name
-  -> ImplicitlyTypedBinding Type i t
-  -> m (ImplicitlyTypedBinding Type Name t)
+  -> ImplicitlyTypedBinding t i l
+  -> m (ImplicitlyTypedBinding Type Name l)
 renameImplicit subs (ImplicitlyTypedBinding l id' alts) =
   do name <- substituteVar subs id'
      ImplicitlyTypedBinding l name <$> mapM (renameAlt subs) alts
 
 renameAlt
   :: (MonadSupply Int m, MonadThrow m, Ord i , Ord i, Identifiable i)
-  => Map Identifier Name -> Alternative Type i l -> m (Alternative Type Name l)
+  => Map Identifier Name -> Alternative t i l -> m (Alternative Type Name l)
 renameAlt subs (Alternative l ps e) =
   do (ps', subs') <- runWriterT (mapM (renamePattern subs) ps)
      let subs'' = M.fromList subs' <> subs
@@ -382,7 +407,7 @@ renameAlt subs (Alternative l ps e) =
 renamePattern
   :: (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i)
   => Map Identifier Name
-  -> Pattern Type i l
+  -> Pattern t i l
   -> WriterT [(Identifier, Name)] m (Pattern Type Name l)
 renamePattern subs =
   \case
@@ -403,11 +428,11 @@ renamePattern subs =
       mapM (renamePattern subs) pats
 
 renameExpression
-  :: forall i m l. (MonadThrow m, MonadSupply Int m , Ord i, Identifiable i)
-  => Map Identifier Name -> Expression Type i l -> m (Expression Type Name l)
+  :: forall t i m l. (MonadThrow m, MonadSupply Int m , Ord i, Identifiable i)
+  => Map Identifier Name -> Expression t i l -> m (Expression Type Name l)
 renameExpression subs = go
   where
-    go :: Expression Type i l -> m (Expression Type Name l)
+    go :: Expression t i l -> m (Expression Type Name l)
     go =
       \case
         VariableExpression l i -> VariableExpression l <$> substituteVar subs i
@@ -418,8 +443,9 @@ renameExpression subs = go
         InfixExpression l x i y ->
           InfixExpression l <$> go x <*> substituteVar subs i <*> go y
         LetExpression l bindGroup@(BindGroup ex implicit) e -> do
-          subs' <- getImplicitSubs subs implicit
-          (bindGroup', subs'') <- renameBindGroup subs' bindGroup
+          subs0 <- getImplicitSubs subs implicit
+          subs1 <- getExplicitSubs subs ex
+          (bindGroup', subs'') <- renameBindGroup (subs0 <> subs1) bindGroup
           LetExpression l <$> pure bindGroup' <*> renameExpression subs'' e
         LambdaExpression l alt -> LambdaExpression l <$> renameAlt subs alt
         IfExpression l x y z -> IfExpression l <$> go x <*> go y <*> go z
@@ -431,7 +457,6 @@ renameExpression subs = go
                e' <- renameExpression (M.fromList subs' <> subs) ex
                pure (pat', e'))
             pat_exps
-
 
 --------------------------------------------------------------------------------
 -- Provide a substitution

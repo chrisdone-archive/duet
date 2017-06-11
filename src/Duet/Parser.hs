@@ -20,11 +20,11 @@ import           Duet.Tokenizer
 import           Duet.Types
 import           Text.Parsec hiding (satisfy, anyToken)
 
-parseFile :: FilePath -> IO (Either ParseError [Decl ParsedType Identifier Location])
+parseFile :: FilePath -> IO (Either ParseError [Decl UnkindedType Identifier Location])
 parseFile fp = do t <- T.readFile fp
                   return (parseText fp t)
 
-parseText :: SourceName -> Text -> Either ParseError [Decl ParsedType Identifier Location]
+parseText :: SourceName -> Text -> Either ParseError [Decl UnkindedType Identifier Location]
 parseText fp inp =
   case parse tokensTokenizer fp (inp) of
     Left e -> Left e
@@ -33,10 +33,10 @@ parseText fp inp =
         Left e -> Left e
         Right ast -> Right ast
 
-tokensParser :: TokenParser [Decl ParsedType Identifier Location]
+tokensParser :: TokenParser [Decl UnkindedType Identifier Location]
 tokensParser = moduleParser <* endOfTokens
 
-moduleParser :: TokenParser [Decl ParsedType Identifier Location]
+moduleParser :: TokenParser [Decl UnkindedType Identifier Location]
 moduleParser =
   many
     ((fmap (\x -> BindGroupDecl (BindGroup [] [[x]])) varfundecl) <|>
@@ -44,7 +44,7 @@ moduleParser =
     fmap ClassDecl classdecl <|>
     fmap InstanceDecl instancedecl)
 
-classdecl :: TokenParser (Class ParsedType Identifier Location)
+classdecl :: TokenParser (Class UnkindedType Identifier Location)
 classdecl =
   go <?> "class declaration (e.g. class Show a where show a :: a -> String)"
   where
@@ -137,7 +137,7 @@ kindableTypeVariable = (unkinded <|> kinded) <?> "type variable (e.g. ‘a’, �
 
 parseScheme
   :: Stream s m (Token, Location)
-  => ParsecT s Int m ([TypeVariable Identifier], ParsedType Identifier)
+  => ParsecT s Int m ([TypeVariable Identifier], UnkindedType Identifier)
 parseScheme = do
   explicit <-
     fmap (const True) (lookAhead (equalToken ForallToken)) <|> pure False
@@ -153,14 +153,14 @@ parseScheme = do
       ty <- parsedType
       pure (vars, ty)
 
-collectTypeVariables :: ParsedType i -> [TypeVariable i]
+collectTypeVariables :: UnkindedType i -> [TypeVariable i]
 collectTypeVariables =
   \case
-     ParsedTypeConstructor {} -> []
-     ParsedTypeVariable i -> [TypeVariable i StarKind]
-     ParsedTypeApp f x -> collectTypeVariables f ++ collectTypeVariables x
+     UnkindedTypeConstructor {} -> []
+     UnkindedTypeVariable i -> [TypeVariable i StarKind]
+     UnkindedTypeApp f x -> collectTypeVariables f ++ collectTypeVariables x
 
-instancedecl :: TokenParser (Instance ParsedType Identifier Location)
+instancedecl :: TokenParser (Instance UnkindedType Identifier Location)
 instancedecl =
   go <?> "instance declaration (e.g. instance Show Int where show = ...)"
   where
@@ -225,65 +225,65 @@ instancedecl =
               setState u
               pure (Identifier (T.unpack v), makeAlt (expressionLabel e) e)
 
-parseType :: TokenParser (Type Identifier)
-parseType = infix' <|> app <|> unambiguous
-  where
-    infix' = do
-      left <- (app <|> unambiguous) <?> "left-hand side of function arrow"
-      tok <- fmap Just (operator <?> ("function arrow " ++ curlyQuotes "->")) <|> pure Nothing
-      case tok of
-        Just (RightArrow, _) -> do
-          right <-
-            parseType <?>
-            ("right-hand side of function arrow " ++ curlyQuotes "->")
-          pure
-            (ApplicationType
-               (ApplicationType
-                  (ConstructorType
-                     (TypeConstructor
-                        (Identifier "(->)")
-                        (FunctionKind StarKind StarKind)))
-                  left)
-               right)
-        _ -> pure left
-      where
-        operator =
-          satisfyToken
-            (\case
-               RightArrow {} -> True
-               _ -> False)
-    app = do
-      f <- unambiguous
-      args <- many unambiguous
-      pure (foldl' ApplicationType f args)
-    unambiguous = atomicType <|> parensTy parseType
-    atomicType = consParse <|> varParse
-    consParse = do
-      (v, _) <-
-        consumeToken
-          (\case
-             Constructor i -> Just i
-             _ -> Nothing) <?>
-        "type constructor (e.g. Int, Maybe)"
-      pure
-        (ConstructorType (TypeConstructor (Identifier (T.unpack v)) StarKind))
-    varParse = do
-      (v, _) <-
-        consumeToken
-          (\case
-             Variable i -> Just i
-             _ -> Nothing) <?>
-        "type variable (e.g. a, f)"
-      pure (VariableType (TypeVariable (Identifier (T.unpack v)) StarKind))
-    parensTy p = go <?> "parentheses e.g. (T a)"
-      where
-        go = do
-          _ <- equalToken OpenParen
-          e <- p <?> "type inside parentheses e.g. (Maybe a)"
-          _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
-          pure e
+-- parseType :: TokenParser (Type Identifier)
+-- parseType = infix' <|> app <|> unambiguous
+--   where
+--     infix' = do
+--       left <- (app <|> unambiguous) <?> "left-hand side of function arrow"
+--       tok <- fmap Just (operator <?> ("function arrow " ++ curlyQuotes "->")) <|> pure Nothing
+--       case tok of
+--         Just (RightArrow, _) -> do
+--           right <-
+--             parseType <?>
+--             ("right-hand side of function arrow " ++ curlyQuotes "->")
+--           pure
+--             (ApplicationType
+--                (ApplicationType
+--                   (ConstructorType
+--                      (TypeConstructor
+--                         (Identifier "(->)")
+--                         (FunctionKind StarKind StarKind)))
+--                   left)
+--                right)
+--         _ -> pure left
+--       where
+--         operator =
+--           satisfyToken
+--             (\case
+--                RightArrow {} -> True
+--                _ -> False)
+--     app = do
+--       f <- unambiguous
+--       args <- many unambiguous
+--       pure (foldl' ApplicationType f args)
+--     unambiguous = atomicType <|> parensTy parseType
+--     atomicType = consParse <|> varParse
+--     consParse = do
+--       (v, _) <-
+--         consumeToken
+--           (\case
+--              Constructor i -> Just i
+--              _ -> Nothing) <?>
+--         "type constructor (e.g. Int, Maybe)"
+--       pure
+--         (ConstructorType (TypeConstructor (Identifier (T.unpack v)) StarKind))
+--     varParse = do
+--       (v, _) <-
+--         consumeToken
+--           (\case
+--              Variable i -> Just i
+--              _ -> Nothing) <?>
+--         "type variable (e.g. a, f)"
+--       pure (VariableType (TypeVariable (Identifier (T.unpack v)) StarKind))
+--     parensTy p = go <?> "parentheses e.g. (T a)"
+--       where
+--         go = do
+--           _ <- equalToken OpenParen
+--           e <- p <?> "type inside parentheses e.g. (Maybe a)"
+--           _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
+--           pure e
 
-datadecl :: TokenParser (DataType ParsedType Identifier)
+datadecl :: TokenParser (DataType UnkindedType Identifier)
 datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
   where
     go = do
@@ -329,7 +329,7 @@ kindParser = infix'
              _ -> Nothing)
       pure c
 
-consp :: TokenParser (DataTypeConstructor ParsedType Identifier)
+consp :: TokenParser (DataTypeConstructor UnkindedType Identifier)
 consp = do c <- consParser
            slots <- many slot
            pure (DataTypeConstructor c slots)
@@ -344,7 +344,7 @@ consp = do c <- consParser
               pure
                 (Identifier (T.unpack c))
 
-slot :: TokenParser (ParsedType Identifier)
+slot :: TokenParser (UnkindedType Identifier)
 slot = consParser <|> variableParser <|> appP
   where
     appP = parentheses go <?> "type application e.g. (Maybe Int)"
@@ -352,7 +352,7 @@ slot = consParser <|> variableParser <|> appP
         go = do
           f <- slot
           xs <- many1 slot
-          pure (foldl ParsedTypeApp f xs)
+          pure (foldl UnkindedTypeApp f xs)
         parentheses p = do
           _ <- equalToken OpenParen
           e <- p <?> "type inside parentheses e.g. (Maybe a)"
@@ -366,7 +366,7 @@ slot = consParser <|> variableParser <|> appP
               (\case
                  Variable i -> Just i
                  _ -> Nothing)
-          pure (ParsedTypeVariable (Identifier (T.unpack v)))
+          pure (UnkindedTypeVariable (Identifier (T.unpack v)))
     consParser = go <?> "type constructor (e.g. Maybe)"
       where
         go = do
@@ -375,9 +375,9 @@ slot = consParser <|> variableParser <|> appP
               (\case
                  Constructor c -> Just c
                  _ -> Nothing)
-          pure (ParsedTypeConstructor (Identifier (T.unpack c)))
+          pure (UnkindedTypeConstructor (Identifier (T.unpack c)))
 
-parsedType :: TokenParser (ParsedType Identifier)
+parsedType :: TokenParser (UnkindedType Identifier)
 parsedType = infix' <|> app <|> unambiguous
   where
     infix' = do
@@ -391,8 +391,8 @@ parsedType = infix' <|> app <|> unambiguous
             parsedType <?>
             ("right-hand side of function arrow " ++ curlyQuotes "->")
           pure
-            (ParsedTypeApp
-               (ParsedTypeApp (ParsedTypeConstructor (Identifier "(->)")) left)
+            (UnkindedTypeApp
+               (UnkindedTypeApp (UnkindedTypeConstructor (Identifier "(->)")) left)
                right)
         _ -> pure left
       where
@@ -404,7 +404,7 @@ parsedType = infix' <|> app <|> unambiguous
     app = do
       f <- unambiguous
       args <- many unambiguous
-      pure (foldl' ParsedTypeApp f args)
+      pure (foldl' UnkindedTypeApp f args)
     unambiguous = atomicType <|> parensTy parsedType
     atomicType = consParse <|> varParse
     consParse = do
@@ -415,7 +415,7 @@ parsedType = infix' <|> app <|> unambiguous
              _ -> Nothing) <?>
         "type constructor (e.g. Int, Maybe)"
       pure
-        (ParsedTypeConstructor
+        (UnkindedTypeConstructor
            (Identifier (T.unpack v)))
     varParse = do
       (v, _) <-
@@ -424,7 +424,7 @@ parsedType = infix' <|> app <|> unambiguous
              Variable i -> Just i
              _ -> Nothing) <?>
         "type variable (e.g. a, f)"
-      pure (ParsedTypeVariable (Identifier (T.unpack v)))
+      pure (UnkindedTypeVariable (Identifier (T.unpack v)))
     parensTy p = go <?> "parentheses e.g. (T a)"
       where
         go = do
@@ -433,7 +433,7 @@ parsedType = infix' <|> app <|> unambiguous
           _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
           pure e
 
-varfundecl :: TokenParser (ImplicitlyTypedBinding Type Identifier Location)
+varfundecl :: TokenParser (ImplicitlyTypedBinding UnkindedType Identifier Location)
 varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
   where
     go = do
@@ -448,13 +448,13 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
       _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
       pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [makeAlt loc e])
 
-makeAlt :: l -> Expression Type i l -> Alternative Type i l
+makeAlt :: l -> Expression t i l -> Alternative t i l
 makeAlt loc e =
   case e of
     LambdaExpression _ alt -> alt
     _ -> Alternative loc [] e
 
-case' :: TokenParser (Expression Type Identifier Location)
+case' :: TokenParser (Expression UnkindedType Identifier Location)
 case' = do
   u <- getState
   loc <- equalToken Case
@@ -467,9 +467,9 @@ case' = do
   pure (CaseExpression loc e alts)
 
 altParser
-  :: Expression Type Identifier Location
+  :: Expression UnkindedType Identifier Location
   -> Int
-  -> TokenParser (Pattern Type Identifier Location, Expression Type Identifier Location)
+  -> TokenParser (Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)
 altParser e' startCol =
   (do u <- getState
       p <- altPat
@@ -493,7 +493,7 @@ altParser e' startCol =
   " of\n\
   \  Just bar -> bar"
 
-altPat :: TokenParser (Pattern Type Identifier Location)
+altPat :: TokenParser (Pattern UnkindedType Identifier Location)
 altPat = varp <|> consParser
   where
     patInner = parenpat <|> varp <|> unaryConstructor
@@ -535,7 +535,7 @@ altPat = varp <|> consParser
           args <- many patInner
           pure (ConstructorPattern loc (Identifier (T.unpack c)) args)
 
-expParser :: TokenParser (Expression Type Identifier Location)
+expParser :: TokenParser (Expression UnkindedType Identifier Location)
 expParser = case' <|> lambda <|> ifParser <|> infix' <|> app <|> atomic
   where
     app = do
@@ -600,7 +600,7 @@ expParser = case' <|> lambda <|> ifParser <|> infix' <|> app <|> atomic
     unambiguous = parensExpr <|> atomic
     parensExpr = parens expParser
 
-lambda :: TokenParser (Expression Type Identifier Location)
+lambda :: TokenParser (Expression UnkindedType Identifier Location)
 lambda = do
   loc <- equalToken Backslash <?> "lambda expression (e.g. \\x -> x)"
   args <- many1 funcParam <?> "lambda parameters"
@@ -608,7 +608,7 @@ lambda = do
   e <- expParser
   pure (LambdaExpression loc (Alternative loc args e))
 
-funcParam :: TokenParser (Pattern Type Identifier Location)
+funcParam :: TokenParser (Pattern UnkindedType Identifier Location)
 funcParam = go <?> "function parameter (e.g. ‘x’, ‘limit’, etc.)"
   where
     go = do
@@ -619,7 +619,7 @@ funcParam = go <?> "function parameter (e.g. ‘x’, ‘limit’, etc.)"
              _ -> Nothing)
       pure (VariablePattern loc (Identifier (T.unpack v)))
 
-atomic :: TokenParser (Expression Type Identifier Location)
+atomic :: TokenParser (Expression UnkindedType Identifier Location)
 atomic =
   varParser <|> charParser <|> stringParser <|> integerParser <|> decimalParser <|>
   constructorParser
@@ -662,7 +662,7 @@ atomic =
                  _ -> Nothing)
           pure (LiteralExpression loc (RationalLiteral (realToFrac c)))
 
-constructorParser :: TokenParser (Expression Type Identifier Location)
+constructorParser :: TokenParser (Expression UnkindedType Identifier Location)
 constructorParser = go <?> "constructor (e.g. Just)"
   where
     go = do
@@ -682,7 +682,7 @@ parens p = go <?> "parens e.g. (x)"
          _ <- equalToken CloseParen<?> "closing parenthesis ‘)’"
          pure e
 
-varParser :: TokenParser (Expression Type Identifier Location)
+varParser :: TokenParser (Expression UnkindedType Identifier Location)
 varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
   where
     go = do
@@ -695,7 +695,7 @@ varParser = go <?> "variable (e.g. ‘foo’, ‘id’, etc.)"
                then ConstantExpression loc (Identifier (T.unpack v))
                else VariableExpression loc (Identifier (T.unpack v)))
 
-ifParser :: TokenParser (Expression Type Identifier Location)
+ifParser :: TokenParser (Expression UnkindedType Identifier Location)
 ifParser = go <?> "if expression (e.g. ‘if p then x else y’)"
   where
     go = do

@@ -49,10 +49,10 @@ data DataTypeConstructor t i = DataTypeConstructor
   } deriving (Show)
 
 -- | Type for a data typed parsed from user input.
-data ParsedType i
-  = ParsedTypeConstructor i
-  | ParsedTypeVariable i
-  | ParsedTypeApp (ParsedType i) (ParsedType i)
+data UnkindedType i
+  = UnkindedTypeConstructor i
+  | UnkindedTypeVariable i
+  | UnkindedTypeApp (UnkindedType i) (UnkindedType i)
   deriving (Show)
 
 -- | Special built-in types you need for type-checking patterns and
@@ -146,7 +146,7 @@ instance Exception ResolveException
 
 -- | A type error.
 data InferException
-  = SignatureTooGeneral
+  = SignatureTooGeneral (Scheme Type Name) (Scheme Type Name)
   | ContextTooWeak
   | OccursCheckFails
   | KindMismatch
@@ -158,6 +158,7 @@ data InferException
   | MergeFail
   | AmbiguousInstance [Ambiguity Name]
   | MissingMethod
+  | MissingTypeVar (TypeVariable Name) [(TypeVariable Name, Type Name)]
 
   deriving (Show, Typeable)
 instance Exception InferException
@@ -169,14 +170,14 @@ data TypeSignature (t :: * -> *) i a = TypeSignature
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 data BindGroup (t :: * -> *) i l = BindGroup
-  { bindGroupExplicitlyTypedBindings :: ![ExplicitlyTypedBinding Type i l]
-  , bindGroupImplicitlyTypedBindings :: ![[ImplicitlyTypedBinding Type i l]]
+  { bindGroupExplicitlyTypedBindings :: ![ExplicitlyTypedBinding t i l]
+  , bindGroupImplicitlyTypedBindings :: ![[ImplicitlyTypedBinding t i l]]
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 data ImplicitlyTypedBinding (t :: * -> *) i l = ImplicitlyTypedBinding
   { implicitlyTypedBindingLabel :: l
   , implicitlyTypedBindingId :: !i
-  , implicitlyTypedBindingAlternatives :: ![Alternative Type i l]
+  , implicitlyTypedBindingAlternatives :: ![Alternative t i l]
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | The simplest case is for explicitly typed bindings, each of which
@@ -310,6 +311,8 @@ patternLabel :: Pattern ty t t1 -> t1
 patternLabel (VariablePattern loc _) = loc
 patternLabel (ConstructorPattern loc _ _) = loc
 patternLabel (WildcardPattern l _) = l
+patternLabel (AsPattern l  _ _) = l
+patternLabel (LiteralPattern l _) =l
 
 data Literal
   = IntegerLiteral Integer
@@ -319,7 +322,7 @@ data Literal
   deriving (Show, Eq)
 
 -- | A class.
-data Class t i l = Class
+data Class (t :: * -> *) i l = Class
   { classTypeVariables :: ![TypeVariable i]
   , classSuperclasses :: ![Predicate t i]
   , classInstances :: ![Instance t i l]
@@ -328,9 +331,9 @@ data Class t i l = Class
   } deriving (Show)
 
 -- | Class instance.
-data Instance t i l = Instance
+data Instance (t :: * -> *) i l = Instance
   { instancePredicate :: !(Qualified t i (Predicate t i))
-  , instanceDictionary :: !(Dictionary Type i l)
+  , instanceDictionary :: !(Dictionary t i l)
   } deriving (Show)
 
 instanceClassName :: Instance t1 i t -> i
@@ -339,7 +342,7 @@ instanceClassName (Instance (Qualified _ (IsIn x _)) _) = x
 -- | A dictionary for a class.
 data Dictionary (t :: * -> *) i l = Dictionary
   { dictionaryName :: i
-  , dictionaryMethods :: Map i (Alternative Type i l)
+  , dictionaryMethods :: Map i (Alternative t i l)
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 -- | A type constructor.

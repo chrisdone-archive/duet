@@ -25,7 +25,7 @@ resolveBindGroup
   -> BindGroup Type Name (TypeSignature Type Name l)
   -> m (BindGroup Type Name (TypeSignature Type Name l))
 resolveBindGroup classes specialTypes (BindGroup explicit implicit) = do
-  explicits <- mapM (error "TODO: explicit bind groups not supported") explicit
+  explicits <- mapM (resolveExplicit classes specialTypes) explicit
   implicits <- mapM (mapM (resolveImplicit classes specialTypes)) implicit
   pure (BindGroup explicits implicits)
 
@@ -37,6 +37,15 @@ resolveImplicit
   -> m (ImplicitlyTypedBinding Type Name (TypeSignature Type Name l))
 resolveImplicit classes specialTypes (ImplicitlyTypedBinding l name alts) =
   ImplicitlyTypedBinding l name <$> mapM (resolveAlt classes specialTypes) alts
+
+resolveExplicit
+  :: (MonadSupply Int m, MonadThrow m ,Show l)
+  => Map Name (Class Type Name (TypeSignature Type Name l))
+  -> SpecialTypes Name
+  -> ExplicitlyTypedBinding Type Name (TypeSignature Type Name l)
+  -> m (ExplicitlyTypedBinding Type Name (TypeSignature Type Name l))
+resolveExplicit classes specialTypes (ExplicitlyTypedBinding l name alts) =
+  ExplicitlyTypedBinding l name <$> mapM (resolveAlt classes specialTypes) alts
 
 resolveAlt
   :: (MonadSupply Int m, MonadThrow m, Show l)

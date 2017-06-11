@@ -43,6 +43,7 @@ module Duet.Infer
   , BindGroup(..)
   , Alternative(..)
   , typeKind
+  , classMethodScheme
   ) where
 
 import           Control.Monad.Catch
@@ -80,12 +81,13 @@ typeCheckModule
 typeCheckModule ce as specialTypes bgs =
   evalStateT
     (runInferT $ do
+       instanceBgs <- classMethodsToGroups specialTypes ce
        (ps, _, bgs') <-
          inferSequenceTypes
            inferBindGroupTypes
            ce
            as
-           (bgs ++ classMethodsToGroups ce)
+           (bgs ++ instanceBgs)
        s <- InferT (gets inferStateSubstitutions)
        let rs = reduce ce (map (substitutePredicate s) ps)
        s' <- defaultSubst ce [] rs
@@ -114,19 +116,17 @@ collectMethods binds =
                   (\(key, _oldAlt) ->
                      case listToMaybe
                             (mapMaybe
-                               (\(BindGroup _ is) ->
+                               (\(BindGroup ex _) ->
                                   listToMaybe
                                     (mapMaybe
-                                       (listToMaybe .
-                                        mapMaybe
-                                          (\i ->
-                                             if implicitlyTypedBindingId i ==
-                                                key
-                                               then listToMaybe
-                                                      (implicitlyTypedBindingAlternatives
-                                                         i)
-                                               else Nothing))
-                                       is))
+                                       (\i ->
+                                          if explicitlyTypedBindingId i ==
+                                             key
+                                            then listToMaybe
+                                                   (explicitlyTypedBindingAlternatives
+                                                      i)
+                                            else Nothing)
+                                       ex))
                                binds) of
                        Just alt -> pure (key, alt)
                        Nothing -> throwM MissingMethod)
@@ -141,16 +141,87 @@ collectMethods binds =
        pure (name, cls {classInstances = insts})) .
   M.toList
 
-classMethodsToGroups :: Map Name (Class Type Name l) -> [BindGroup Type Name l]
-classMethodsToGroups =
-  map
-    (BindGroup [] .
-     map
-       (map
-          (\(name, alt) ->
-             ImplicitlyTypedBinding (alternativeLabel alt) name [alt])) .
-     map (M.toList . dictionaryMethods . instanceDictionary)) .
-  map classInstances . M.elems
+classMethodsToGroups
+  :: MonadThrow m
+  => SpecialTypes Name -> Map Name (Class Type Name l) -> m [BindGroup Type Name l]
+classMethodsToGroups specialTypes =
+  mapM
+    (\class' ->
+       BindGroup <$>
+       fmap
+         concat
+         (mapM
+            (\inst ->
+               sequence
+                 (zipWith
+                    (\(methodTyVars, methodType) (instMethodName, methodAlt) ->
+                       ExplicitlyTypedBinding <$> pure instMethodName <*>
+                       instanceMethodScheme specialTypes
+                         class'
+                         methodTyVars
+                         methodType
+                         (instancePredicate inst) <*>
+                       pure [methodAlt])
+                    (M.elems (classMethods class'))
+                    (M.toList (dictionaryMethods (instanceDictionary inst)))))
+            (classInstances class')) <*>
+       pure []) .
+  M.elems
+
+instanceMethodScheme
+  :: MonadThrow m
+  => SpecialTypes Name -> Class Type Name l
+  -> [TypeVariable Name]
+  -> Type Name
+  -> Qualified Type Name (Predicate Type Name)
+  -> m (Scheme Type Name)
+instanceMethodScheme _specialTypes cls methodVars0 methodType0 (Qualified preds (IsIn _ headTypes)) =
+  let gens = zip methodVars [GenericType i | i <- [0 ..]]
+  in do methodType <- instantiate methodType0
+        g_ty' <- genify gens methodType
+        g_preds <- mapM instantiatePred preds
+        pure
+          (Forall
+             (map typeVariableKind methodVars)
+             (Qualified g_preds g_ty'))
+  where
+    methodVars = filter (not . flip elem (classTypeVariables cls)) methodVars0
+    table = zip (classTypeVariables cls) headTypes
+    instantiatePred (IsIn c t) = IsIn c <$> mapM instantiate t
+    instantiate =
+      \case
+        ty@(VariableType tyVar) ->
+          case lookup tyVar table of
+            Nothing -> pure ty
+            Just typ -> pure typ
+        ApplicationType a b ->
+          ApplicationType <$> instantiate a <*> instantiate b
+        typ -> pure typ
+
+classMethodScheme
+  :: MonadThrow m
+  => Class t Name l -> [TypeVariable Name] -> Type Name -> m (Scheme Type Name)
+classMethodScheme cls methodVars methodType =
+  let gens = zip methodVars [GenericType i | i <- [0 ..]]
+  in do ty' <- genify gens methodType
+        headVars <- mapM (genify gens . VariableType) (classTypeVariables cls)
+        pure
+          (Forall
+             (map typeVariableKind methodVars)
+             (Qualified [IsIn (className cls) headVars] ty'))
+
+genify :: MonadThrow m => [(TypeVariable Name, Type Name)] -> Type Name -> m (Type Name)
+genify table =
+  \case
+    VariableType tyvar ->
+      case lookup tyvar table of
+        Nothing -> throwM (InvalidMethodTypeVariable (map fst table) tyvar)
+        Just v -> pure v
+    ApplicationType f x -> do
+      f' <- genify table f
+      x' <- genify table x
+      pure (ApplicationType f' x')
+    x -> pure x
 
 --------------------------------------------------------------------------------
 -- Substitution
@@ -226,7 +297,7 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding identifier sc alts
       ps' = filter (not . entail ce qs') (map (substitutePredicate s) ps)
   (ds, rs) <- split ce fs gs ps'
   if sc /= sc'
-    then throwM SignatureTooGeneral
+    then throwM (SignatureTooGeneral sc sc')
     else if not (null rs)
            then throwM ContextTooWeak
            else return (ds, ExplicitlyTypedBinding identifier sc alts')

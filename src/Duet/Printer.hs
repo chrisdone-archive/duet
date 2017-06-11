@@ -98,8 +98,9 @@ printImplicitlyTypedBinding
   => Print i l -> ImplicitlyTypedBinding t i l -> String
 printImplicitlyTypedBinding printer (ImplicitlyTypedBinding _ i [alt]) =
   printIdentifier printer i ++ " " ++ printAlternative printer alt
+printImplicitlyTypedBinding _ _ = ""
 
-printAlternative :: (Eq i, Printable i) => Print i l -> Alternative Type i l -> [Char]
+printAlternative :: (Eq i, Printable i, PrintableType t) => Print i l -> Alternative t i l -> [Char]
 printAlternative printer (Alternative _ patterns expression) =
   concat (map (\p->printPattern printer p ++ " ") patterns) ++ "= " ++ printExpression printer expression
 
@@ -176,6 +177,8 @@ printPat printer=
          then ""
          else " " ++ unwords (map inner ps))
     WildcardPattern{} -> "_"
+    AsPattern _ ident p -> printit printer ident ++ "@" ++ printPat printer p
+    LiteralPattern _ l -> printLiteral l
   where
     inner =
       \case
@@ -185,6 +188,8 @@ printPat printer=
           | null ps -> printit printer i
           | otherwise ->
             "(" ++ printit printer i ++ " " ++ unwords (map inner ps) ++ ")"
+        AsPattern _ ident p -> printit printer ident ++ "@" ++ printPat printer p
+        LiteralPattern _ l -> printLiteral l
 
 printExpressionAppArg :: (Printable i, PrintableType t) => Print i l ->(Expression t i l) -> String
 printExpressionAppArg printer =
@@ -330,12 +335,12 @@ instance PrintableType Type where
           x@ApplicationType {} -> "(" ++ printType printer specialTypes x ++ ")"
           x -> printType printer specialTypes x
 
-instance PrintableType ParsedType where
+instance PrintableType UnkindedType where
   printType printer specialTypes =
     \case
-      ParsedTypeVariable v -> printIdentifier printer v
-      ParsedTypeConstructor tyCon -> printIdentifier printer tyCon
-      ParsedTypeApp x' y ->
+      UnkindedTypeVariable v -> printIdentifier printer v
+      UnkindedTypeConstructor tyCon -> printIdentifier printer tyCon
+      UnkindedTypeApp x' y ->
         "(" ++ printType printer specialTypes x' ++ " " ++ printType printer specialTypes y ++ ")"
 
 printTypeConstructor :: Printable j => Print i l -> TypeConstructor j -> String
