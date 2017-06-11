@@ -100,6 +100,14 @@ printImplicitlyTypedBinding printer (ImplicitlyTypedBinding _ i [alt]) =
   printIdentifier printer i ++ " " ++ printAlternative printer alt
 printImplicitlyTypedBinding _ _ = ""
 
+printExplicitlyTypedBinding
+  :: (Printable i, PrintableType t)
+  => Print i l -> SpecialTypes i -> ExplicitlyTypedBinding t i l -> String
+printExplicitlyTypedBinding printer specialTypes (ExplicitlyTypedBinding i scheme [alt]) =
+  printIdentifier printer i ++ " :: " ++ printScheme printer specialTypes scheme ++ "\n" ++
+  printIdentifier printer i ++ " " ++ printAlternative printer alt
+printExplicitlyTypedBinding _ _ _ = ""
+
 printAlternative :: (Eq i, Printable i, PrintableType t) => Print i l -> Alternative t i l -> [Char]
 printAlternative printer (Alternative _ patterns expression) =
   concat (map (\p->printPattern printer p ++ " ") patterns) ++ "= " ++ printExpression printer expression
@@ -233,7 +241,7 @@ printLiteral (RationalLiteral i) = printf "%f" (fromRational i :: Double)
 printLiteral (StringLiteral x) = show x
 printLiteral (CharacterLiteral x) = show x
 
-printScheme :: (Printable i, Eq i) => Print i l -> SpecialTypes i -> Scheme Type i -> [Char]
+printScheme :: (Printable i, Eq i, PrintableType t) => Print i l -> SpecialTypes i -> Scheme t i -> [Char]
 printScheme printer specialTypes (Forall kinds qualifiedType') =
   (if null kinds
      then ""
@@ -255,13 +263,13 @@ printScheme printer specialTypes (Forall kinds qualifiedType') =
   where
     printQualifiedType specialTypes (Qualified predicates typ) =
       case predicates of
-        [] -> printTypeSansParens printer specialTypes typ
+        [] -> printType printer specialTypes typ
         _ ->
           "(" ++
           intercalate
             ", "
             (map (printPredicate printer specialTypes) predicates) ++
-          ") => " ++ printTypeSansParens printer specialTypes typ
+          ") => " ++ printType printer specialTypes typ
 printClass :: Printable i => Print i l -> SpecialTypes i -> Class Type i l -> String
 printClass printer specialTypes (Class vars supers instances i methods) =
   "class " ++
@@ -294,7 +302,8 @@ printSupers printer specialTypes supers
   | otherwise =
     "(" ++ intercalate ", " (map (printPredicate printer specialTypes) supers) ++ ") => "
 
-printPredicate :: (Eq i, Printable i) => Print i l -> SpecialTypes i -> Predicate Type i -> [Char]
+
+printPredicate :: (Eq i, Printable i, PrintableType t) => Print i l -> SpecialTypes i -> Predicate t i -> [Char]
 printPredicate printer specialTypes (IsIn identifier types) =
   printIdentifier printer identifier ++
   " " ++ unwords (map (printType printer specialTypes) types)

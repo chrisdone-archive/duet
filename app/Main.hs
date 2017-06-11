@@ -62,14 +62,24 @@ compileStepText file i text =
         runTypeChecker decls
       putStrLn "-- Type-checked bindings:"
       mapM_
-        (\(BindGroup _ is) ->
+        (\(BindGroup es is) -> do
+           mapM_
+             (putStrLn . printExplicitlyTypedBinding defaultPrint specialTypes)
+             es
            mapM_
              (mapM_ (putStrLn . printImplicitlyTypedBinding (defaultPrint)))
              is)
         bindGroups
       putStrLn "-- With type-annotations:"
       mapM_
-        (\(BindGroup _ is) ->
+        (\(BindGroup es is) -> do
+           (mapM_
+              (putStrLn .
+               printExplicitlyTypedBinding
+                 defaultPrint
+                 {printTypes = \x -> Just (specialTypes, fmap (const ()) x)}
+                 specialTypes)
+              es)
            mapM_
              (mapM_
                 (putStrLn .
@@ -122,7 +132,13 @@ compileStepText file i text =
                    exitFailure))
       putStrLn "-- Source with instance dictionaries inserted:"
       mapM_
-        (\(BindGroup _ is) ->
+        (\(BindGroup es is) -> do
+           mapM_
+             (putStrLn .
+              printExplicitlyTypedBinding
+                defaultPrint {printDictionaries = True}
+                specialTypes)
+             es
            mapM_
              (mapM_
                 (putStrLn .
