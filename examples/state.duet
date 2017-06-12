@@ -1,0 +1,17 @@
+class Monad (m :: Type -> Type) where
+  bind :: m a -> (a -> m b) -> m b
+class Applicative (f :: Type -> Type) where
+  pure :: a -> f a
+class Functor (f :: Type -> Type) where
+  map :: (a -> b) -> f a -> f b
+data Result s a = Result s a
+data State s a = State (s -> Result s a)
+instance Functor (State Bool) where
+  map =
+    \f state ->
+      case state of
+        State s2r ->
+          State
+            (\s ->
+               case s2r s of
+                 Result s1 a -> Result s1 (f a))
