@@ -147,8 +147,7 @@ printExpression printer e =
        ApplicationExpression _ f x ->
          case x of
            VariableExpression _ (nonrenamableName -> Just (DictName {}))
-             | not (printDictionaries printer) ->
-               printExpressionAppOp printer f
+             | not (printDictionaries printer) -> printExpressionAppOp printer f
              where isLam (LambdaExpression {}) = True
                    isLam _ = False
            _ ->
@@ -162,7 +161,18 @@ printExpression printer e =
            then "\\" ++ prefix ++ "->\n" ++ indented inner
            else "\\" ++ prefix ++ "-> " ++ indent (length prefix + 4) inner
          where inner = (printExpression printer e)
-               prefix = concat (map (\x -> printPattern printer x ++ " ") args)
+               prefix =
+                 concat
+                   (map
+                      (\x -> printPattern printer x ++ " ")
+                      (filter dictPred args))
+               dictPred =
+                 if printDictionaries printer
+                   then const True
+                   else \case
+                          VariablePattern _ (nonrenamableName -> Just (DictName {})) ->
+                            False
+                          _ -> True
        IfExpression _ a b c ->
          "if " ++
          printExpressionIfPred printer a ++
