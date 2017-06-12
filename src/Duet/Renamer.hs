@@ -225,11 +225,31 @@ renameInstance'
   -> [(Identifier, TypeVariable Name)]
   -> Instance UnkindedType Identifier l
   -> m (Instance Type Name l)
-renameInstance' specialTypes subs types tyVars (Instance (Qualified preds ty) dict) = do
-  preds' <- mapM (renamePredicate specialTypes subs tyVars types) preds
-  ty' <- renamePredicate specialTypes subs tyVars types ty
+renameInstance' specialTypes subs types _tyVars (Instance (Qualified preds ty) dict) = do
+  let vars0 =
+        nub
+          (concat
+             (map
+                collectTypeVariables
+                (case ty of
+                   IsIn _ t -> t)))
+  vars <-
+    mapM
+      (\(TypeVariable i k) -> do
+         n <- supplyTypeName i
+         pure (i, TypeVariable n k))
+      vars0
+  preds' <- mapM (renamePredicate specialTypes subs vars types) preds
+  ty' <- renamePredicate specialTypes subs vars types ty
   dict' <- renameDict specialTypes subs dict ty'
   pure (Instance (Qualified preds' ty') dict')
+  where
+    collectTypeVariables :: UnkindedType i -> [TypeVariable i]
+    collectTypeVariables =
+      \case
+        UnkindedTypeConstructor {} -> []
+        UnkindedTypeVariable i -> [TypeVariable i StarKind]
+        UnkindedTypeApp f x -> collectTypeVariables f ++ collectTypeVariables x
 
 renameDict
   :: (MonadThrow m, MonadSupply Int m)
