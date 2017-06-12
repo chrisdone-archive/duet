@@ -345,19 +345,8 @@ consp = do c <- consParser
                 (Identifier (T.unpack c))
 
 slot :: TokenParser (UnkindedType Identifier)
-slot = consParser <|> variableParser <|> appP
+slot = consParser <|> variableParser <|> parens parsedType
   where
-    appP = parentheses go <?> "type application e.g. (Maybe Int)"
-      where
-        go = do
-          f <- slot
-          xs <- many1 slot
-          pure (foldl UnkindedTypeApp f xs)
-        parentheses p = do
-          _ <- equalToken OpenParen
-          e <- p <?> "type inside parentheses e.g. (Maybe a)"
-          _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
-          pure e
     variableParser = go <?> "type variable (e.g. ‘a’, ‘s’, etc.)"
       where
         go = do

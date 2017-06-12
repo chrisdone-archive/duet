@@ -71,7 +71,7 @@ renameConstructor specialTypes typeConstructors vars (DataTypeConstructor name f
   pure (DataTypeConstructor name' fields')
 
 renameField
-  :: MonadThrow m
+  :: (MonadThrow m, MonadSupply Int m)
   => SpecialTypes Name
   -> [(Identifier, Name, [(Identifier, TypeVariable Name)], [DataTypeConstructor UnkindedType Identifier])]
   -> [(Identifier, TypeVariable Name)]
@@ -120,6 +120,19 @@ renameField specialTypes typeConstructors vars name fe = do
                          (TypeVariable n@(TypeName _ i) k) ->
                            (Identifier i, TypeVariable n k))
                       vars)
+            _ ->
+              case specialTypesFunction specialTypes of
+                TypeConstructor n@(TypeName _ i') _
+                  | Identifier i' == i -> do
+                    vars <-
+                      mapM
+                        (\i ->
+                           (i, ) <$>
+                           fmap
+                             (\n -> TypeVariable n StarKind)
+                             (supplyTypeVariableName i))
+                        (map Identifier ["a", "b"])
+                    pure (n, vars)
 
 --------------------------------------------------------------------------------
 -- Class renaming
@@ -525,6 +538,11 @@ supplyTypeName :: (MonadSupply Int m) => Identifier -> m Name
 supplyTypeName (Identifier s) = do
   i <- supply
   return (TypeName i s)
+
+supplyTypeVariableName :: (MonadSupply Int m) => Identifier -> m Name
+supplyTypeVariableName (Identifier s) = do
+  i <- supply
+  return (TypeName i (s ++ show i))
 
 supplyClassName :: (MonadSupply Int m) => Identifier -> m Name
 supplyClassName (Identifier s) = do
