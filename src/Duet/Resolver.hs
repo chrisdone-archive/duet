@@ -73,9 +73,11 @@ resolveAlt classes specialTypes (Alternative l ps e) = do
      dicts
      (if null dicts
         then e
-        else (LambdaExpression
-                l
-                (Alternative l [VariablePattern l d | (_, d) <- dicts] e))))
+        else let dictArgs = [VariablePattern l d | (_, d) <- dicts]
+             in case e of
+                  LambdaExpression _ (Alternative l0 args e0) ->
+                    LambdaExpression l (Alternative l0 (dictArgs ++ args) e0)
+                  _ -> LambdaExpression l (Alternative l dictArgs e)))
   where
     Forall _ (Qualified predicates _) = typeSignatureScheme l
 
