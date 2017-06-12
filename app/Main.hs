@@ -155,9 +155,6 @@ compileStepText file i text =
                 evalSupplyT
                   (fix
                      (\loopy e -> do
-                        when
-                          (True || cleanExpression e)
-                          (liftIO (putStrLn (printExpression (defaultPrint) e)))
                         e' <-
                           expandSeq1
                             typeClassEnv'
@@ -166,6 +163,11 @@ compileStepText file i text =
                             e
                             bindGroups'
                             subs
+                        when
+                          ((True || cleanExpression e) &&
+                           (printExpression (defaultPrint) e' /=
+                            printExpression (defaultPrint) e))
+                          (liftIO (putStrLn (printExpression (defaultPrint) e)))
                         if fmap (const ()) e' /= fmap (const ()) e
                           then do
                             renameExpression subs e' >>= loopy
