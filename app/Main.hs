@@ -164,7 +164,7 @@ compileStepText file i text =
                             specialSigs
                             signatures
                             e
-                            bindGroups
+                            bindGroups'
                             subs
                         if fmap (const ()) e' /= fmap (const ()) e
                           then do

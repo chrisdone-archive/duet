@@ -54,13 +54,6 @@ resolveAlt
   -> Alternative Type Name (TypeSignature Type Name l)
   -> m (Alternative Type Name (TypeSignature Type Name l))
 resolveAlt classes specialTypes (Alternative l ps e) = do
-  {-trace
-    (unlines
-       [ "Predicates: " ++ show predicates
-       , "By instances: " ++ show (map (\p -> (byInst classes p)) predicates)
-       , "Classes: " ++ show classes
-       ])
-    (return ())-}
   dicts <-
     mapM
       (\pred' ->

@@ -445,7 +445,7 @@ renamePattern
 renamePattern subs =
   \case
     VariablePattern l i -> do
-      name <- lift (supplyValueName i)
+      name <- maybe (lift (supplyValueName i)) pure (nonrenamableName i)
       v <- identifyValue i
       tell [(v, name)]
       pure (VariablePattern l name)
