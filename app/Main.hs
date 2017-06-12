@@ -164,9 +164,7 @@ compileStepText file i text =
                             bindGroups'
                             subs
                         when
-                          ((True || cleanExpression e) &&
-                           (printExpression (defaultPrint) e' /=
-                            printExpression (defaultPrint) e))
+                          (True || cleanExpression e)
                           (liftIO (putStrLn (printExpression (defaultPrint) e)))
                         if fmap (const ()) e' /= fmap (const ()) e
                           then do
