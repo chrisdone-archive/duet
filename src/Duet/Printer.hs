@@ -132,27 +132,37 @@ printExpression printer e =
        ConstructorExpression _ i -> printIdentifier printer i
        CaseExpression _ e alts ->
          "case " ++
-         printExpressionIfPred printer e ++
+         indent 5 (printExpressionIfPred printer e) ++
          " of\n" ++
-         intercalate
-           "\n"
-           (map
-              ("  " ++)
+         indented
+           (intercalate
+              "\n"
               (map
                  (\(p, e') ->
-                    printPat printer p ++ " -> " ++ printExpression printer e')
+                    let inner = printExpression printer e'
+                    in if any (== '\n') inner
+                         then printPat printer p ++ " ->\n" ++ indented inner
+                         else printPat printer p ++ " -> " ++ indent 2 inner)
                  alts))
        ApplicationExpression _ f x ->
          case x of
            VariableExpression _ (nonrenamableName -> Just (DictName {}))
-             | not (printDictionaries printer) -> printExpression printer f
+             | not (printDictionaries printer) ->
+               printExpressionAppOp printer f
+             where isLam (LambdaExpression {}) = True
+                   isLam _ = False
            _ ->
-             printExpressionAppOp printer f ++
-             " " ++ printExpressionAppArg printer x
+             if any (== '\n') inner || any (== '\n') prefix
+               then prefix ++ "\n" ++ indented inner
+               else prefix ++ " " ++ indent (length prefix + 1) inner
+             where prefix = printExpressionAppOp printer f
+                   inner = printExpressionAppArg printer x
        LambdaExpression _ (Alternative _ args e) ->
-         "\\" ++
-         concat (map (\x -> printPattern printer x ++ " ") args) ++
-         "-> " ++ printExpression printer e
+         if any (== '\n') inner
+           then "\\" ++ prefix ++ "->\n" ++ indented inner
+           else "\\" ++ prefix ++ "-> " ++ indent (length prefix + 4) inner
+         where inner = (printExpression printer e)
+               prefix = concat (map (\x -> printPattern printer x ++ " ") args)
        IfExpression _ a b c ->
          "if " ++
          printExpressionIfPred printer a ++
@@ -174,6 +184,14 @@ printExpression printer e =
                   if any isSpace k
                     then "(" ++ k ++ ")"
                     else k
+
+indented x = intercalate "\n" (map ("  "++) (lines x))
+
+indent :: Int -> String -> [Char]
+indent n = intercalate ("\n" ++ replicate n ' ') . lines
+
+lined :: [[Char]] -> [Char]
+lined = intercalate "\n  "
 
 printPat :: (Printable i, PrintableType t) => Print i l ->  Pattern t i l -> String
 printPat printer=
@@ -233,7 +251,7 @@ printExpressionAppOp printer=
     e -> printExpression printer e
 
 paren :: [Char] -> [Char]
-paren e = "("  ++ e ++ ")"
+paren e = "("  ++ indent 1 e ++ ")"
 
 printLiteral :: Literal -> String
 printLiteral (IntegerLiteral i) = show i
