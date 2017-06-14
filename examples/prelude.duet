@@ -1,0 +1,42 @@
+data Bool = True | False
+
+data Ordering = EQ | LT | GT
+
+class Eq a where
+  equal :: a -> a -> Bool
+  notEqual :: a -> a -> Bool
+
+class Ord a where
+  compare :: a -> a -> Ordering
+
+class Monad (m :: Type -> Type) where
+  bind :: m a -> (a -> m b) -> m b
+
+class Applicative (f :: Type -> Type) where
+  pure :: a -> f a
+  ap :: f (a -> b) -> f a -> f b
+
+class Functor (f :: Type -> Type) where
+  map :: (a -> b) -> f a -> f b
+
+class Num a where
+  plus :: a -> a -> a
+  times :: a -> a -> a
+
+class Neg a where
+  negate :: a -> a
+  abs :: a -> a
+
+class MinBound b where
+  minBound :: b
+
+class MaxBound b where
+  maxBound :: b
+
+class Integral a where
+  div :: a -> a -> a
+  mod :: a -> a -> a
+
+class Fractional a where
+  divide :: a -> a -> a
+  recip :: a -> a
