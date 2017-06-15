@@ -157,12 +157,11 @@ classMethodsToGroups specialTypes =
             (\inst ->
                sequence
                  (zipWith
-                    (\(methodTyVars, methodType) (instMethodName, methodAlt) ->
+                    (\methodScheme (instMethodName, methodAlt) ->
                        ExplicitlyTypedBinding <$> pure instMethodName <*>
                        instanceMethodScheme specialTypes
                          class'
-                         methodTyVars
-                         methodType
+                         methodScheme
                          (instancePredicate inst) <*>
                        pure [methodAlt])
                     (M.elems (classMethods class'))
@@ -173,19 +172,19 @@ classMethodsToGroups specialTypes =
 
 instanceMethodScheme
   :: MonadThrow m
-  => SpecialTypes Name -> Class Type Name l
-  -> [TypeVariable Name]
-  -> Type Name
+  => SpecialTypes Name
+  -> Class Type Name l
+  -> Scheme Type Name
   -> Qualified Type Name (Predicate Type Name)
   -> m (Scheme Type Name)
-instanceMethodScheme _specialTypes cls methodVars0 methodType0 (Qualified preds (IsIn _ headTypes)) = do
-  methodType <- instantiate methodType0
-  g_ty' <- pure methodType
-  g_preds <- mapM instantiatePred preds
-  pure (Forall methodVars (Qualified g_preds g_ty'))
+instanceMethodScheme _specialTypes cls (Forall methodVars0 (Qualified methodPreds methodType0)) (Qualified preds (IsIn _ headTypes)) = do
+  methodQual <- instantiateQual (Qualified (methodPreds ++ preds) methodType0)
+  pure (Forall methodVars methodQual)
   where
     methodVars = filter (not . flip elem (classTypeVariables cls)) methodVars0
     table = zip (classTypeVariables cls) headTypes
+    instantiateQual (Qualified ps t) =
+      Qualified <$> mapM instantiatePred ps <*> instantiate t
     instantiatePred (IsIn c t) = IsIn c <$> mapM instantiate t
     instantiate =
       \case
@@ -199,25 +198,14 @@ instanceMethodScheme _specialTypes cls methodVars0 methodType0 (Qualified preds 
 
 classMethodScheme
   :: MonadThrow m
-  => Class t Name l -> [TypeVariable Name] -> Type Name -> m (Scheme Type Name)
-classMethodScheme cls methodVars methodType = do
+  => Class t Name l -> Scheme Type Name -> m (Scheme Type Name)
+classMethodScheme cls (Forall methodVars (Qualified methodPreds methodType)) = do
   ty' <- pure methodType
   headVars <- mapM (pure . VariableType) (classTypeVariables cls)
-  when (null methodVars) (error "!")
-  pure (Forall methodVars (Qualified [IsIn (className cls) headVars] ty'))
-
--- genify :: MonadThrow m => [(TypeVariable Name, Type Name)] -> Type Name -> m (Type Name)
--- genify table =
---   \case
---     VariableType tyvar ->
---       case lookup tyvar table of
---         Nothing -> throwM (InvalidMethodTypeVariable (map fst table) tyvar)
---         Just v -> pure v
---     ApplicationType f x -> do
---       f' <- genify table f
---       x' <- genify table x
---       pure (ApplicationType f' x')
---     x -> pure x
+  pure
+    (Forall
+       methodVars
+       (Qualified (methodPreds ++ [IsIn (className cls) headVars]) ty'))
 
 --------------------------------------------------------------------------------
 -- Substitution
@@ -682,7 +670,7 @@ addClass
   => Name
   -> [TypeVariable Name]
   -> [Predicate Type Name]
-  -> Map Name (([TypeVariable Name], Type Name))
+  -> Map Name (Scheme Type Name)
   -> Map Name (Class Type Name l)
   -> m (Map Name (Class Type Name l))
 addClass i vs ps methods ce

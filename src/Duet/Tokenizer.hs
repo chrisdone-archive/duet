@@ -21,6 +21,7 @@ import           Text.Printf
 
 data Token
   = If
+  | Imply
   | Then
   | Data
   | ForallToken
@@ -86,6 +87,7 @@ tokenTokenizer prespaces =
     , atom Backslash "\\"
     , atom OpenParen "("
     , atom CloseParen ")"
+    , atom Imply "=>"
     , atom Equals "="
     , atom Bar "|"
     , atom Colons "::"
@@ -357,6 +359,7 @@ tokenStr tok =
   case tok of
     If -> curlyQuotes "if"
     Then -> curlyQuotes "then"
+    Imply -> curlyQuotes "=>"
     RightArrow -> curlyQuotes "->"
     Else -> curlyQuotes "else"
     Where -> curlyQuotes "where"

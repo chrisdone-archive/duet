@@ -326,7 +326,7 @@ data Class (t :: * -> *) i l = Class
   , classSuperclasses :: ![Predicate t i]
   , classInstances :: ![Instance t i l]
   , className :: i
-  , classMethods :: Map i ([TypeVariable i], t i)
+  , classMethods :: Map i (Scheme t i)
   } deriving (Show)
 
 -- | Class instance.

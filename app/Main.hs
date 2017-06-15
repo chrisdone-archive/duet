@@ -499,8 +499,8 @@ builtInSignatures specialTypes = do
 classSignatures :: MonadThrow m => Class Type Name l -> m [TypeSignature Type Name Name]
 classSignatures cls =
   mapM
-    (\(name, (methodVars, ty)) ->
-       TypeSignature <$> pure name <*> classMethodScheme cls methodVars ty)
+    (\(name, scheme) ->
+       TypeSignature <$> pure name <*> classMethodScheme cls scheme)
     (M.toList (classMethods cls))
 
 dataTypeSignatures

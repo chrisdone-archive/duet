@@ -1,3 +1,4 @@
+
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
@@ -161,12 +162,20 @@ renameClass specialTypes subs types cls = do
     fmap
       M.fromList
       (mapM
-         (\(name, (vars, ty)) -> do
+         (\(name, (Forall vars (Qualified preds ty))) -> do
             name' <- supplyMethodName name
             methodVars <- mapM (renameMethodTyVar classVars) vars
             let classAndMethodVars = nub (classVars ++ methodVars)
             ty' <- renameType specialTypes classAndMethodVars types ty
-            pure (name', (map snd classAndMethodVars, ty')))
+            preds' <-
+              mapM
+                (\(IsIn c tys) ->
+                   IsIn <$> substituteClass subs c <*>
+                   mapM (renameType specialTypes classAndMethodVars types) tys)
+                preds
+            pure
+              ( name'
+              , (Forall (map snd classAndMethodVars) (Qualified preds' ty'))))
          (M.toList (classMethods cls)))
   pure
     (Class

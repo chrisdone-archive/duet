@@ -148,8 +148,6 @@ printExpression printer e =
          case x of
            VariableExpression _ (nonrenamableName -> Just (DictName {}))
              | not (printDictionaries printer) -> printExpressionAppOp printer f
-             where isLam (LambdaExpression {}) = True
-                   isLam _ = False
            _ ->
              if any (== '\n') inner || any (== '\n') prefix
                then prefix ++ "\n" ++ indented inner
@@ -195,6 +193,7 @@ printExpression printer e =
                     then "(" ++ k ++ ")"
                     else k
 
+indented :: String -> [Char]
 indented x = intercalate "\n" (map ("  "++) (lines x))
 
 indent :: Int -> String -> [Char]
@@ -298,6 +297,7 @@ printScheme printer specialTypes (Forall kinds qualifiedType') =
             ", "
             (map (printPredicate printer specialTypes) predicates) ++
           ") => " ++ printType printer specialTypes typ
+
 printClass :: Printable i => Print i l -> SpecialTypes i -> Class Type i l -> String
 printClass printer specialTypes (Class vars supers instances i methods) =
   "class " ++
@@ -308,14 +308,9 @@ printClass printer specialTypes (Class vars supers instances i methods) =
   intercalate "\n  " (map (printMethod printer specialTypes) (M.toList methods)) ++
   "\n" ++ intercalate "\n" (map (printInstance printer specialTypes) instances)
 
-printMethod :: Printable i =>  Print i l -> SpecialTypes i -> (i, ([TypeVariable i], Type i)) -> String
-printMethod printer specialTypes (i, (vars, ty)) =
-  printit printer i ++ " :: " ++ vars' ++ printType printer specialTypes ty
-  where
-    vars' =
-      if null vars
-        then ""
-        else "forall " ++ unwords (map (printTypeVariable printer) vars) ++ ". "
+printMethod :: Printable i =>  Print i l -> SpecialTypes i -> (i, Scheme Type i) -> String
+printMethod printer specialTypes (i, scheme) =
+  printit printer i ++ " :: " ++ printScheme printer specialTypes scheme
 
 printInstance :: Printable i => Print i l -> SpecialTypes i -> Instance Type i l -> String
 printInstance printer specialTypes (Instance (Qualified predicates typ) _) =
