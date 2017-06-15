@@ -48,10 +48,8 @@ tokensParser = moduleParser <* endOfTokens
 moduleParser :: TokenParser [Decl UnkindedType Identifier Location]
 moduleParser =
   many
-    ((fmap (\x -> BindGroupDecl (BindGroup [] [[x]])) varfundecl) <|>
-    fmap DataDecl datadecl <|>
-    fmap ClassDecl classdecl <|>
-    fmap InstanceDecl instancedecl)
+    (varfundeclExplicit <|> fmap DataDecl datadecl <|> fmap ClassDecl classdecl <|>
+     fmap InstanceDecl instancedecl)
 
 classdecl :: TokenParser (Class UnkindedType Identifier Location)
 classdecl =
@@ -469,6 +467,59 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
       e <- expParser
       _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
       pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [makeAlt loc e])
+
+varfundeclExplicit :: TokenParser (Decl UnkindedType Identifier Location)
+varfundeclExplicit =
+  go <?> "explicitly typed variable declaration (e.g. x :: Int and x = 1)"
+  where
+    go = do
+      (v0, loc) <-
+        consumeToken
+          (\case
+             Variable i -> Just i
+             _ -> Nothing) <?>
+        "variable name"
+      (tok, _) <- anyToken <?> curlyQuotes "::" ++ " or " ++ curlyQuotes "="
+      case tok of
+        Colons -> do
+          scheme <- parseScheme <?> "type signature e.g. foo :: Int"
+          _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
+          (v, _) <-
+            consumeToken
+              (\case
+                 Variable i -> Just i
+                 _ -> Nothing) <?>
+            "variable name"
+          when
+            (v /= v0)
+            (unexpected "variable binding name different to the type signature")
+          _ <- equalToken Equals <?> "‘=’ for variable declaration e.g. x = 1"
+          e <- expParser
+          _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
+          pure
+            (BindGroupDecl
+               (BindGroup
+                  [ (ExplicitlyTypedBinding
+                       (Identifier (T.unpack v))
+                       scheme
+                       [makeAlt loc e])
+                  ]
+                  [[]]))
+        Equals -> do
+          e <- expParser
+          _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
+          pure
+            (BindGroupDecl
+               (BindGroup
+                  []
+                  [ [ ImplicitlyTypedBinding
+                        loc
+                        (Identifier (T.unpack v0))
+                        [makeAlt loc e]
+                    ]
+                  ]))
+        t -> unexpected (tokenStr t)
+
 
 makeAlt :: l -> Expression t i l -> Alternative t i l
 makeAlt loc e =

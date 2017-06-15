@@ -58,7 +58,7 @@ compileStepText file i text =
                is
            _ -> return ())
         decls
-      ((specialSigs, specialTypes, bindGroups, signatures, subs, typeClassEnv), supplies) <-
+      ((specialSigs, specialTypes, bindGroups, signatures, subs, typeClassEnv, types), supplies) <-
         runTypeChecker decls
       putStrLn "-- Type-checked bindings:"
       mapM_
@@ -168,7 +168,7 @@ compileStepText file i text =
                           (liftIO (putStrLn (printExpression (defaultPrint) e)))
                         if fmap (const ()) e' /= fmap (const ()) e
                           then do
-                            renameExpression subs e' >>= loopy
+                            renameExpression specialTypes subs types e' >>= loopy
                           else pure ())
                      e0)
                   supplies)
@@ -330,7 +330,7 @@ editDistance = on (levenshteinDistance defaultEditCosts) (map toLower)
 runTypeChecker
   :: (MonadThrow m, MonadCatch m, MonadIO m)
   => [Decl UnkindedType Identifier Location]
-  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Type Name (TypeSignature Type Name Location)], [TypeSignature Type Name Name], Map Identifier Name, Map Name (Class Type Name (TypeSignature Type Name Location))), [Int])
+  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Type Name (TypeSignature Type Name Location)], [TypeSignature Type Name Name], Map Identifier Name, Map Name (Class Type Name (TypeSignature Type Name Location)), [DataType Type Name]), [Int])
 runTypeChecker decls =
   let bindings =
         mapMaybe
@@ -360,7 +360,7 @@ runTypeChecker decls =
        (do specialTypes <- defaultSpecialTypes
            (specialSigs, signatures0) <- builtInSignatures specialTypes
            liftIO (putStrLn "-- Renaming types, classes and instances ...")
-           (typeClasses, signatures, subs) <-
+           (typeClasses, signatures, subs, types) <-
              catch
                (do dataTypes <- renameDataTypes specialTypes types
                    consSigs <-
@@ -404,7 +404,8 @@ runTypeChecker decls =
                             })
                          typeClasses
                      , signatures
-                     , subs))
+                     , subs
+                     , dataTypes))
                (\e ->
                   liftIO
                     (do putStrLn (displayRenamerException specialTypes e)
@@ -415,7 +416,7 @@ runTypeChecker decls =
            liftIO (putStrLn "-- Renaming variable/function declarations ...")
            (renamedBindings, subs') <-
              catch
-               (renameBindGroups subs bindings)
+               (renameBindGroups specialTypes subs types bindings)
                (\e ->
                   liftIO
                     (do putStrLn (displayRenamerException specialTypes e)
@@ -451,7 +452,7 @@ runTypeChecker decls =
                        (do putStrLn (displayInferException specialTypes e)
                            exitFailure)))
            return
-             (specialSigs, specialTypes, bindGroups, signatures, subs', env'))
+             (specialSigs, specialTypes, bindGroups, signatures, subs', env', types))
        [0 ..]
 
 -- | Built-in pre-defined functions.
