@@ -20,16 +20,4 @@ instance Monad Maybe where
         Just v -> f v
 instance Applicative Maybe where
   pure = \v -> Just v
-not =
-  \b ->
-    case b of
-      True -> False
-      False -> True
-main =
-  bind
-    (map not (Just True))
-    (\v ->
-       pure
-         (if v
-            then "OK!"
-            else "Boo!"))
+  ap = \a b -> Nothing
