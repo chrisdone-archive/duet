@@ -58,7 +58,7 @@ resolveAlt classes specialTypes (Alternative l ps e) = do
     mapM
       (\pred' ->
          (pred', ) <$> supplyDictName (predicateToString specialTypes pred'))
-      (filter (\p -> (not (isJust (byInst classes p)))) predicates)
+      (filter (\p -> (not (isJust (byInst classes p)))) (nub predicates))
   (Alternative l <$> pure ps <*>
    resolveExp
      classes
