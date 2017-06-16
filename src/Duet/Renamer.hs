@@ -560,12 +560,18 @@ renameExpression specials subs types = go
         LiteralExpression l i -> pure (LiteralExpression l i)
         ApplicationExpression l f x -> ApplicationExpression l <$> go f <*> go x
         InfixExpression l x (orig, VariableExpression l0 i) y -> do
-          ident <- identifyValue i
           i' <-
-            case lookup ident operatorTable of
-              Just f -> pure (f (specialSigs specials))
-              _ -> throwM (IdentifierNotInVarScope subs ident)
-          InfixExpression l <$> go x <*> pure (orig, VariableExpression l0 i') <*> go y
+            case nonrenamableName i of
+              Just x -> pure x
+              Nothing -> do
+                ident <- identifyValue i
+                case lookup ident operatorTable of
+                  Just f -> pure (f (specialSigs specials))
+                  _ -> throwM (IdentifierNotInVarScope subs ident)
+          InfixExpression l <$> go x <*> pure (orig, VariableExpression l0 i') <*>
+            go y
+        InfixExpression l x (orig, o) y ->
+          InfixExpression l <$> go x <*> fmap (orig,) (go o) <*> go y
         LetExpression l bindGroup@(BindGroup ex implicit) e -> do
           subs0 <- getImplicitSubs subs implicit
           subs1 <- getExplicitSubs subs ex
@@ -592,13 +598,15 @@ renameExpression specials subs types = go
 substituteVar :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
 substituteVar subs i0 =
   case nonrenamableName i0 of
-    Nothing -> do i <- identifyValue i0
-                  case M.lookup i subs of
-                    Just name@ValueName{} -> pure name
-                    Just name@MethodName{} -> pure name
-                    Just name@DictName {} -> pure name
-                    _ -> do s <- identifyValue i
-                            throwM (IdentifierNotInVarScope subs s)
+    Nothing -> do
+      i <- identifyValue i0
+      case M.lookup i subs of
+        Just name@ValueName {} -> pure name
+        Just name@MethodName {} -> pure name
+        Just name@DictName {} -> pure name
+        _ -> do
+          s <- identifyValue i
+          throwM (IdentifierNotInVarScope subs s)
     Just n -> pure n
 
 substituteClass :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
@@ -611,10 +619,10 @@ substituteClass subs i0 =
 
 substituteType :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
 substituteType subs i0 =
-  do i <- identifyValue i0
+  do i <- identifyType i0
      case M.lookup i subs of
        Just name@TypeName{} -> pure name
-       _ -> do s <- identifyValue i
+       _ -> do s <- identifyType i
                throwM (IdentifierNotInTypeScope subs s)
 
 substituteCons :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name

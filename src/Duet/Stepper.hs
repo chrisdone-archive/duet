@@ -7,7 +7,11 @@
 
 -- | The substitution stepper.
 
-module Duet.Stepper where
+module Duet.Stepper
+  ( expandSeq1
+  , fargs
+  , lookupNameByString
+  ) where
 
 import           Control.Arrow
 import           Control.Monad.Catch
@@ -30,9 +34,8 @@ expandSeq1
   -> [TypeSignature Type Name Name]
   -> Expression Type Name (TypeSignature Type Name Location)
   -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
-  -> Map Identifier Name
   -> m (Expression Type Name (TypeSignature Type Name Location))
-expandSeq1 typeClassEnv specialSigs signatures e b _ =
+expandSeq1 typeClassEnv specialSigs signatures e b  =
   evalStateT (go e) False
   where
     go =
@@ -49,7 +52,7 @@ expandSeq1 typeClassEnv specialSigs signatures e b _ =
             if alreadyExpanded
               then pure e0
               else do
-                e' <- lift (expandWhnf typeClassEnv specialSigs signatures e0 b)
+                e' <- lift (expandWhnf typeClassEnv specialSigs signatures e0 b )
                 put (e' /= e0)
                 pure e'
 
@@ -105,18 +108,40 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                           error
                             ("Missing method " ++
                              show methodName ++ " in dictionary: " ++ show dict)
-                        Just (Alternative _ _ e) ->
-                          pure e
+                        Just (Alternative _ _ e) -> pure e
             _ -> do
               func' <- go func
               pure (ApplicationExpression l func' arg)
+        orig@(InfixExpression l x op@(s, VariableExpression _ (PrimopName primop)) y) ->
+          case x of
+            LiteralExpression _ x' ->
+              case y of
+                LiteralExpression _ y' ->
+                  case (x', y') of
+                    (IntegerLiteral i1, IntegerLiteral i2) ->
+                      pure
+                        (LiteralExpression
+                           l
+                           (case primop of
+                              PrimopIntegerPlus -> IntegerLiteral (i1 + i2)
+                              PrimopIntegerTimes -> IntegerLiteral (i1 * i2)
+                              PrimopIntegerSubtract -> IntegerLiteral (i1 - i2)))
+                    _ -> pure orig
+                _ -> do
+                  y' <- go y
+                  pure (InfixExpression l x op y')
+            _ -> do
+              x' <- go x
+              pure (InfixExpression l x' op y)
+        InfixExpression l x (s, op) y -> do
+          op' <- go op
+          pure (InfixExpression l x (s, op') y)
         IfExpression l pr th el ->
           case pr of
             ConstructorExpression _ n
               | n == specialSigsTrue specialSigs -> pure th
               | n == specialSigsFalse specialSigs -> pure el
             _ -> IfExpression l <$> go pr <*> pure th <*> pure el
-        InfixExpression {} -> return x
         LetExpression {} -> return x
         LambdaExpression {} -> return x
         CaseExpression l e0 alts ->
@@ -148,7 +173,7 @@ expandAt
   -> Expression Type Name (TypeSignature Type Name Location)
   -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
   -> m (Expression Type Name (TypeSignature Type Name Location))
-expandAt typeClassEnv is specialSigs signatures e0 b = go [0] e0
+expandAt typeClassEnv is specialSigs signatures e0 b  = go [0] e0
   where
     go js e =
       if is == js
@@ -174,6 +199,12 @@ match = go [0]
       case pat of
         WildcardPattern _ _ -> OK (Success [])
         VariablePattern _ i -> OK (Success [(i, val)])
+        LiteralPattern _ l ->
+          case val of
+            LiteralExpression _ l'
+              | l' == l -> OK (Success [])
+              | otherwise -> Fail
+            _ -> OK (NeedsMoreEval is)
         ConstructorPattern _ i pats
           | (constructor@ConstructorExpression {}, args) <- fargs val ->
             if fmap (const ()) constructor == ConstructorExpression () i

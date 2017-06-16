@@ -24,6 +24,7 @@ class (Eq a, Identifiable a) => Printable a where
 instance Printable Name where
   printit printer =
     \case
+      PrimopName primop -> printPrimop primop
       ValueName i string ->
         string ++
         (if printNameDetails printer
@@ -55,6 +56,13 @@ instance Printable Name where
         (if printNameDetails printer
            then "[method:" ++ show i ++ "]"
            else "")
+
+printPrimop :: Primop -> [Char]
+printPrimop =
+  \case
+    PrimopIntegerSubtract -> "PrimopIntegerSubtract"
+    PrimopIntegerTimes -> "PrimopIntegerTimes"
+    PrimopIntegerPlus -> "PrimopIntegerPlus"
 
 instance Printable Identifier where
   printit _ =

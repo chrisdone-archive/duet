@@ -44,6 +44,7 @@ module Duet.Infer
   , Pattern(..)
   , BindGroup(..)
   , Alternative(..)
+  , toScheme
   , typeKind
   , classMethodScheme
   ) where

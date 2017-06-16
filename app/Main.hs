@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
@@ -157,7 +159,7 @@ compileStepText file i text =
             (do e0 <- lookupNameByString i' bindGroups'
                 evalSupplyT
                   (fix
-                     (\loopy e -> do
+                     (\loopy lastString e -> do
                         e' <-
                           expandSeq1
                             typeClassEnv'
@@ -165,14 +167,15 @@ compileStepText file i text =
                             signatures
                             e
                             bindGroups'
-                            subs
+                        let string = printExpression (defaultPrint) e
                         when
-                          (True || cleanExpression e)
-                          (liftIO (putStrLn (printExpression (defaultPrint) e)))
+                          (string/=lastString && (True || cleanExpression e))
+                          (liftIO (putStrLn string))
                         if fmap (const ()) e' /= fmap (const ()) e
                           then do
-                            renameExpression specials subs types e' >>= loopy
+                            renameExpression specials subs types e' >>= loopy string
                           else pure ())
+                     ""
                      e0)
                   supplies)
             (\e ->
@@ -360,7 +363,7 @@ runTypeChecker decls =
              _ -> Nothing)
           decls
   in runSupplyT
-       (do (specialTypes, specialSigs, signatures0, env0) <- setupEnv mempty
+       (do (specialTypes, specialSigs, signatures0, env0 ) <- setupEnv mempty
            let specials = Specials specialSigs specialTypes
            liftIO (putStrLn "-- Renaming types, classes and instances ...")
            (typeClasses, signatures, subs, dataTypes) <-
@@ -491,8 +494,8 @@ dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
 -- | Setup the class environment.
 setupEnv
   :: (MonadThrow m)
-  => Map Name (Class Type Name l)
-  -> SupplyT Int m (SpecialTypes Name, SpecialSigs Name, [TypeSignature Type Name Name], Map Name (Class Type Name l))
+  => Map Name (Class Type Name Location)
+  -> SupplyT Int m (SpecialTypes Name, SpecialSigs Name, [TypeSignature Type Name Name], Map Name (Class Type Name Location))
 setupEnv env = do
   theArrow <- supplyTypeName "(->)"
   theChar <- supplyTypeName "Char"
@@ -529,7 +532,8 @@ setupEnv env = do
   boolSigs <- dataTypeSignatures specialTypes boolDataType
   classSigs <-
     fmap concat (mapM classSignatures [numClass, negClass, fracClass])
-  let signatures = boolSigs <> classSigs
+  primopSigs <- makePrimOps specialTypes
+  let signatures = boolSigs <> classSigs <> primopSigs
       specialSigs =
         SpecialSigs
         { specialSigsTrue = true
@@ -546,12 +550,66 @@ setupEnv env = do
       (IsIn
          (className numClass)
          [ConstructorType (specialTypesInteger specialTypes)])
+      [( "times"
+       , Alternative
+           (Location 0 0 0 0)
+           []
+           (VariableExpression
+              (Location 0 0 0 0)
+              (PrimopName PrimopIntegerTimes)))
+      ,( "plus"
+       , Alternative
+           (Location 0 0 0 0)
+           []
+           (VariableExpression
+              (Location 0 0 0 0)
+              (PrimopName PrimopIntegerPlus)))]
+  negInt <-
+    makeInst
+      specials
+      (IsIn
+         (className negClass)
+         [ConstructorType (specialTypesInteger specialTypes)])
+      [ ( "subtract"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopIntegerSubtract)))
+      ]
   env' <-
     let update =
           addClass numClass >=>
-          addClass negClass >=> addClass fracClass >=> addInstance numInt
+          addClass negClass >=>
+          addClass fracClass >=> addInstance numInt >=> addInstance negInt
     in lift (update env)
   pure (specialTypes, specialSigs, signatures, env')
+
+makePrimOps
+  :: (MonadSupply Int m, MonadThrow m)
+  => SpecialTypes Name -> m [TypeSignature Type Name Name]
+makePrimOps SpecialTypes {..} = do
+  let sigs =
+        [ TypeSignature
+            (PrimopName PrimopIntegerSubtract)
+            (toScheme (integer --> integer --> integer))
+        , TypeSignature
+            (PrimopName PrimopIntegerTimes)
+            (toScheme (integer --> integer --> integer))
+        , TypeSignature
+            (PrimopName PrimopIntegerPlus)
+            (toScheme (integer --> integer --> integer))
+        ]
+  pure sigs
+  where
+    integer = ConstructorType specialTypesInteger
+    infixr 1 -->
+    (-->) :: Type Name -> Type Name -> Type Name
+    a --> b =
+      ApplicationType
+        (ApplicationType (ConstructorType specialTypesFunction) a)
+        b
 
 makeNumClass :: MonadSupply Int m => TypeConstructor Name -> m (Class Type Name l, Name, Name)
 makeNumClass function = do
@@ -571,7 +629,6 @@ makeNumClass function = do
     infixr 1 -->
     (-->) :: Type Name -> Type Name -> Type Name
     a --> b = ApplicationType (ApplicationType (ConstructorType function) a) b
-
 
 makeNegClass :: MonadSupply Int m => TypeConstructor Name -> m (Class Type Name l, Name)
 makeNegClass function = do
@@ -630,10 +687,18 @@ makeClass name vars methods = do
      , classSuperclasses = mempty
      })
 
-makeInst specials pred =
-  do name <- supplyDictName (predicateToDict specials pred)
-     pure (Instance
-             (Qualified
-                []
-                pred)
-             (Dictionary name mempty))
+makeInst
+  :: MonadSupply Int m
+  => Specials Name
+  -> Predicate Type Name
+  -> [(String, Alternative Type Name l)]
+  -> m (Instance Type Name l)
+makeInst specials pred methods = do
+  name <- supplyDictName (predicateToDict specials pred)
+  methods' <-
+    mapM
+      (\(key, alt) -> do
+         key' <- supplyMethodName (Identifier key)
+         pure (key', alt))
+      methods
+  pure (Instance (Qualified [] pred) (Dictionary name (M.fromList methods')))

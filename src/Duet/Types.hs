@@ -97,6 +97,14 @@ data Name
   | DictName !Int String
   | ClassName !Int String
   | MethodName !Int String
+  | PrimopName Primop
+  deriving (Show, Eq, Ord)
+
+-- | Pre-defined operations.
+data Primop
+  = PrimopIntegerPlus
+  | PrimopIntegerSubtract
+  | PrimopIntegerTimes
   deriving (Show, Eq, Ord)
 
 -- | State of inferring.
@@ -398,6 +406,7 @@ instance Identifiable Name where
       ConstructorName _ c -> pure (Identifier c)
       DictName _ i -> pure (Identifier i)
       MethodName _ i -> pure (Identifier i)
+      PrimopName {} -> error"wtf"
       n -> throwM (TypeAtValueScope n)
   identifyType =
     \case
@@ -416,3 +425,4 @@ instance Identifiable Name where
       DictName {} -> pure n
       ClassName {} -> pure n
       MethodName {} -> pure n
+      PrimopName {} -> pure n

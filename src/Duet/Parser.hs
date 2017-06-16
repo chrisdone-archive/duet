@@ -569,7 +569,7 @@ altParser e' startCol =
 altPat :: TokenParser (Pattern UnkindedType Identifier Location)
 altPat = varp <|> consParser
   where
-    patInner = parenpat <|> varp <|> unaryConstructor
+    patInner = parenpat <|> varp <|> intliteral <|> unaryConstructor
     parenpat = go
       where
         go = do
@@ -577,6 +577,15 @@ altPat = varp <|> consParser
           e <- varp <|> altPat
           _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
           pure e
+    intliteral = go <?> "integer (e.g. 42, 123)"
+                where
+                  go = do
+                    (c, loc) <-
+                      consumeToken
+                        (\case
+                           Integer c -> Just c
+                           _ -> Nothing)
+                    pure (LiteralPattern loc (IntegerLiteral c))
     varp = go <?> "variable pattern (e.g. x)"
       where
         go = do
