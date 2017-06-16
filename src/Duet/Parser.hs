@@ -567,7 +567,7 @@ altParser e' startCol =
   \  Just bar -> bar"
 
 altPat :: TokenParser (Pattern UnkindedType Identifier Location)
-altPat = varp <|> consParser
+altPat = varp <|> intliteral <|> consParser
   where
     patInner = parenpat <|> varp <|> intliteral <|> unaryConstructor
     parenpat = go
