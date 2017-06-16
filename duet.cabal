@@ -30,6 +30,7 @@ library
     Duet.Renamer
     Duet.Resolver
     Duet.Stepper
+    Duet.Supply
     Control.Monad.Supply
 
 executable duet

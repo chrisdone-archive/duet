@@ -26,6 +26,7 @@ class Num a where
 class Neg a where
   negate :: a -> a
   abs :: a -> a
+  subtract :: a -> a -> a
 
 class MinBound b where
   minBound :: b

@@ -631,7 +631,8 @@ expParser = case' <|> lambda <|> ifParser <|> infix' <|> app <|> atomic
                     InfixExpression
                       (Location 0 0 0 0)
                       left
-                      (Identifier (T.unpack t))
+                      (let i = ((T.unpack t))
+                       in (i, VariableExpression (Location 0 0 0 0) (Identifier i)))
                       right
               maybe
                 (return ())

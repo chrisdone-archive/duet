@@ -667,17 +667,15 @@ defined Nothing = False
 -- Throws 'ReadException' in the case of error.
 addClass
   :: MonadThrow m
-  => Name
-  -> [TypeVariable Name]
-  -> [Predicate Type Name]
-  -> Map Name (Scheme Type Name)
+  => Class Type Name l
   -> Map Name (Class Type Name l)
   -> m (Map Name (Class Type Name l))
-addClass i vs ps methods ce
+addClass (Class vs ps _ i methods) ce
   | defined (M.lookup i ce) = throwM ClassAlreadyDefined
   | any (not . defined . flip M.lookup ce . predHead) ps =
     throwM UndefinedSuperclass
   | otherwise = return (M.insert i (Class vs ps [] i methods) ce)
+
 
 -- | Add an instance of a class. Example:
 --
@@ -688,12 +686,10 @@ addClass i vs ps methods ce
 -- Throws 'ReadException' in the case of error.
 addInstance
   :: MonadThrow m
-  => [Predicate Type Name]
-  -> Predicate Type Name
-  -> Dictionary Type Name l
+  => Instance Type Name l
   -> Map Name (Class Type Name l)
   -> m (Map Name (Class Type Name l))
-addInstance ps p@(IsIn i _) dict ce =
+addInstance (Instance (Qualified _ p@(IsIn i _)) dict) ce =
   case M.lookup i ce of
     Nothing -> throwM NoSuchClassForInstance
     Just typeClass
@@ -701,6 +697,7 @@ addInstance ps p@(IsIn i _) dict ce =
       | otherwise -> return (M.insert i c ce)
       where its = classInstances typeClass
             qs = [q | Instance (Qualified _ q) _ <- its]
+            ps = []
             c =
               (Class
                  (classTypeVariables typeClass)
@@ -822,13 +819,13 @@ inferExpressionType ce as (ApplicationExpression l e f) = do
   unify (tf `makeArrow` t) te
   let scheme = (Forall [] (Qualified (ps++qs) t))
   return (ps ++ qs, t, ApplicationExpression (TypeSignature l scheme) e' f')
-inferExpressionType ce as (InfixExpression l x op y) = do
-  (ps, ts, ApplicationExpression l' (ApplicationExpression _ (VariableExpression _ op') x') y') <-
+inferExpressionType ce as (InfixExpression l x (i,op) y) = do
+  (ps, ts, ApplicationExpression l' (ApplicationExpression _ (op') x') y') <-
     inferExpressionType
       ce
       as
-      (ApplicationExpression l (ApplicationExpression l (VariableExpression l op) x) y)
-  pure (ps, ts, InfixExpression l' x' op' y')
+      (ApplicationExpression l (ApplicationExpression l op x) y)
+  pure (ps, ts, InfixExpression l' x' (i, op') y')
 inferExpressionType ce as (LetExpression l bg e) = do
   (ps, as', bg') <- inferBindGroupTypes ce as bg
   (qs, t, e') <- inferExpressionType ce (as' ++ as) e

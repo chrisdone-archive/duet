@@ -176,10 +176,12 @@ printExpression printer e =
          printExpressionIfPred printer a ++
          " then " ++
          printExpression printer b ++ " else " ++ printExpression printer c
-       InfixExpression _ f o x ->
+       InfixExpression _ f (o, ov) x ->
          printExpressionAppArg printer f ++
          " " ++
-         printIdentifier printer o ++ " " ++ printExpressionAppArg printer x
+         (if printDictionaries printer
+             then "`" ++ printExpression printer ov ++ "`"
+             else o) ++ " " ++ printExpressionAppArg printer x
        _ -> "<TODO>")
   where
     wrapType x =

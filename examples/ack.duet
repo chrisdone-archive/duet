@@ -1,0 +1,10 @@
+data Tuple a b = Tuple a b
+ack :: Int -> Int -> Int
+ack = \m n ->
+  case Tuple m n of
+    Tuple 0 n -> n + 1
+        ack 0 n = n+1
+        ack m 0 = ack (m-1) 1
+        ack m n = ack (m-1) (ack m (n-1))
+
+main = ack 4 1

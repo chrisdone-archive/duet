@@ -11,11 +11,12 @@ module Duet.Resolver where
 
 import Control.Monad.Catch
 import Control.Monad.Supply
+import Data.List
 import Data.Map.Strict (Map)
 import Data.Maybe
 import Duet.Infer
 import Duet.Printer
-import Duet.Renamer
+import Duet.Supply
 import Duet.Types
 
 resolveBindGroup
@@ -77,7 +78,7 @@ resolveAlt classes specialTypes (Alternative l ps e) = do
 predicateToString
   :: (Printable i, Show i)
   => SpecialTypes i -> Predicate Type i -> String
-predicateToString specialTypes (IsIn name ts) =
+predicateToString _specialTypes (IsIn name _ts) =
   -- printIdentifier name ++ " " ++ unwords (map (printType specialTypes) ts)
   "?dict" ++ printIdentifier defaultPrint name
 
@@ -89,7 +90,7 @@ resolveExp
   -> Expression Type Name (TypeSignature Type Name l)
   -> m (Expression Type Name (TypeSignature Type Name l))
 
-resolveExp classes specialTypes dicts = go
+resolveExp classes _ dicts = go
   where
     go =
       \case
@@ -99,6 +100,8 @@ resolveExp classes specialTypes dicts = go
             (foldl (ApplicationExpression l) (VariableExpression l i) dictArgs)
           where Forall _ (Qualified predicates _) = typeSignatureScheme l
         ApplicationExpression l f x -> ApplicationExpression l <$> go f <*> go x
+        InfixExpression l x (i, op) y ->
+          InfixExpression l <$> go x <*> fmap (i ,) (go op) <*> go y
         LambdaExpression l0 (Alternative l vs b) ->
           LambdaExpression l0 <$> (Alternative l vs <$> go b)
         CaseExpression l e alts ->

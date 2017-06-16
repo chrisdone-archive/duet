@@ -1,3 +1,5 @@
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -64,14 +66,16 @@ data SpecialTypes i = SpecialTypes
   , specialTypesFunction   :: TypeConstructor i
   , specialTypesInteger    :: TypeConstructor i
   , specialTypesRational   :: TypeConstructor i
-  , specialTypesShow       :: i
   } deriving (Show)
 
 -- | Special built-in signatures.
 data SpecialSigs i = SpecialSigs
   { specialSigsTrue :: i
   , specialSigsFalse :: i
-  , specialSigsShow :: i
+  , specialSigsPlus :: i
+  , specialSigsTimes :: i
+  , specialSigsSubtract :: i
+  , specialSigsDivide :: i
   }
 
 -- | Type inference monad.
@@ -275,7 +279,7 @@ data Expression (t :: * -> *) i l
   | ConstantExpression l Identifier
   | LiteralExpression l Literal
   | ApplicationExpression l (Expression t i l) (Expression t i l)
-  | InfixExpression l (Expression t i l) i (Expression t i l)
+  | InfixExpression l (Expression t i l) (String, Expression t i l) (Expression t i l)
   | LetExpression l (BindGroup t i l) (Expression t i l)
   | LambdaExpression l (Alternative t i l)
   | IfExpression l (Expression t i l) (Expression t i l) (Expression t i l)

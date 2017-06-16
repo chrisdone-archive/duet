@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -29,6 +30,7 @@ import           Duet.Printer
 import           Duet.Renamer
 import           Duet.Resolver
 import           Duet.Stepper
+import           Duet.Supply
 import           Duet.Tokenizer
 import           Duet.Types
 import           System.Environment
@@ -60,6 +62,7 @@ compileStepText file i text =
         decls
       ((specialSigs, specialTypes, bindGroups, signatures, subs, typeClassEnv, types), supplies) <-
         runTypeChecker decls
+      let specials = Specials specialSigs specialTypes
       putStrLn "-- Type-checked bindings:"
       mapM_
         (\(BindGroup es is) -> do
@@ -168,7 +171,7 @@ compileStepText file i text =
                           (liftIO (putStrLn (printExpression (defaultPrint) e)))
                         if fmap (const ()) e' /= fmap (const ()) e
                           then do
-                            renameExpression specialTypes subs types e' >>= loopy
+                            renameExpression specials subs types e' >>= loopy
                           else pure ())
                      e0)
                   supplies)
@@ -357,12 +360,12 @@ runTypeChecker decls =
              _ -> Nothing)
           decls
   in runSupplyT
-       (do specialTypes <- defaultSpecialTypes
-           (specialSigs, signatures0) <- builtInSignatures specialTypes
+       (do (specialTypes, specialSigs, signatures0, env0) <- setupEnv mempty
+           let specials = Specials specialSigs specialTypes
            liftIO (putStrLn "-- Renaming types, classes and instances ...")
-           (typeClasses, signatures, subs, types) <-
+           (typeClasses, signatures, subs, dataTypes) <-
              catch
-               (do dataTypes <- renameDataTypes specialTypes types
+               (do dataTypes <- renameDataTypes specials types
                    consSigs <-
                      fmap
                        concat
@@ -370,7 +373,7 @@ runTypeChecker decls =
                    typeClasses0 <-
                      mapM
                        (\c -> do
-                          renamed <- renameClass specialTypes mempty dataTypes c
+                          renamed <- renameClass specials mempty dataTypes c
                           pure (className c, renamed))
                        classes
                    let typeClasses = map snd typeClasses0
@@ -378,21 +381,21 @@ runTypeChecker decls =
                    let signatures = signatures0 <> consSigs <> methodSigs
                        subs =
                          M.fromList
-                           (map
+                           (mapMaybe
                               (\(TypeSignature name _) ->
                                  case name of
-                                   ValueName _ ident -> (Identifier ident, name)
+                                   ValueName _ ident -> Just (Identifier ident, name)
                                    ConstructorName _ ident ->
-                                     (Identifier ident, name)
+                                     pure (Identifier ident, name)
                                    MethodName _ ident ->
-                                     (Identifier ident, name))
+                                     pure (Identifier ident, name)
+                                   _ -> Nothing)
                               signatures) <>
                          M.fromList (map (second className) typeClasses0)
                    allInstances <-
                      mapM
-                       (renameInstance specialTypes subs dataTypes typeClasses)
+                       (renameInstance specials subs dataTypes typeClasses)
                        instances
-                   {-trace ("Instances: " ++ show allInstances) (return ())-}
                    pure
                      ( map
                          (\typeClass ->
@@ -416,32 +419,26 @@ runTypeChecker decls =
            liftIO (putStrLn "-- Renaming variable/function declarations ...")
            (renamedBindings, subs') <-
              catch
-               (renameBindGroups specialTypes subs types bindings)
+               (renameBindGroups specials subs dataTypes bindings)
                (\e ->
                   liftIO
                     (do putStrLn (displayRenamerException specialTypes e)
                         exitFailure))
-           env0 <- setupEnv specialTypes mempty
+
            env <-
              lift
                (foldM
                   (\e0 typeClass ->
                      addClass
-                       (className typeClass)
-                       (classTypeVariables typeClass)
-                       (classSuperclasses typeClass)
-                       (classMethods typeClass)
+                       typeClass
                        e0 >>= \e ->
                        foldM
-                         (\e1 i@(Instance (Qualified ps p) dict)
-                               {-liftIO (putStrLn ("Add instance: " ++ show i))-}
-                           -> do addInstance ps p dict e1)
+                         (\e1 i
+                           -> do addInstance i e1)
                          e
                          (classInstances typeClass))
                   env0
                   typeClasses)
-           -- liftIO (putStrLn "-- Type class environment:")
-           -- liftIO (print env)
            liftIO (putStrLn "-- Inferring types ...")
            (bindGroups, env') <-
              lift
@@ -452,50 +449,8 @@ runTypeChecker decls =
                        (do putStrLn (displayInferException specialTypes e)
                            exitFailure)))
            return
-             (specialSigs, specialTypes, bindGroups, signatures, subs', env', types))
+             (specialSigs, specialTypes, bindGroups, signatures, subs', env', dataTypes))
        [0 ..]
-
--- | Built-in pre-defined functions.
-builtInSignatures
-  :: MonadThrow m
-  => SpecialTypes Name -> SupplyT Int m (SpecialSigs Name, [TypeSignature Type Name Name])
-builtInSignatures specialTypes = do
-  the_show <- supplyValueName ("show" :: Identifier)
-  sigs <- dataTypeSignatures specialTypes (specialTypesBool specialTypes)
-  the_True <- getSig "True" sigs
-  the_False <- getSig "False" sigs
-  return
-    ( SpecialSigs
-      { specialSigsTrue = the_True
-      , specialSigsFalse = the_False
-      , specialSigsShow = the_show
-      }
-    , [ {-TypeSignature
-          the_show
-          (Forall
-             [StarKind]
-             (Qualified
-                [IsIn (specialTypesShow specialTypes) [(GenericType 0)]]
-                (GenericType 0 --> ConstructorType (specialTypesString specialTypes))))-}
-      ] ++
-      sigs)
-  where
-    getSig ident sigs =
-      case listToMaybe
-             (mapMaybe
-                (\case
-                   (TypeSignature n@(ValueName _ i) _)
-                     | i == ident -> Just n
-                   (TypeSignature n@(ConstructorName _ i) _)
-                     | i == ident -> Just n
-                   _ -> Nothing)
-                sigs) of
-        Nothing -> throwM (BuiltinNotDefined ident)
-        Just sig -> pure sig
-
-    (-->) :: Type Name -> Type Name -> Type Name
-    a --> b =
-      ApplicationType (ApplicationType (ConstructorType(specialTypesFunction specialTypes)) a) b
 
 classSignatures :: MonadThrow m => Class Type Name l -> m [TypeSignature Type Name Name]
 classSignatures cls =
@@ -513,99 +468,172 @@ dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
       pure
         (TypeSignature
            cname
-           (let -- varsGens = map (second GenericType) (zip vs [0 ..])
-            in Forall
-                 vs
-                 (Qualified
-                    []
-                    (foldr
-                       makeArrow
-                       (foldl
-                          ApplicationType
-                          (dataTypeConstructor dt)
-                          (map VariableType vs))
-                       fs))))
+           (Forall
+              vs
+              (Qualified
+                 []
+                 (foldr
+                    makeArrow
+                    (foldl
+                       ApplicationType
+                       (dataTypeConstructor dt)
+                       (map VariableType vs))
+                    fs))))
       where
-        varsToGens :: [(TypeVariable Name, Type Name)] -> Type Name -> Type Name
-        varsToGens varsGens = go
-          where
-            go =
-              \case
-                v@(VariableType tyvar) ->
-                  case lookup tyvar varsGens of
-                    Just gen -> gen
-                    Nothing -> v
-                ApplicationType t1 t2 -> ApplicationType (go t1) (go t2)
-                -- g@GenericType {} -> g
-                c@ConstructorType {} -> c
         makeArrow :: Type Name -> Type Name -> Type Name
         a `makeArrow` b =
           ApplicationType
-            (ApplicationType (ConstructorType(specialTypesFunction specialTypes)) a)
+            (ApplicationType
+               (ConstructorType (specialTypesFunction specialTypes))
+               a)
             b
 
 -- | Setup the class environment.
 setupEnv
-  :: MonadThrow m
-  => SpecialTypes Name
-  -> Map Name (Class Type Name l)
-  -> SupplyT Int m (Map Name (Class Type Name l))
-setupEnv specialTypes env = do
-  show_a <- supplyTypeName "a"
-  showInt <- supplyDictName "Show Int"
-  showRational <- supplyDictName "Show Rational"
-  showChar' <- supplyDictName "Show Char"
-  let update =
-        addClass theShow [TypeVariable show_a StarKind] [] mempty >=>
-        addInstance
-          []
-          (IsIn theShow [ConstructorType(specialTypesInteger specialTypes)])
-          (Dictionary showInt mempty) >=>
-        addInstance
-          []
-          (IsIn theShow [ConstructorType(specialTypesRational specialTypes)])
-          (Dictionary showRational mempty) >=>
-        addInstance
-          []
-          (IsIn theShow [ConstructorType(specialTypesChar specialTypes)])
-          (Dictionary showChar' mempty)
-  lift (update env)
-  where
-    theShow = specialTypesShow specialTypes
-
---------------------------------------------------------------------------------
--- Built-in types
-
--- | Special types that Haskell uses for pattern matching and literals.
-defaultSpecialTypes :: Monad m => SupplyT Int m (SpecialTypes Name)
-defaultSpecialTypes = do
-  boolDataType <-
-    do name <- supplyTypeName "Bool"
-       true <- supplyConstructorName "True"
-       false <- supplyConstructorName "False"
-       pure
-         (DataType
-            name
-            []
-            [DataTypeConstructor true [], DataTypeConstructor false []])
+  :: (MonadThrow m)
+  => Map Name (Class Type Name l)
+  -> SupplyT Int m (SpecialTypes Name, SpecialSigs Name, [TypeSignature Type Name Name], Map Name (Class Type Name l))
+setupEnv env = do
   theArrow <- supplyTypeName "(->)"
   theChar <- supplyTypeName "Char"
   theString <- supplyTypeName "String"
   theInteger <- supplyTypeName "Integer"
   theRational <- supplyTypeName "Rational"
-  theShow <- supplyTypeName "Show"
-  return
-    (SpecialTypes
-     { specialTypesBool = boolDataType
-     , specialTypesChar = (TypeConstructor theChar StarKind)
-     , specialTypesString = (TypeConstructor theString StarKind)
-     , specialTypesFunction =
-         (TypeConstructor
-            theArrow
-            (FunctionKind StarKind (FunctionKind StarKind StarKind)))
-     , specialTypesInteger =
-         (TypeConstructor theInteger StarKind)
-     , specialTypesRational =
-         (TypeConstructor theRational StarKind)
-     , specialTypesShow = theShow
+  (true, false, boolDataType) <-
+    do name <- supplyTypeName "Bool"
+       true <- supplyConstructorName "True"
+       false <- supplyConstructorName "False"
+       pure
+         ( true
+         , false
+         , DataType
+             name
+             []
+             [DataTypeConstructor true [], DataTypeConstructor false []])
+  let function =
+        (TypeConstructor
+           theArrow
+           (FunctionKind StarKind (FunctionKind StarKind StarKind)))
+  let specialTypes =
+        (SpecialTypes
+         { specialTypesBool = boolDataType
+         , specialTypesChar = TypeConstructor theChar StarKind
+         , specialTypesString = TypeConstructor theString StarKind
+         , specialTypesFunction = function
+         , specialTypesInteger = TypeConstructor theInteger StarKind
+         , specialTypesRational = TypeConstructor theRational StarKind
+         })
+  (numClass, plus, times) <- makeNumClass function
+  (negClass, subtract') <- makeNegClass function
+  (fracClass, divide) <- makeFracClass function
+  boolSigs <- dataTypeSignatures specialTypes boolDataType
+  classSigs <-
+    fmap concat (mapM classSignatures [numClass, negClass, fracClass])
+  let signatures = boolSigs <> classSigs
+      specialSigs =
+        SpecialSigs
+        { specialSigsTrue = true
+        , specialSigsFalse = false
+        , specialSigsPlus = plus
+        , specialSigsSubtract = subtract'
+        , specialSigsTimes = times
+        , specialSigsDivide = divide
+        }
+      specials = Specials specialSigs specialTypes
+  numInt <-
+    makeInst
+      specials
+      (IsIn
+         (className numClass)
+         [ConstructorType (specialTypesInteger specialTypes)])
+  env' <-
+    let update =
+          addClass numClass >=>
+          addClass negClass >=> addClass fracClass >=> addInstance numInt
+    in lift (update env)
+  pure (specialTypes, specialSigs, signatures, env')
+
+makeNumClass :: MonadSupply Int m => TypeConstructor Name -> m (Class Type Name l, Name, Name)
+makeNumClass function = do
+  a <- fmap (\n -> TypeVariable n StarKind) (supplyTypeName "a")
+  let a' = VariableType a
+  plus <- supplyMethodName "plus"
+  times <- supplyMethodName "times"
+  cls <-
+    makeClass
+      "Num"
+      [a]
+      [ (plus, Forall [a] (Qualified [] (a' --> a' --> a')))
+      , (times, Forall [a] (Qualified [] (a' --> a' --> a')))
+      ]
+  pure (cls, plus, times)
+  where
+    infixr 1 -->
+    (-->) :: Type Name -> Type Name -> Type Name
+    a --> b = ApplicationType (ApplicationType (ConstructorType function) a) b
+
+
+makeNegClass :: MonadSupply Int m => TypeConstructor Name -> m (Class Type Name l, Name)
+makeNegClass function = do
+  a <- fmap (\n -> TypeVariable n StarKind) (supplyTypeName "a")
+  let a' = VariableType a
+  negate' <- supplyMethodName "negate"
+  subtract' <- supplyMethodName "subtract"
+  abs' <- supplyMethodName "abs"
+  cls <-
+    makeClass
+      "Neg"
+      [a]
+      [ (negate', Forall [a] (Qualified [] (a' --> a' --> a')))
+      , (subtract', Forall [a] (Qualified [] (a' --> a' --> a')))
+      , (abs', Forall [a] (Qualified [] (a' --> a')))
+      ]
+  pure (cls, subtract')
+  where
+    infixr 1 -->
+    (-->) :: Type Name -> Type Name -> Type Name
+    a --> b = ApplicationType (ApplicationType (ConstructorType function) a) b
+
+makeFracClass :: MonadSupply Int m => TypeConstructor Name -> m (Class Type Name l, Name)
+makeFracClass function = do
+  a <- fmap (\n -> TypeVariable n StarKind) (supplyTypeName "a")
+  let a' = VariableType a
+  divide <- supplyMethodName "divide"
+  recip' <- supplyMethodName "recip"
+  cls <-
+    makeClass
+      "Fractional"
+      [a]
+      [ (divide, Forall [a] (Qualified [] (a' --> a' --> a')))
+      , (recip', Forall [a] (Qualified [] (a' --> a')))
+      ]
+  pure (cls, divide)
+  where
+    infixr 1 -->
+    (-->) :: Type Name -> Type Name -> Type Name
+    a --> b = ApplicationType (ApplicationType (ConstructorType function) a) b
+
+makeClass
+  :: MonadSupply Int m
+  => Identifier
+  -> [TypeVariable Name]
+  -> [(Name, Scheme t Name)]
+  -> m (Class t Name l)
+makeClass name vars methods = do
+  name' <- supplyClassName name
+  pure
+    (Class
+     { className = name'
+     , classTypeVariables = vars
+     , classInstances = []
+     , classMethods = M.fromList methods
+     , classSuperclasses = mempty
      })
+
+makeInst specials pred =
+  do name <- supplyDictName (predicateToDict specials pred)
+     pure (Instance
+             (Qualified
+                []
+                pred)
+             (Dictionary name mempty))

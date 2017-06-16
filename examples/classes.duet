@@ -34,6 +34,11 @@ instance Equal Nat where
 not = \b -> case b of
               True -> False
               False -> True
+
+foo :: Bool
+foo = 123
+
 notEqual :: Equal a => a -> a -> Bool
 notEqual = \x y -> not (equal x y)
+
 main = equal (reader (shower (Succ Zero))) (Succ Zero)
