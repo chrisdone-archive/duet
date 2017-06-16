@@ -155,15 +155,18 @@ printExpression printer e =
              where prefix = printExpressionAppOp printer f
                    inner = printExpressionAppArg printer x
        LambdaExpression _ (Alternative _ args e) ->
-         if any (== '\n') inner
-           then "\\" ++ prefix ++ "->\n" ++ indented inner
-           else "\\" ++ prefix ++ "-> " ++ indent (length prefix + 4) inner
+         if null filteredArgs
+            then inner
+            else if any (== '\n') inner
+                   then "\\" ++ prefix ++ "->\n" ++ indented inner
+                   else "\\" ++ prefix ++ "-> " ++ indent (length prefix + 4) inner
          where inner = (printExpression printer e)
+               filteredArgs = filter dictPred args
                prefix =
                  concat
                    (map
                       (\x -> printPattern printer x ++ " ")
-                      (filter dictPred args))
+                      filteredArgs)
                dictPred =
                  if printDictionaries printer
                    then const True
