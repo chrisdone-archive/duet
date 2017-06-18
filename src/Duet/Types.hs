@@ -10,12 +10,13 @@
 
 module Duet.Types where
 
-import Control.Monad.Catch
-import Control.Monad.State
-import Data.Map.Strict (Map)
-import Data.Semigroup
-import Data.String
-import Data.Typeable
+import           Control.Monad.Catch
+import           Control.Monad.State
+import           Data.Map.Strict (Map)
+import           Data.Semigroup
+import           Data.String
+import           Data.Text (Text)
+import           Data.Typeable
 
 -- | A declaration.
 data Decl t i l
@@ -76,7 +77,7 @@ data SpecialSigs i = SpecialSigs
   , specialSigsTimes :: i
   , specialSigsSubtract :: i
   , specialSigsDivide :: i
-  }
+  } deriving (Show)
 
 -- | Type inference monad.
 newtype InferT m a = InferT
@@ -426,3 +427,59 @@ instance Identifiable Name where
       ClassName {} -> pure n
       MethodName {} -> pure n
       PrimopName {} -> pure n
+
+-- | Context for the type checker.
+data Context t i l = Context
+  { contextSpecialSigs :: SpecialSigs i
+  , contextSpecialTypes :: SpecialTypes i
+  , contextSignatures :: [TypeSignature t i i]
+  , contextScope :: Map Identifier i
+  , contextTypeClasses :: Map i (Class t i (TypeSignature t i l))
+  , contextDataTypes :: [DataType t i]
+  } deriving (Show)
+
+-- | Builtin context.
+data Builtins t i l = Builtins
+  { builtinsSpecialSigs :: SpecialSigs i
+  , builtinsSpecialTypes :: SpecialTypes i
+  , builtinsSignatures :: [TypeSignature t i i]
+  , builtinsTypeClasses :: Map i (Class t i l)
+  } deriving (Show)
+
+data Token
+  = If
+  | Imply
+  | Then
+  | Data
+  | ForallToken
+  | Else
+  | Case
+  | Where
+  | Of
+  | Backslash
+  | Let
+  | In
+  | RightArrow
+  | OpenParen
+  | CloseParen
+  | Equals
+  | Colons
+  | Variable !Text
+  | Constructor !Text
+  | Character !Char
+  | String !Text
+  | Operator !Text
+  | Period
+  | Comma
+  | Integer !Integer
+  | Decimal !Double
+  | NonIndentedNewline
+  | Bar
+  | ClassToken
+  | InstanceToken
+  deriving (Eq, Ord)
+
+data Specials n = Specials
+  { specialSigs :: SpecialSigs n
+  , specialTypes :: SpecialTypes n
+  }

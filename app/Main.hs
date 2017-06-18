@@ -1,11 +1,10 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
--- |
+-- | Simple compiler and stepper.
 
 module Main where
 
@@ -15,16 +14,13 @@ import           Control.Monad.Catch
 import           Control.Monad.Fix
 import           Control.Monad.Supply
 import           Control.Monad.Trans
-import           Data.Char
-import           Data.Function
-import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
 import           Data.Monoid
-import           Data.Ord
 import           Data.Text (Text)
 import qualified Data.Text.IO as T
+import           Duet.Context
 import           Duet.Infer
 import           Duet.Parser
 import           Duet.Printer
@@ -32,11 +28,8 @@ import           Duet.Renamer
 import           Duet.Resolver
 import           Duet.Stepper
 import           Duet.Supply
-import           Duet.Tokenizer
 import           Duet.Types
 import           System.Environment
-import           System.Exit
-import           Text.EditDistance
 
 main :: IO ()
 main = do
@@ -52,51 +45,11 @@ compileStepText file i text =
   case parseText file text of
     Left e -> error (show e)
     Right decls -> do
-      putStrLn "-- Parsed code:"
-      mapM_
-        (\case
-           BindGroupDecl (BindGroup _ is) ->
-             mapM_
-               (mapM_ (putStrLn . printImplicitlyTypedBinding (defaultPrint)))
-               is
-           _ -> return ())
-        decls
-      ((specialSigs, specialTypes, bindGroups, signatures, subs, typeClassEnv, types), supplies) <-
-        runTypeChecker decls
-      let specials = Specials specialSigs specialTypes
-      putStrLn "-- Type-checked bindings:"
-      mapM_
-        (\(BindGroup es is) -> do
-           mapM_
-             (putStrLn . printExplicitlyTypedBinding defaultPrint specialTypes)
-             es
-           mapM_
-             (mapM_ (putStrLn . printImplicitlyTypedBinding (defaultPrint)))
-             is)
-        bindGroups
-      putStrLn "-- With type-annotations:"
-      mapM_
-        (\(BindGroup es is) -> do
-           (mapM_
-              (putStrLn .
-               printExplicitlyTypedBinding
-                 defaultPrint
-                 {printTypes = \x -> Just (specialTypes, fmap (const ()) x)}
-                 specialTypes)
-              es)
-           mapM_
-             (mapM_
-                (putStrLn .
-                 printImplicitlyTypedBinding
-                   defaultPrint
-                   {printTypes = \x -> Just (specialTypes, fmap (const ()) x)}))
-             is)
-        bindGroups
-      {-trace ("Compiled classes: " ++ show env) (return ())-}
-      typeClassEnv' <-
-        catch
-          (evalSupplyT
-             (fmap
+      evalSupplyT
+        (do (bindGroups, context) <- runTypeChecker decls
+            let specials = contextSpecials context
+            typeClassEnv' <-
+              fmap
                 M.fromList
                 (mapM
                    (\(name, cls) -> do
@@ -108,7 +61,10 @@ compileStepText file i text =
                                  (\(nam, alt) ->
                                     fmap
                                       (nam, )
-                                      (resolveAlt typeClassEnv specialTypes alt))
+                                      (resolveAlt
+                                         (contextTypeClasses context)
+                                         (contextSpecialTypes context)
+                                         alt))
                                  (M.toList
                                     (dictionaryMethods (instanceDictionary inst)))
                              pure
@@ -119,68 +75,40 @@ compileStepText file i text =
                                })
                           (classInstances cls)
                       pure (name, cls {classInstances = is}))
-                   (M.toList typeClassEnv)))
-             supplies)
-          (\e ->
-             liftIO
-               (do putStrLn (displayResolveException specialTypes e)
-                   exitFailure))
-      bindGroups' <-
-        catch
-          (evalSupplyT
-             (mapM (resolveBindGroup typeClassEnv' specialTypes) bindGroups)
-             supplies)
-          (\e ->
-             liftIO
-               (do putStrLn (displayResolveException specialTypes e)
-                   exitFailure))
-      putStrLn "-- Source with instance dictionaries inserted:"
-      mapM_
-        (\(BindGroup es is) -> do
-           mapM_
-             (putStrLn .
-              printExplicitlyTypedBinding
-                defaultPrint {printDictionaries = True}
-                specialTypes)
-             es
-           mapM_
-             (mapM_
-                (putStrLn .
-                 printImplicitlyTypedBinding
-                   defaultPrint {printDictionaries = True}))
-             is)
-        bindGroups'
-      case i of
-        Nothing -> return ()
-        Just i' -> do
-          putStrLn "-- Stepping ..."
-          catch
-            (do e0 <- lookupNameByString i' bindGroups'
-                evalSupplyT
-                  (fix
-                     (\loopy lastString e -> do
-                        e' <-
-                          expandSeq1
-                            typeClassEnv'
-                            specialSigs
-                            signatures
-                            e
-                            bindGroups'
-                        let string = printExpression (defaultPrint) e
-                        when
-                          (string/=lastString && (True || cleanExpression e))
-                          (liftIO (putStrLn string))
-                        if fmap (const ()) e' /= fmap (const ()) e
-                          then do
-                            renameExpression specials subs types e' >>= loopy string
-                          else pure ())
-                     ""
-                     e0)
-                  supplies)
-            (\e ->
-               liftIO
-                 (do putStrLn (displayStepperException specialTypes e)
-                     exitFailure))
+                   (M.toList (contextTypeClasses context)))
+            bindGroups' <-
+              (mapM
+                 (resolveBindGroup typeClassEnv' (contextSpecialTypes context))
+                 bindGroups)
+            case i of
+              Nothing -> return ()
+              Just i' -> do
+                e0 <- lookupNameByString i' bindGroups'
+                fix
+                  (\loopy lastString e -> do
+                     e' <-
+                       expandSeq1
+                         typeClassEnv'
+                         (contextSpecialSigs context)
+                         (contextSignatures context)
+                         e
+                         bindGroups'
+                     let string = printExpression (defaultPrint) e
+                     when
+                       (string /= lastString && (True || cleanExpression e))
+                       (liftIO (putStrLn string))
+                     if fmap (const ()) e' /= fmap (const ()) e
+                       then do
+                         renameExpression
+                           specials
+                           (contextScope context)
+                           (contextDataTypes context)
+                           e' >>=
+                           loopy string
+                       else pure ())
+                  ""
+                  e0)
+        [0 ..]
 
 --------------------------------------------------------------------------------
 -- Clean expressions
@@ -196,146 +124,11 @@ cleanExpression =
     ApplicationExpression _ f x -> cleanExpression f && cleanExpression x
     _ -> True
 
-displayResolveException :: SpecialTypes Name -> ResolveException -> String
-displayResolveException specialTypes =
-  \case
-    NoInstanceFor p -> "No instance for " ++ printPredicate defaultPrint specialTypes p
-
-displayStepperException :: a -> StepException -> String
-displayStepperException _ =
-  \case
-    CouldntFindName n -> "Not in scope: " ++ curlyQuotes (printit defaultPrint n)
-    CouldntFindNameByString n ->
-      "The starter variable isn't defined: " ++
-      curlyQuotes n ++
-      "\nPlease define a variable called " ++ curlyQuotes n
-    TypeAtValueScope k -> "Type at value scope: " ++ show k
-
-displayInferException :: SpecialTypes Name -> InferException -> [Char]
-displayInferException specialTypes =
-  \case
-    ExplicitTypeMismatch sc1 sc2 ->
-      "The type of a definition doesn't match its explicit type:\n\n  " ++
-     printScheme defaultPrint specialTypes sc1 ++ "\n\nand\n\n  " ++
-
-     printScheme defaultPrint specialTypes sc2 ++ "\n\n" ++
-       show sc1 ++ "\n" ++ show sc2
-    NotInScope scope name ->
-      "Not in scope " ++
-      curlyQuotes (printit defaultPrint name) ++
-      "\n" ++
-      "Nearest names in scope:\n\n" ++
-      intercalate
-        ", "
-        (map
-           curlyQuotes
-           (take
-              5
-              (sortBy
-                 (comparing (editDistance (printit defaultPrint name)))
-                 (map (printTypeSignature defaultPrint specialTypes) scope))))
-    TypeMismatch t1 t2 ->
-      "Couldn't match type " ++
-      curlyQuotes (printType defaultPrint specialTypes t1) ++
-      "\n" ++
-      "against inferred type " ++ curlyQuotes (printType defaultPrint specialTypes t2)
-    OccursCheckFails ->
-      "Infinite type (occurs check failed). \nYou \
-                        \probably have a self-referential value!"
-    AmbiguousInstance ambiguities ->
-      "Couldn't infer which instances to use for\n" ++
-      unlines
-        (map
-           (\(Ambiguity _ ps) ->
-              intercalate ", " (map (printPredicate defaultPrint specialTypes) ps))
-           ambiguities)
-    e -> show e
-
-displayRenamerException :: SpecialTypes Name -> RenamerException -> [Char]
-displayRenamerException specialTypes =
-  wrap (\case
-          IdentifierNotInVarScope scope name ->
-            "Not in variable scope " ++
-            curlyQuotes (printit defaultPrint name) ++
-            "\n" ++
-            "Nearest names in scope:\n\n" ++
-            intercalate
-              ", "
-              (map
-                 curlyQuotes
-                 (take
-                    5
-                    (sortBy
-                       (comparing (editDistance (printit defaultPrint name)))
-                       (map (printit defaultPrint) (M.elems scope)))))
-          IdentifierNotInConScope scope name ->
-            "Not in constructors scope " ++
-            curlyQuotes (printit defaultPrint name) ++
-            "\n" ++
-            "Nearest names in scope:\n\n" ++
-            intercalate
-              ", "
-              (map
-                 curlyQuotes
-                 (take
-                    5
-                    (sortBy
-                       (comparing (editDistance (printit defaultPrint name)))
-                       (map (printit defaultPrint) (M.elems scope)))))
-          KindTooManyArgs ty k ty2 ->
-            "The type " ++
-            curlyQuotes (printType defaultPrint specialTypes ty ++ " :: " ++ printKind k) ++
-            " has an unexpected additional argument, " ++
-            curlyQuotes (printType defaultPrint specialTypes ty2)
-          ConstructorFieldKind cons typ kind ->
-            "The type " ++
-            curlyQuotes (printType defaultPrint specialTypes typ ++ " :: " ++ printKind kind) ++
-            " is used in a field in the " ++
-            curlyQuotes (printit defaultPrint cons) ++
-            " constructor, but all fields \
-            \should have types of kind " ++
-            curlyQuotes (printKind StarKind)
-          KindArgMismatch t1 k1 t2 k2 ->
-            "The type " ++
-            curlyQuotes (printType defaultPrint specialTypes t1 ++ " :: " ++ printKind k1) ++
-            " has been given an argument of the wrong kind " ++
-            curlyQuotes (printType defaultPrint specialTypes t2 ++ " :: " ++ printKind k2)
-          TypeNotInScope types i ->
-            "Unknown type " ++
-            curlyQuotes (printIdentifier defaultPrint i) ++
-            "\n" ++
-            "Closest names in scope are: " ++
-            intercalate
-              ", "
-              (map
-                 curlyQuotes
-                 (take
-                    5
-                    (sortBy
-                       (comparing (editDistance (printIdentifier defaultPrint i)))
-                       (map (printTypeConstructor defaultPrint) types))))
-          UnknownTypeVariable types i ->
-            "Unknown type variable " ++
-            curlyQuotes (printIdentifier defaultPrint i) ++
-            "\n" ++
-            "Type variables in scope are: " ++
-            intercalate
-              ", "
-              (map
-                 curlyQuotes
-                 (sortBy
-                    (comparing (editDistance (printIdentifier defaultPrint i)))
-                    (map (printTypeVariable defaultPrint) types)))
-          e -> show e)
-  where wrap f e = (f e)-- ++ "\n(" ++ show e ++ ")"
-
-editDistance :: [Char] -> [Char] -> Int
-editDistance = on (levenshteinDistance defaultEditCosts) (map toLower)
-
 runTypeChecker
-  :: (MonadThrow m, MonadCatch m, MonadIO m)
+  :: (MonadThrow m, MonadCatch m, MonadSupply Int m)
   => [Decl UnkindedType Identifier Location]
-  -> m ((SpecialSigs Name, SpecialTypes Name, [BindGroup Type Name (TypeSignature Type Name Location)], [TypeSignature Type Name Name], Map Identifier Name, Map Name (Class Type Name (TypeSignature Type Name Location)), [DataType Type Name]), [Int])
+  -> m ([BindGroup Type Name (TypeSignature Type Name Location)]
+       ,Context Type Name Location)
 runTypeChecker decls =
   let bindings =
         mapMaybe
@@ -361,140 +154,87 @@ runTypeChecker decls =
              DataDecl d -> Just d
              _ -> Nothing)
           decls
-  in runSupplyT
-       (do (specialTypes, specialSigs, signatures0, env0 ) <- setupEnv mempty
-           let specials = Specials specialSigs specialTypes
-           liftIO (putStrLn "-- Renaming types, classes and instances ...")
-           (typeClasses, signatures, subs, dataTypes) <-
-             catch
-               (do dataTypes <- renameDataTypes specials types
-                   consSigs <-
-                     fmap
-                       concat
-                       (mapM (dataTypeSignatures specialTypes) dataTypes)
-                   typeClasses0 <-
-                     mapM
-                       (\c -> do
-                          renamed <- renameClass specials mempty dataTypes c
-                          pure (className c, renamed))
-                       classes
-                   let typeClasses = map snd typeClasses0
-                   methodSigs <- fmap concat (mapM classSignatures typeClasses)
-                   let signatures = signatures0 <> consSigs <> methodSigs
-                       subs =
-                         M.fromList
-                           (mapMaybe
-                              (\(TypeSignature name _) ->
-                                 case name of
-                                   ValueName _ ident -> Just (Identifier ident, name)
-                                   ConstructorName _ ident ->
-                                     pure (Identifier ident, name)
-                                   MethodName _ ident ->
-                                     pure (Identifier ident, name)
-                                   _ -> Nothing)
-                              signatures) <>
-                         M.fromList (map (second className) typeClasses0)
-                   allInstances <-
-                     mapM
-                       (renameInstance specials subs dataTypes typeClasses)
-                       instances
-                   pure
-                     ( map
-                         (\typeClass ->
-                            typeClass
-                            { classInstances =
-                                filter
-                                  ((== className typeClass) . instanceClassName)
-                                  allInstances
-                            })
-                         typeClasses
-                     , signatures
-                     , subs
-                     , dataTypes))
-               (\e ->
-                  liftIO
-                    (do putStrLn (displayRenamerException specialTypes e)
-                        exitFailure))
-           liftIO (putStrLn "-- Signatures in scope:")
-           liftIO
-             (mapM_ (putStrLn . printTypeSignature defaultPrint specialTypes) signatures)
-           liftIO (putStrLn "-- Renaming variable/function declarations ...")
-           (renamedBindings, subs') <-
-             catch
-               (renameBindGroups specials subs dataTypes bindings)
-               (\e ->
-                  liftIO
-                    (do putStrLn (displayRenamerException specialTypes e)
-                        exitFailure))
+  in do builtins <- setupEnv mempty
+        let specials = builtinsSpecials builtins
+        (typeClasses, signatures, subs, dataTypes) <-
+          do dataTypes <- renameDataTypes specials types
+             consSigs <-
+               fmap
+                 concat
+                 (mapM
+                    (dataTypeSignatures (builtinsSpecialTypes builtins))
+                    dataTypes)
+             typeClasses0 <-
+               mapM
+                 (\c -> do
+                    renamed <- renameClass specials mempty dataTypes c
+                    pure (className c, renamed))
+                 classes
+             let typeClasses = map snd typeClasses0
+             methodSigs <- fmap concat (mapM classSignatures typeClasses)
+             let signatures = builtinsSignatures builtins <> consSigs <> methodSigs
+                 subs =
+                   M.fromList
+                     (mapMaybe
+                        (\(TypeSignature name _) ->
+                           case name of
+                             ValueName _ ident -> Just (Identifier ident, name)
+                             ConstructorName _ ident ->
+                               pure (Identifier ident, name)
+                             MethodName _ ident -> pure (Identifier ident, name)
+                             _ -> Nothing)
+                        signatures) <>
+                   M.fromList (map (second className) typeClasses0)
+             allInstances <-
+               mapM
+                 (renameInstance specials subs dataTypes typeClasses)
+                 instances
+             pure
+               ( map
+                   (\typeClass ->
+                      typeClass
+                      { classInstances =
+                          filter
+                            ((== className typeClass) . instanceClassName)
+                            allInstances
+                      })
+                   typeClasses
+               , signatures
+               , subs
+               , dataTypes)
+        (renamedBindings, subs') <-
+          renameBindGroups specials subs dataTypes bindings
+        env <-
+          foldM
+            (\e0 typeClass ->
+               addClass typeClass e0 >>= \e ->
+                 foldM
+                   (\e1 i -> do addInstance i e1)
+                   e
+                   (classInstances typeClass))
+            (builtinsTypeClasses builtins)
+            typeClasses
+        (bindGroups, env') <-
+          typeCheckModule env signatures (builtinsSpecialTypes builtins) renamedBindings
+        return
+          ( bindGroups
+          , Context
+            { contextSpecialSigs = builtinsSpecialSigs builtins
+            , contextSpecialTypes = builtinsSpecialTypes builtins
+            , contextSignatures = signatures
+            , contextScope = subs'
+            , contextTypeClasses = env'
+            , contextDataTypes = dataTypes
+            })
 
-           env <-
-             lift
-               (foldM
-                  (\e0 typeClass ->
-                     addClass
-                       typeClass
-                       e0 >>= \e ->
-                       foldM
-                         (\e1 i
-                           -> do addInstance i e1)
-                         e
-                         (classInstances typeClass))
-                  env0
-                  typeClasses)
-           liftIO (putStrLn "-- Inferring types ...")
-           (bindGroups, env') <-
-             lift
-               (catch
-                  (typeCheckModule env signatures specialTypes renamedBindings)
-                  (\e ->
-                     liftIO
-                       (do putStrLn (displayInferException specialTypes e)
-                           exitFailure)))
-           return
-             (specialSigs, specialTypes, bindGroups, signatures, subs', env', dataTypes))
-       [0 ..]
-
-classSignatures :: MonadThrow m => Class Type Name l -> m [TypeSignature Type Name Name]
-classSignatures cls =
-  mapM
-    (\(name, scheme) ->
-       TypeSignature <$> pure name <*> classMethodScheme cls scheme)
-    (M.toList (classMethods cls))
-
-dataTypeSignatures
-  :: Monad m
-  => SpecialTypes Name -> DataType Type Name -> m [TypeSignature Type Name Name]
-dataTypeSignatures specialTypes dt@(DataType _ vs cs) = mapM construct cs
-  where
-    construct (DataTypeConstructor cname fs) =
-      pure
-        (TypeSignature
-           cname
-           (Forall
-              vs
-              (Qualified
-                 []
-                 (foldr
-                    makeArrow
-                    (foldl
-                       ApplicationType
-                       (dataTypeConstructor dt)
-                       (map VariableType vs))
-                    fs))))
-      where
-        makeArrow :: Type Name -> Type Name -> Type Name
-        a `makeArrow` b =
-          ApplicationType
-            (ApplicationType
-               (ConstructorType (specialTypesFunction specialTypes))
-               a)
-            b
+--------------------------------------------------------------------------------
+-- Setting the context
 
 -- | Setup the class environment.
 setupEnv
-  :: (MonadThrow m)
+  :: (MonadThrow m, MonadSupply Int m)
   => Map Name (Class Type Name Location)
-  -> SupplyT Int m (SpecialTypes Name, SpecialSigs Name, [TypeSignature Type Name Name], Map Name (Class Type Name Location))
+  -> m (Builtins Type Name Location)
 setupEnv env = do
   theArrow <- supplyTypeName "(->)"
   theChar <- supplyTypeName "Char"
@@ -549,20 +289,21 @@ setupEnv env = do
       (IsIn
          (className numClass)
          [ConstructorType (specialTypesInteger specialTypes)])
-      [( "times"
-       , Alternative
-           (Location 0 0 0 0)
-           []
-           (VariableExpression
-              (Location 0 0 0 0)
-              (PrimopName PrimopIntegerTimes)))
-      ,( "plus"
-       , Alternative
-           (Location 0 0 0 0)
-           []
-           (VariableExpression
-              (Location 0 0 0 0)
-              (PrimopName PrimopIntegerPlus)))]
+      [ ( "times"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopIntegerTimes)))
+      , ( "plus"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopIntegerPlus)))
+      ]
   negInt <-
     makeInst
       specials
@@ -582,8 +323,17 @@ setupEnv env = do
           addClass numClass >=>
           addClass negClass >=>
           addClass fracClass >=> addInstance numInt >=> addInstance negInt
-    in lift (update env)
-  pure (specialTypes, specialSigs, signatures, env')
+    in update env
+  pure
+    Builtins
+    { builtinsSpecialSigs = specialSigs
+    , builtinsSpecialTypes = specialTypes
+    , builtinsSignatures = signatures
+    , builtinsTypeClasses = env'
+    }
+
+--------------------------------------------------------------------------------
+-- Builtin classes and primops
 
 makePrimOps
   :: (MonadSupply Int m, MonadThrow m)
@@ -668,36 +418,3 @@ makeFracClass function = do
     infixr 1 -->
     (-->) :: Type Name -> Type Name -> Type Name
     a --> b = ApplicationType (ApplicationType (ConstructorType function) a) b
-
-makeClass
-  :: MonadSupply Int m
-  => Identifier
-  -> [TypeVariable Name]
-  -> [(Name, Scheme t Name)]
-  -> m (Class t Name l)
-makeClass name vars methods = do
-  name' <- supplyClassName name
-  pure
-    (Class
-     { className = name'
-     , classTypeVariables = vars
-     , classInstances = []
-     , classMethods = M.fromList methods
-     , classSuperclasses = mempty
-     })
-
-makeInst
-  :: MonadSupply Int m
-  => Specials Name
-  -> Predicate Type Name
-  -> [(String, Alternative Type Name l)]
-  -> m (Instance Type Name l)
-makeInst specials pred' methods = do
-  name <- supplyDictName (predicateToDict specials pred')
-  methods' <-
-    mapM
-      (\(key, alt) -> do
-         key' <- supplyMethodName (Identifier key)
-         pure (key', alt))
-      methods
-  pure (Instance (Qualified [] pred') (Dictionary name (M.fromList methods')))

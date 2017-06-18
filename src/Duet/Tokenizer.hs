@@ -14,43 +14,11 @@ import           Data.List
 import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
+import           Duet.Printer
 import           Duet.Types
 import           Text.Parsec hiding (anyToken)
 import           Text.Parsec.Text
 import           Text.Printf
-
-data Token
-  = If
-  | Imply
-  | Then
-  | Data
-  | ForallToken
-  | Else
-  | Case
-  | Where
-  | Of
-  | Backslash
-  | Let
-  | In
-  | RightArrow
-  | OpenParen
-  | CloseParen
-  | Equals
-  | Colons
-  | Variable !Text
-  | Constructor !Text
-  | Character !Char
-  | String !Text
-  | Operator !Text
-  | Period
-  | Comma
-  | Integer !Integer
-  | Decimal !Double
-  | NonIndentedNewline
-  | Bar
-  | ClassToken
-  | InstanceToken
-  deriving (Eq, Ord)
 
 tokenize :: FilePath -> Text -> Either ParseError [(Token, Location)]
 tokenize fp t = parse tokensTokenizer fp t
@@ -319,9 +287,6 @@ parseNumbers prespaces = parser <?> "number (e.g. 42, 3.141, etc.)"
 
 smartQuotes :: [Char] -> [Char]
 smartQuotes t = "“" <> t <> "”"
-
-curlyQuotes :: [Char] -> [Char]
-curlyQuotes t = "‘" <> t <> "’"
 
 equalToken :: Token -> TokenParser Location
 equalToken p = fmap snd (satisfyToken (==p) <?> tokenStr p)

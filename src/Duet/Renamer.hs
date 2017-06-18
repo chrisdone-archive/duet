@@ -45,11 +45,6 @@ import           Duet.Types
 --------------------------------------------------------------------------------
 -- Data type renaming (this includes kind checking)
 
-data Specials n = Specials
-  { specialSigs :: SpecialSigs n
-  , specialTypes :: SpecialTypes n
-  }
-
 renameDataTypes
   :: (MonadSupply Int m, MonadThrow m)
   => Specials Name

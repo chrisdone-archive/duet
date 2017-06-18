@@ -31,6 +31,7 @@ library
     Duet.Resolver
     Duet.Stepper
     Duet.Supply
+    Duet.Context
     Control.Monad.Supply
 
 executable duet
