@@ -1,5 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
@@ -693,12 +692,12 @@ makeInst
   -> Predicate Type Name
   -> [(String, Alternative Type Name l)]
   -> m (Instance Type Name l)
-makeInst specials pred methods = do
-  name <- supplyDictName (predicateToDict specials pred)
+makeInst specials pred' methods = do
+  name <- supplyDictName (predicateToDict specials pred')
   methods' <-
     mapM
       (\(key, alt) -> do
          key' <- supplyMethodName (Identifier key)
          pure (key', alt))
       methods
-  pure (Instance (Qualified [] pred) (Dictionary name (M.fromList methods')))
+  pure (Instance (Qualified [] pred') (Dictionary name (M.fromList methods')))
