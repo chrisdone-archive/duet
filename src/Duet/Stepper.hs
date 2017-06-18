@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE Strict #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -29,14 +30,14 @@ import           Duet.Types
 
 expandSeq1
   :: (MonadThrow m, MonadSupply Int m)
-  => Map Name (Class Type Name (TypeSignature Type Name Location))
-  -> SpecialSigs Name
-  -> [TypeSignature Type Name Name]
-  -> Expression Type Name (TypeSignature Type Name Location)
+  => Context Type Name (Location)
   -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
+  -> Expression Type Name (TypeSignature Type Name Location)
   -> m (Expression Type Name (TypeSignature Type Name Location))
-expandSeq1 typeClassEnv specialSigs signatures e b  =
-  evalStateT (go e) False
+expandSeq1 (Context { contextTypeClasses = typeClassEnv
+                    , contextSpecialSigs = specialSigs
+                    , contextSignatures = signatures
+                    }) b e = evalStateT (go e) False
   where
     go =
       \case
@@ -52,7 +53,7 @@ expandSeq1 typeClassEnv specialSigs signatures e b  =
             if alreadyExpanded
               then pure e0
               else do
-                e' <- lift (expandWhnf typeClassEnv specialSigs signatures e0 b )
+                e' <- lift (expandWhnf typeClassEnv specialSigs signatures e0 b)
                 put (e' /= e0)
                 pure e'
 

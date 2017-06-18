@@ -10,6 +10,7 @@
 
 module Duet.Types where
 
+import           Text.Parsec (ParseError)
 import           Control.Monad.Catch
 import           Control.Monad.State
 import           Data.Map.Strict (Map)
@@ -116,11 +117,16 @@ data InferState = InferState
   -- , inferStateExpressionTypes :: ![(Expression (), Scheme)]
   } deriving (Show)
 
+data ParseException
+  = TokenizerError ParseError
+  | ParserError ParseError
+ deriving (Typeable, Show)
+instance Exception ParseException
+
 data StepException
   = CouldntFindName !Name
   | CouldntFindNameByString !String
   | TypeAtValueScope !Name
-
   deriving (Typeable, Show)
 instance Exception StepException
 
@@ -480,6 +486,6 @@ data Token
   deriving (Eq, Ord)
 
 data Specials n = Specials
-  { specialSigs :: SpecialSigs n
-  , specialTypes :: SpecialTypes n
+  { specialsSigs :: SpecialSigs n
+  , specialsTypes :: SpecialTypes n
   }

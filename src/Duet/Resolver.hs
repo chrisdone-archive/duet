@@ -9,15 +9,46 @@
 
 module Duet.Resolver where
 
-import Control.Monad.Catch
-import Control.Monad.Supply
-import Data.List
-import Data.Map.Strict (Map)
-import Data.Maybe
-import Duet.Infer
-import Duet.Printer
-import Duet.Supply
-import Duet.Types
+import           Control.Monad.Catch
+import           Control.Monad.Supply
+import           Data.List
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
+import           Data.Maybe
+import           Duet.Infer
+import           Duet.Printer
+import           Duet.Supply
+import           Duet.Types
+
+
+resolveTypeClasses
+  :: (Show l, MonadSupply Int f, MonadThrow f)
+  => Map Name (Class Type Name (TypeSignature Type Name l))
+  -> SpecialTypes Name
+  -> f (Map Name (Class Type Name (TypeSignature Type Name l)))
+resolveTypeClasses typeClasses specialTypes = go typeClasses
+  where
+    go =
+      fmap M.fromList .
+      mapM
+        (\(name, cls) -> do
+           is <-
+             mapM
+               (\inst -> do
+                  ms <-
+                    mapM
+                      (\(nam, alt) ->
+                         fmap (nam, ) (resolveAlt typeClasses specialTypes alt))
+                      (M.toList (dictionaryMethods (instanceDictionary inst)))
+                  pure
+                    inst
+                    { instanceDictionary =
+                        (instanceDictionary inst)
+                        {dictionaryMethods = M.fromList ms}
+                    })
+               (classInstances cls)
+           pure (name, cls {classInstances = is})) .
+      M.toList
 
 resolveBindGroup
   :: (MonadSupply Int m, MonadThrow m ,Show l)

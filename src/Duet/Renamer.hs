@@ -120,7 +120,7 @@ renameField specials typeConstructors vars name fe = do
       case find ((\(j, _, _, _) -> j == i)) typeConstructors of
         Just (_, name', vs, _) -> pure (name', vs)
         Nothing ->
-          case specialTypesBool (specialTypes specials) of
+          case specialTypesBool (specialsTypes specials) of
             DataType n@(TypeName _ i') vars _
               | Identifier i' == i ->
                 pure
@@ -131,7 +131,7 @@ renameField specials typeConstructors vars name fe = do
                            (Identifier i, TypeVariable n k))
                       vars)
             _ ->
-              case specialTypesFunction (specialTypes specials) of
+              case specialTypesFunction (specialsTypes specials) of
                 TypeConstructor n@(TypeName _ i') _
                   | Identifier i' == i -> do
                     vars <-
@@ -295,7 +295,7 @@ renameDict specials subs types (Dictionary _ methods) predicate = do
 
 predicateToDict :: Specials Name -> ((Predicate Type Name)) -> String
 predicateToDict specials pred =
-  "$dict" ++ map normalize (printPredicate defaultPrint (specialTypes specials) pred)
+  "$dict" ++ map normalize (printPredicate defaultPrint (specialsTypes specials) pred)
   where
     normalize c
       | isDigit c || isLetter c = c
@@ -389,8 +389,8 @@ renameType specials tyVars types t = either go pure (isType t)
               a' <- go a
               throwM (KindTooManyArgs f' (typeKind f') a')
     specials' =
-      [ setup (specialTypesFunction . specialTypes)
-      , setup (dataTypeToConstructor . specialTypesBool . specialTypes)
+      [ setup (specialTypesFunction . specialsTypes)
+      , setup (dataTypeToConstructor . specialTypesBool . specialsTypes)
       ]
       where
         setup f = do
@@ -561,7 +561,7 @@ renameExpression specials subs types = go
               Nothing -> do
                 ident <- identifyValue i
                 case lookup ident operatorTable of
-                  Just f -> pure (f (specialSigs specials))
+                  Just f -> pure (f (specialsSigs specials))
                   _ -> throwM (IdentifierNotInVarScope subs ident)
           InfixExpression l <$> go x <*> pure (orig, VariableExpression l0 i') <*>
             go y

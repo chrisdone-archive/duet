@@ -10,6 +10,8 @@
 module Duet.Parser where
 
 import           Control.Monad
+import           Control.Monad.Catch
+import           Control.Monad.IO.Class
 import           Data.List
 import qualified Data.Map.Strict as M
 import           Data.Text (Text)
@@ -20,18 +22,19 @@ import           Duet.Tokenizer
 import           Duet.Types
 import           Text.Parsec hiding (satisfy, anyToken)
 
-parseFile :: FilePath -> IO (Either ParseError [Decl UnkindedType Identifier Location])
-parseFile fp = do t <- T.readFile fp
-                  return (parseText fp t)
+parseFile :: (MonadIO m, MonadThrow m) => FilePath -> m [Decl UnkindedType Identifier Location]
+parseFile fp = do
+  t <- liftIO (T.readFile fp)
+  parseText fp t
 
-parseText :: SourceName -> Text -> Either ParseError [Decl UnkindedType Identifier Location]
+parseText :: MonadThrow m => SourceName -> Text -> m [Decl UnkindedType Identifier Location]
 parseText fp inp =
   case parse tokensTokenizer fp (inp) of
-    Left e -> Left e
+    Left e -> throwM (TokenizerError e)
     Right tokens' ->
       case runParser tokensParser 0 fp tokens' of
-        Left e -> Left e
-        Right ast -> Right ast
+        Left e -> throwM (ParserError e)
+        Right ast -> pure ast
 
 parseType' :: Num u => SourceName -> Parsec [(Token, Location)] u b -> Text -> Either ParseError b
 parseType' fp p inp =

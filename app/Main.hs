@@ -8,14 +8,12 @@
 
 module Main where
 
-import           Control.Arrow
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.Fix
 import           Control.Monad.Supply
 import           Control.Monad.Trans
 import           Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Text (Text)
@@ -31,87 +29,93 @@ import           Duet.Supply
 import           Duet.Types
 import           System.Environment
 
+-- | Main entry point.
 main :: IO ()
 main = do
   args <- getArgs
   case args of
     (file:is) -> do
       text <- T.readFile file
-      compileStepText "<interactive>" (listToMaybe is) text
+      evalSupplyT
+        (do (binds, context) <- createContext "<interactive>" text
+            maybe (return ()) (runStepper context binds) (listToMaybe is))
+        [1 ..]
     _ -> error "usage: duet <file>"
 
-compileStepText :: String -> Maybe String -> Text -> IO ()
-compileStepText file i text =
-  case parseText file text of
-    Left e -> error (show e)
-    Right decls -> do
-      evalSupplyT
-        (do (bindGroups, context) <- runTypeChecker decls
-            let specials = contextSpecials context
-            typeClassEnv' <-
-              fmap
-                M.fromList
-                (mapM
-                   (\(name, cls) -> do
-                      is <-
-                        mapM
-                          (\inst -> do
-                             ms <-
-                               mapM
-                                 (\(nam, alt) ->
-                                    fmap
-                                      (nam, )
-                                      (resolveAlt
-                                         (contextTypeClasses context)
-                                         (contextSpecialTypes context)
-                                         alt))
-                                 (M.toList
-                                    (dictionaryMethods (instanceDictionary inst)))
-                             pure
-                               inst
-                               { instanceDictionary =
-                                   (instanceDictionary inst)
-                                   {dictionaryMethods = M.fromList ms}
-                               })
-                          (classInstances cls)
-                      pure (name, cls {classInstances = is}))
-                   (M.toList (contextTypeClasses context)))
-            bindGroups' <-
-              (mapM
-                 (resolveBindGroup typeClassEnv' (contextSpecialTypes context))
-                 bindGroups)
-            case i of
-              Nothing -> return ()
-              Just i' -> do
-                e0 <- lookupNameByString i' bindGroups'
-                fix
-                  (\loopy lastString e -> do
-                     e' <-
-                       expandSeq1
-                         typeClassEnv'
-                         (contextSpecialSigs context)
-                         (contextSignatures context)
-                         e
-                         bindGroups'
-                     let string = printExpression (defaultPrint) e
-                     when
-                       (string /= lastString && (True || cleanExpression e))
-                       (liftIO (putStrLn string))
-                     if fmap (const ()) e' /= fmap (const ()) e
-                       then do
-                         renameExpression
-                           specials
-                           (contextScope context)
-                           (contextDataTypes context)
-                           e' >>=
-                           loopy string
-                       else pure ())
-                  ""
-                  e0)
-        [0 ..]
+--------------------------------------------------------------------------------
+-- Context setup
+
+-- | Create a context of all renamed, checked and resolved code.
+createContext
+  :: (MonadSupply Int m, MonadThrow m)
+  => String
+  -> Text
+  -> m ([BindGroup Type Name (TypeSignature Type Name Location)], Context Type Name Location)
+createContext file text = do
+  do decls <- parseText file text
+     builtins <- setupEnv mempty
+     let specials = builtinsSpecials builtins
+     -- Renaming
+     (typeClasses, signatures, renamedBindings, scope, dataTypes) <-
+       renameEverything decls specials builtins
+     -- Type class definition
+     addedTypeClasses <- addClasses builtins typeClasses
+     -- Type checking
+     (bindGroups, typeCheckedClasses) <-
+       typeCheckModule
+         addedTypeClasses
+         signatures
+         (builtinsSpecialTypes builtins)
+         renamedBindings
+     -- Type class resolution
+     resolvedTypeClasses <-
+       resolveTypeClasses typeCheckedClasses (builtinsSpecialTypes builtins)
+     resolvedBindGroups <-
+       mapM
+         (resolveBindGroup resolvedTypeClasses (builtinsSpecialTypes builtins))
+         bindGroups
+     -- Create a context of everything
+     let context =
+           Context
+           { contextSpecialSigs = builtinsSpecialSigs builtins
+           , contextSpecialTypes = builtinsSpecialTypes builtins
+           , contextSignatures = signatures
+           , contextScope = scope
+           , contextTypeClasses = resolvedTypeClasses
+           , contextDataTypes = dataTypes
+           }
+     pure (resolvedBindGroups, context)
 
 --------------------------------------------------------------------------------
--- Clean expressions
+-- Stepper
+
+-- | Run the substitution model on the code.
+runStepper
+  :: (MonadIO m, MonadSupply Int m, MonadThrow m)
+  => Context Type Name Location
+  -> [BindGroup Type Name (TypeSignature Type Name Location)]
+  -> String
+  -> m ()
+runStepper context bindGroups' i = do
+  e0 <- lookupNameByString i bindGroups'
+  fix
+    (\loopy lastString e -> do
+       e' <- expandSeq1 context bindGroups' e
+       let string = printExpression (defaultPrint) e
+       when
+         (string /= lastString && (True || cleanExpression e))
+         (liftIO (putStrLn string))
+       if fmap (const ()) e' /= fmap (const ()) e
+         then do
+           renameExpression
+             (contextSpecials context)
+             (contextScope context)
+             (contextDataTypes context)
+             e' >>=
+             loopy string
+         else pure ())
+    ""
+    e0
 
 -- | Filter out expressions with intermediate case, if and immediately-applied lambdas.
 cleanExpression :: Expression Type i l -> Bool
@@ -123,109 +127,6 @@ cleanExpression =
       | (LambdaExpression {}, args) <- fargs e0 -> null args
     ApplicationExpression _ f x -> cleanExpression f && cleanExpression x
     _ -> True
-
-runTypeChecker
-  :: (MonadThrow m, MonadCatch m, MonadSupply Int m)
-  => [Decl UnkindedType Identifier Location]
-  -> m ([BindGroup Type Name (TypeSignature Type Name Location)]
-       ,Context Type Name Location)
-runTypeChecker decls =
-  let bindings =
-        mapMaybe
-          (\case
-             BindGroupDecl d -> Just d
-             _ -> Nothing)
-          decls
-      classes =
-        mapMaybe
-          (\case
-             ClassDecl d -> Just d
-             _ -> Nothing)
-          decls
-      instances =
-        mapMaybe
-          (\case
-             InstanceDecl d -> Just d
-             _ -> Nothing)
-          decls
-      types =
-        mapMaybe
-          (\case
-             DataDecl d -> Just d
-             _ -> Nothing)
-          decls
-  in do builtins <- setupEnv mempty
-        let specials = builtinsSpecials builtins
-        (typeClasses, signatures, subs, dataTypes) <-
-          do dataTypes <- renameDataTypes specials types
-             consSigs <-
-               fmap
-                 concat
-                 (mapM
-                    (dataTypeSignatures (builtinsSpecialTypes builtins))
-                    dataTypes)
-             typeClasses0 <-
-               mapM
-                 (\c -> do
-                    renamed <- renameClass specials mempty dataTypes c
-                    pure (className c, renamed))
-                 classes
-             let typeClasses = map snd typeClasses0
-             methodSigs <- fmap concat (mapM classSignatures typeClasses)
-             let signatures = builtinsSignatures builtins <> consSigs <> methodSigs
-                 subs =
-                   M.fromList
-                     (mapMaybe
-                        (\(TypeSignature name _) ->
-                           case name of
-                             ValueName _ ident -> Just (Identifier ident, name)
-                             ConstructorName _ ident ->
-                               pure (Identifier ident, name)
-                             MethodName _ ident -> pure (Identifier ident, name)
-                             _ -> Nothing)
-                        signatures) <>
-                   M.fromList (map (second className) typeClasses0)
-             allInstances <-
-               mapM
-                 (renameInstance specials subs dataTypes typeClasses)
-                 instances
-             pure
-               ( map
-                   (\typeClass ->
-                      typeClass
-                      { classInstances =
-                          filter
-                            ((== className typeClass) . instanceClassName)
-                            allInstances
-                      })
-                   typeClasses
-               , signatures
-               , subs
-               , dataTypes)
-        (renamedBindings, subs') <-
-          renameBindGroups specials subs dataTypes bindings
-        env <-
-          foldM
-            (\e0 typeClass ->
-               addClass typeClass e0 >>= \e ->
-                 foldM
-                   (\e1 i -> do addInstance i e1)
-                   e
-                   (classInstances typeClass))
-            (builtinsTypeClasses builtins)
-            typeClasses
-        (bindGroups, env') <-
-          typeCheckModule env signatures (builtinsSpecialTypes builtins) renamedBindings
-        return
-          ( bindGroups
-          , Context
-            { contextSpecialSigs = builtinsSpecialSigs builtins
-            , contextSpecialTypes = builtinsSpecialTypes builtins
-            , contextSignatures = signatures
-            , contextScope = subs'
-            , contextTypeClasses = env'
-            , contextDataTypes = dataTypes
-            })
 
 --------------------------------------------------------------------------------
 -- Setting the context
