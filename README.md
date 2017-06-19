@@ -9,6 +9,13 @@ the developer and the computer.
 * [Beta](http://chrisdone.com/toys/duet-beta/) - April 30th 2017
 * [Alpha](http://chrisdone.com/toys/duet-alpha/) - April 27th 2017
 
+## Building locally
+
+    $ stack build
+
+The web UI can be built with `sh build.sh`, but probably nobody but me
+needs that.
+
 ## Command-line usage
 
 Run with the file and function to evaluate:
