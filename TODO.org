@@ -1,3 +1,0 @@
-* DONE Parser for "data" decls
-* DONE Integrate "DataType" into type checker
-* DONE Integrate "DataType" into stepper
