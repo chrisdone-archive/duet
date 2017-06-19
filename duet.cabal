@@ -68,9 +68,6 @@ executable duet-web
     Main.hs
   ghc-options:
     -threaded -O2
-  other-modules:
-    Snappy
-    Snap
   build-depends:
     duet,
     base
@@ -82,4 +79,6 @@ executable duet-web
       mtl,
       containers,
       aeson,
-      ghcjs-base
+      ghcjs-base,
+      reflex,
+      reflex-dom
