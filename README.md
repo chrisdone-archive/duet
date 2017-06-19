@@ -5,6 +5,7 @@ the developer and the computer.
 
 ## Web releases
 
+* [Delta](http://chrisdone.com/toys/duet-delta/) - June 19 2017
 * [Gamma](http://chrisdone.com/toys/duet-gamma/) - May 2nd 2017
 * [Beta](http://chrisdone.com/toys/duet-beta/) - April 30th 2017
 * [Alpha](http://chrisdone.com/toys/duet-alpha/) - April 27th 2017
