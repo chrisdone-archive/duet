@@ -42,38 +42,45 @@ The below is a pretty comprehensive example of supported syntax so
 far:
 
 ``` haskell
+class Reader a where
+  reader :: List Ch -> a
+class Shower a where
+  shower :: a -> List Ch
+instance Shower Nat where
+  shower = \n ->
+    case n of
+      Zero -> Cons Z Nil
+      Succ n -> Cons S (shower n)
+data Nat = Succ Nat | Zero
+instance Reader Nat where
+  reader = \cs ->
+    case cs of
+      Cons Z Nil -> Zero
+      Cons S xs  -> Succ (reader xs)
+      _ -> Zero
 data List a = Nil | Cons a (List a)
-data Tuple a b = Tuple a b
-class Functor (f :: Type -> Type) where
-  map :: (a -> b) -> f a -> f b
-instance Functor Maybe where
-  map = \f m ->
-    case m of
-      Nothing -> Nothing
-      Just a -> Just (f a)
-data Maybe a = Nothing | Just a
-id = \x -> x
-not = \p -> if p then False else True
-foldr = \cons nil l ->
-  case l of
-    Nil -> nil
-    Cons x xs -> cons x (foldr cons nil xs)
-foldl = \f z l ->
-  case l of
-    Nil -> z
-    Cons x xs -> foldl f (f z x) xs
-map = \f xs ->
-  case xs of
-    Nil -> Nil
-    Cons x xs -> Cons (f x) (map f xs)
-zip = \xs ys ->
-  case Tuple xs ys of
-    Tuple Nil _ -> Nil
-    Tuple _ Nil -> Nil
-    Tuple (Cons x xs1) (Cons y ys1) ->
-      Cons (Tuple x y) (zip xs1 ys1)
-list = (Cons True (Cons False Nil))
-main = zip list (map not list)
+data Ch = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z
+class Equal a where
+  equal :: a -> a -> Bool
+instance Equal Nat where
+  equal =
+    \a b ->
+      case a of
+        Zero ->
+          case b of
+            Zero -> True
+            _ -> False
+        Succ n ->
+          case b of
+            Succ m -> equal n m
+            _ -> False
+        _ -> False
+not = \b -> case b of
+              True -> False
+              False -> True
+notEqual :: Equal a => a -> a -> Bool
+notEqual = \x y -> not (equal x y)
+main = equal (reader (shower (Succ Zero))) (Succ Zero)
 ```
 
 ## Holes
