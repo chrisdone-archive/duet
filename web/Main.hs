@@ -36,8 +36,6 @@ import           Reflex.Dom
 --------------------------------------------------------------------------------
 -- Constants
 
-defaultInput = "main = 2 * (10 - (5 + -3))"
-
 maxSteps = 100
 
 inputName = "<interactive>"
@@ -45,7 +43,7 @@ inputName = "<interactive>"
 mainFunc = "main"
 
 exampleInputs =
-  [("Arithmetic",defaultInput)
+  [("Arithmetic",arithmeticSource)
   ,("Factorial",facSource)
   ,("Lists",listsSource)
   ,("Folds", foldsSource)
@@ -66,7 +64,7 @@ main =
             (row
                (do input <- col 6 (makeSourceInput currentSource)
                    result <- mapDyn compileAndRun input
-                   col 6 (makeStepsBox result)
+                   col 6 (makeStepsBox currentSource result)
                    pure result))
         makeErrorsBox result)
 
@@ -77,7 +75,7 @@ examples = do
           12
           (do dropper <-
                 dropdown
-                  (fromMaybe "" (lookup defaultExample exampleInputs))
+                  (fromMaybe "" (listToMaybe (fmap snd exampleInputs)))
                   (constDyn (M.fromList (map swap exampleInputs)))
                   (def :: DropdownConfig Spider String)
               pure (_dropdown_value dropper))))
@@ -94,27 +92,28 @@ makeHeader =
                    "Duet is a dialect of Haskell. This is a demonstration page with an in-browser type-checker and interpreter."))))
 
 makeSourceInput currentSource = do
+  el "h2" (text "Input program")
+  defInput <- sample (current currentSource)
   input <-
-    do el "h2" (text "Input program")
-       defInput <- sample (current currentSource)
-       el
-         "p"
-         (textArea
-            (def :: TextAreaConfig Spider)
-            { _textAreaConfig_initialValue = defInput
-            , _textAreaConfig_setValue = updated currentSource
-            , _textAreaConfig_attributes =
-                constDyn
-                  (M.fromList
-                     [ ("class", "form-control")
-                     , ("rows", "15")
-                     , ("style", "font-family: monospace")
-                     ])
-            })
+    el
+      "p"
+      (textArea
+         (def :: TextAreaConfig Spider)
+         { _textAreaConfig_initialValue = defInput
+         , _textAreaConfig_setValue = updated currentSource
+         , _textAreaConfig_attributes =
+             constDyn
+               (M.fromList
+                  [ ("class", "form-control")
+                  , ("rows", "15")
+                  , ("style", "font-family: monospace")
+                  ])
+         })
   debouncedInputEv <- debounce 0.5 (updated (_textArea_value input))
-  foldDyn const defaultInput debouncedInputEv
+  foldDyn const defInput debouncedInputEv
 
-makeStepsBox result = do
+makeStepsBox currentSource result = do
+  initialValue <- fmap initialValue (sample (current currentSource))
   stepsText <-
     foldDyn
       (\result last -> either (const last) (printSteps . Right) result)
@@ -141,7 +140,7 @@ makeStepsBox result = do
        , _textAreaConfig_setValue = updated stepsText
        })
   where
-    initialValue = printSteps (compileAndRun defaultInput)
+    initialValue = printSteps . compileAndRun
     defaultAttributes = [("class", "form-control"), ("rows", "15")]
 
 makeErrorsBox result = do
@@ -611,3 +610,5 @@ readshowSource = "class Reader a where\n\
                   \\n\
                   \main = equal (reader (shower (Succ Zero))) (Succ Zero)\n\
                   \"
+
+arithmeticSource = "main = 2 * (10 - (5 + -3))"
