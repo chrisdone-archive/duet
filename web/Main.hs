@@ -56,34 +56,41 @@ exampleInputs =
 main =
   mainWidget
     (do makeHeader
-        currentSource <- examples
         container
           (row
-             (do result <-
+             (do (currentSource, result) <-
                    col
                      6
-                     (do input <- makeSourceInput currentSource
+                     (do el "h2" (text "Input program")
+                         currentSource <- examples
+                         input <- makeSourceInput currentSource
                          result <- mapDyn compileAndRun input
                          makeErrorsBox result
-                         pure result)
-                 col 6 (do makeStepsBox currentSource result)
+                         pure (currentSource, result))
+                 col 6 (do el "h2" (text "Steps")
+                           currentMode <- stepmodes
+                           makeStepsBox currentMode currentSource result)
                  pure ())))
 
+stepmodes =
+  el
+    "p"
+    (do dropper <-
+          dropdown
+            True
+            (constDyn (M.fromList [(True, "Complete output"),(False, "Concise output")]))
+            (def :: DropdownConfig Spider Bool)
+        pure (_dropdown_value dropper))
+
 examples = do
-  container
-    (row
-       (col
-          12
-          (do el "p"
-                 (text "You can choose from a set of examples I've prepared that demonstrate Duet's current feature set:")
-              el
-                "p"
-                (do dropper <-
-                      dropdown
-                        (fromMaybe "" (listToMaybe (fmap snd exampleInputs)))
-                        (constDyn (M.fromList (map swap exampleInputs)))
-                        (def :: DropdownConfig Spider String)
-                    pure (_dropdown_value dropper)))))
+  el
+    "p"
+    (do dropper <-
+          dropdown
+            (fromMaybe "" (listToMaybe (fmap snd exampleInputs)))
+            (constDyn (M.fromList (map swap exampleInputs)))
+            (def :: DropdownConfig Spider String)
+        pure (_dropdown_value dropper))
 
 makeHeader =
   container
@@ -102,7 +109,6 @@ makeHeader =
                    "Duet is an educational dialect of Haskell aimed at interactivity. This is a demonstration page of the work-in-progress implementation, compiled to JavaScript, consisting of a type-checker and interpreter."))))
 
 makeSourceInput currentSource = do
-  el "h2" (text "Input program")
   defInput <- sample (current currentSource)
   input <-
     el
@@ -122,14 +128,16 @@ makeSourceInput currentSource = do
   debouncedInputEv <- debounce 0.5 (updated (_textArea_value input))
   foldDyn const defInput debouncedInputEv
 
-makeStepsBox currentSource result = do
-  initialValue <- fmap initialValue (sample (current currentSource))
+makeStepsBox currentMode currentSource result = do
+  initialMode <- sample (current currentMode)
+  initialValue <- fmap (initialValue initialMode) (sample (current currentSource))
+  modesAndResults <- combineDyn (,) currentMode result
   stepsText <-
     foldDyn
-      (\result last -> either (const last) (printSteps . Right) result)
+      (\(mode, result) last ->
+         either (const last) (printSteps mode . Right) result)
       initialValue
-      (updated result)
-  el "h2" (text "Steps")
+      (updated modesAndResults)
   attributes <-
     mapDyn
       (either
@@ -150,7 +158,7 @@ makeStepsBox currentSource result = do
        , _textAreaConfig_setValue = updated stepsText
        })
   where
-    initialValue = printSteps . compileAndRun
+    initialValue complete = printSteps complete . compileAndRun
     defaultAttributes =
       [("readonly", "readonly"), ("class", "form-control"), ("rows", "15")]
 
@@ -178,9 +186,17 @@ compileAndRun text =
   evalSupplyT
     (do (binds, context) <- createContext inputName (T.pack text)
         execWriterT (runStepper maxSteps context binds mainFunc))
-    [1 ..] :: Either SomeException [String]
+    [1 ..] :: Either SomeException [Expression Type Name ()]
 
-printSteps = either (const "") (unlines . reverse)
+printSteps complete =
+  either
+    (const "")
+    (unlines . map (printExpression defaultPrint) . filter mode . reverse)
+  where
+    mode =
+      if complete
+        then const True
+        else cleanExpression
 
 --------------------------------------------------------------------------------
 -- Bootstrap short-hands
@@ -265,7 +281,7 @@ createContext file text = do
 
 -- | Run the substitution model on the code.
 runStepper
-  :: (MonadWriter [String] m, MonadSupply Int m, MonadThrow m)
+  :: (MonadWriter [Expression Type Name ()] m, MonadSupply Int m, MonadThrow m)
   => Int
   -> Context Type Name Location
   -> [BindGroup Type Name (TypeSignature Type Name Location)]
@@ -278,8 +294,8 @@ runStepper maxSteps context bindGroups' i = do
        e' <- expandSeq1 context bindGroups' e
        let string = printExpression (defaultPrint) e
        when
-         (string /= lastString && (True || cleanExpression e))
-         (tell [string])
+         (string /= lastString)
+         (tell [fmap (const ()) e])
        if (fmap (const ()) e' /= fmap (const ()) e) && count < maxSteps
          then do
            renameExpression
@@ -288,8 +304,7 @@ runStepper maxSteps context bindGroups' i = do
              (contextDataTypes context)
              e' >>=
              loopy (count + 1) string
-         else when (count >= maxSteps)
-                   (tell ["<max steps exceeded: " ++ show maxSteps ++ ">"]))
+         else pure ())
     1
     ""
     e0
