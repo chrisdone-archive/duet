@@ -576,7 +576,7 @@ foldsSource =
 
 facSource = "go = \\n res ->\n\
              \  case n of\n\
-             \    0 -> 1\n\
+             \    0 -> res\n\
              \    n -> go (n - 1) (res * n)\n\
              \\n\
              \fac = \\n -> go n 1\n\
