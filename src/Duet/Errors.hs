@@ -41,8 +41,7 @@ displayInferException specialTypes =
       "The type of a definition doesn't match its explicit type:\n\n  " ++
      printScheme defaultPrint specialTypes sc1 ++ "\n\nand\n\n  " ++
 
-     printScheme defaultPrint specialTypes sc2 ++ "\n\n" ++
-       show sc1 ++ "\n" ++ show sc2
+     printScheme defaultPrint specialTypes sc2
     NotInScope scope name ->
       "Not in scope " ++
       curlyQuotes (printit defaultPrint name) ++
