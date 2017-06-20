@@ -9,5 +9,4 @@ instance Functor Maybe where
 not = \b -> case b of
               True -> False
               False -> True
-data X = X
-main = map (\x -> x) (Just X)
+main = map (\x -> x) (Just 123)

@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 
+import           Control.Arrow
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.Except
@@ -18,6 +19,7 @@ import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import           Data.Tuple
 import           Data.Typeable
 import           Duet.Context
 import           Duet.Errors
@@ -42,20 +44,42 @@ inputName = "<interactive>"
 
 mainFunc = "main"
 
+exampleInputs =
+  [("Arithmetic","main = 2 * (10 + 5 + -3)")
+  ,("Factorial",facSource)
+  ,("Lists",listsSource)
+  ,("Folds", foldsSource)
+  ,("Monad", monadSource)]
+
+defaultExample = "Arithmetic"
+
 --------------------------------------------------------------------------------
 -- Main entry point
 
 main =
   mainWidget
     (do makeHeader
+        currentSource <- examples
         result <-
           container
             (row
-               (do input <- col 6 makeSourceInput
+               (do input <- col 6 (makeSourceInput currentSource)
                    result <- mapDyn compileAndRun input
                    col 6 (makeStepsBox result)
                    pure result))
         makeErrorsBox result)
+
+examples = do
+  container
+    (row
+       (col
+          12
+          (do dropper <-
+                dropdown
+                  (fromMaybe "" (lookup defaultExample exampleInputs))
+                  (constDyn (M.fromList (map swap exampleInputs)))
+                  (def :: DropdownConfig Spider String)
+              pure (_dropdown_value dropper))))
 
 makeHeader =
   container
@@ -68,14 +92,16 @@ makeHeader =
                 (text
                    "Duet is a dialect of Haskell. This is a demonstration page with an in-browser type-checker and interpreter."))))
 
-makeSourceInput = do
+makeSourceInput currentSource = do
   input <-
     do el "h2" (text "Input program")
+       defInput <- sample (current currentSource)
        el
          "p"
          (textArea
-            def
-            { _textAreaConfig_initialValue = defaultInput
+            (def :: TextAreaConfig Spider)
+            { _textAreaConfig_initialValue = defInput
+            , _textAreaConfig_setValue = updated currentSource
             , _textAreaConfig_attributes =
                 constDyn
                   (M.fromList
@@ -465,3 +491,79 @@ makeFracClass function = do
     infixr 1 -->
     (-->) :: Type Name -> Type Name -> Type Name
     a --> b = ApplicationType (ApplicationType (ConstructorType function) a) b
+
+--------------------------------------------------------------------------------
+-- Example sources
+
+listsSource =
+  "data List a = Nil | Cons a (List a)\n\
+   \data Tuple a b = Tuple a b\n\
+   \id = \\x -> x\n\
+   \not = \\p -> if p then False else True\n\
+   \foldr = \\cons nil l ->\n\
+   \  case l of\n\
+   \    Nil -> nil\n\
+   \    Cons x xs -> cons x (foldr cons nil xs)\n\
+   \map = \\f xs ->\n\
+   \  case xs of\n\
+   \    Nil -> Nil\n\
+   \    Cons x xs -> Cons (f x) (map f xs)\n\
+   \zip = \\xs ys ->\n\
+   \  case Tuple xs ys of\n\
+   \    Tuple Nil _ -> Nil\n\
+   \    Tuple _ Nil -> Nil\n\
+   \    Tuple (Cons x xs1) (Cons y ys1) ->\n\
+   \      Cons (Tuple x y) (zip xs1 ys1)\n\
+   \list = (Cons True (Cons False Nil))\n\
+   \main = zip list list"
+
+monadSource =
+ "class Monad (m :: Type -> Type) where\n\
+  \  bind :: m a -> (a -> m b) -> m b\n\
+  \class Applicative (f :: Type -> Type) where\n\
+  \  pure :: a -> f a\n\
+  \class Functor (f :: Type -> Type) where\n\
+  \  map :: (a -> b) -> f a -> f b\n\
+  \data Maybe a = Nothing | Just a\n\
+  \instance Functor Maybe where\n\
+  \  map =\n\
+  \    \\f m ->\n\
+  \      case m of\n\
+  \        Nothing -> Nothing\n\
+  \        Just a -> Just (f a)\n\
+  \instance Monad Maybe where\n\
+  \  bind =\n\
+  \    \\m f ->\n\
+  \      case m of\n\
+  \        Nothing -> Nothing\n\
+  \        Just v -> f v\n\
+  \instance Applicative Maybe where\n\
+  \  pure = \\v -> Just v\n\n\
+ \main = bind (pure 1) (\\i -> Just (i * 2))"
+
+foldsSource =
+  "data List a = Nil | Cons a (List a)\n\
+   \foldr = \\f z l ->\n\
+   \  case l of\n\
+   \    Nil -> z\n\
+   \    Cons x xs -> f x (foldr f z xs)\n\
+   \foldl = \\f z l ->\n\
+   \  case l of\n\
+   \    Nil -> z\n\
+   \    Cons x xs -> foldl f (f z x) xs\n\
+   \list = (Cons True (Cons False Nil))\n\
+   \main = foldr _f _nil list"
+
+facSource = "go = \\n res ->\n\
+             \  case n of\n\
+             \    0 -> 1\n\
+             \    n -> go (n - 1) (res * n)\n\
+             \\n\
+             \fac = \\n -> go n 1\n\
+             \\n\
+             \factorial = \\n ->\n\
+             \  case n of\n\
+             \    0 -> 1\n\
+             \    n -> n * factorial (n - 1)\n\
+             \\n\
+             \main = fac 5"
