@@ -228,11 +228,14 @@ parsing constructor parser description = do
         (sourceLine end)
         (sourceColumn end))
   where
+    supportedKeywords = ["class","data","forall","instance","if","then","else","case"]
     bailOnUnsupportedKeywords text word =
       when
         (text == word)
         (unexpected
-           ("“" ++ T.unpack word ++ "”: that keyword isn't allowed, " ++ ext))
+           (if elem word supportedKeywords
+               then "the keyword " ++ curlyQuotes (T.unpack word) ++ " isn't in the right place or is incomplete. Try adding a space after it?"
+               else ("“" ++ T.unpack word ++ "”: that keyword isn't allowed, " ++ ext)))
       where
         ext = "but you could use this instead: " ++ T.unpack word ++ "_"
 

@@ -50,8 +50,6 @@ exampleInputs =
   ,("Monad", monadSource)
   ,("Read/Show",readshowSource)]
 
-defaultExample = "Arithmetic"
-
 --------------------------------------------------------------------------------
 -- Main entry point
 
@@ -59,37 +57,49 @@ main =
   mainWidget
     (do makeHeader
         currentSource <- examples
-        result <-
-          container
-            (row
-               (do input <- col 6 (makeSourceInput currentSource)
-                   result <- mapDyn compileAndRun input
-                   col 6 (makeStepsBox currentSource result)
-                   pure result))
-        makeErrorsBox result)
+        container
+          (row
+             (do result <-
+                   col
+                     6
+                     (do input <- makeSourceInput currentSource
+                         result <- mapDyn compileAndRun input
+                         makeErrorsBox result
+                         pure result)
+                 col 6 (do makeStepsBox currentSource result)
+                 pure ())))
 
 examples = do
   container
     (row
        (col
           12
-          (do dropper <-
-                dropdown
-                  (fromMaybe "" (listToMaybe (fmap snd exampleInputs)))
-                  (constDyn (M.fromList (map swap exampleInputs)))
-                  (def :: DropdownConfig Spider String)
-              pure (_dropdown_value dropper))))
+          (do el "p"
+                 (text "You can choose from a set of examples I've prepared that demonstrate Duet's current feature set:")
+              el
+                "p"
+                (do dropper <-
+                      dropdown
+                        (fromMaybe "" (listToMaybe (fmap snd exampleInputs)))
+                        (constDyn (M.fromList (map swap exampleInputs)))
+                        (def :: DropdownConfig Spider String)
+                    pure (_dropdown_value dropper)))))
 
 makeHeader =
   container
     (row
        (col
           12
-          (do el "h1" (text "Duet (delta)")
+          (do el
+                "h1"
+                (elAttr
+                   "img"
+                   (M.fromList [("src", "duet.png"), ("style", "height: 3em; margin-bottom: 0.5em")])
+                   (return ()))
               el
                 "p"
                 (text
-                   "Duet is a dialect of Haskell. This is a demonstration page with an in-browser type-checker and interpreter."))))
+                   "Duet is an educational dialect of Haskell aimed at interactivity. This is a demonstration page of the work-in-progress implementation, compiled to JavaScript, consisting of a type-checker and interpreter."))))
 
 makeSourceInput currentSource = do
   el "h2" (text "Input program")
@@ -141,30 +151,25 @@ makeStepsBox currentSource result = do
        })
   where
     initialValue = printSteps . compileAndRun
-    defaultAttributes = [("class", "form-control"), ("rows", "15")]
+    defaultAttributes =
+      [("readonly", "readonly"), ("class", "form-control"), ("rows", "15")]
 
 makeErrorsBox result = do
   errorAttrs <-
     mapDyn
       (M.fromList .
        either
-         (const [("class", "container")])
+         (const [("class", "alert alert-danger")])
          (const [("style", "display: none")]))
       result
   errorMessage <- mapDyn (either displayException (const "")) result
   elDynAttr
     "div"
     errorAttrs
-    (row
-       (col
-          12
-          (elClass
-             "div"
-             "alert alert-danger"
-             (elAttr
-                "p"
-                (M.fromList [("style", "white-space: pre")])
-                (dynText errorMessage)))))
+    (elAttr
+       "p"
+       (M.fromList [("style", "white-space: pre-wrap;")])
+       (dynText errorMessage))
 
 --------------------------------------------------------------------------------
 -- Shared functions
