@@ -16,7 +16,8 @@ library
     mtl,
     exceptions,
     parsec,
-    text
+    text,
+    edit-distance
   ghc-options:
     -Wall -O0
   default-language:
@@ -30,6 +31,7 @@ library
     Duet.Renamer
     Duet.Resolver
     Duet.Stepper
+    Duet.Errors
     Duet.Supply
     Duet.Context
     Control.Monad.Supply

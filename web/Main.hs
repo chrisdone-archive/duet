@@ -20,6 +20,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Data.Typeable
 import           Duet.Context
+import           Duet.Errors
 import           Duet.Infer
 import           Duet.Parser
 import           Duet.Printer
@@ -41,34 +42,55 @@ main =
                       "p"
                       (text
                          "Duet is a dialect of Haskell. This is a demonstration page with an in-browser type-checker and interpreter."))))
-        input <-
+        result <-
           container
             (row
-               (col
-                  12
-                  (do el "h2" (text "Input program")
-                      el
-                        "p"
-                        (textArea
-                           def
-                           { _textAreaConfig_initialValue = "main = 1 * 2"
-                           , _textAreaConfig_attributes =
-                               constDyn
-                                 (M.fromList
-                                    [ ("class", "form-control")
-                                    , ("rows", "15")
-                                    , ("style", "font-family: monospace")
-                                    ])
-                           }))))
-        result <-
-          mapDyn
-            (\text ->
-               evalSupplyT
-                 (do (binds, context) <-
-                       createContext "<interactive>" (T.pack text)
-                     execWriterT (runStepper context binds "main"))
-                 [1 ..] :: Either SomeException [String])
-            (_textArea_value input)
+               (do input <-
+                     col
+                       6
+                       (do el "h2" (text "Input program")
+                           el
+                             "p"
+                             (textArea
+                                def
+                                { _textAreaConfig_initialValue = defaultInput
+                                , _textAreaConfig_attributes =
+                                    constDyn
+                                      (M.fromList
+                                         [ ("class", "form-control")
+                                         , ("rows", "15")
+                                         , ("style", "font-family: monospace")
+                                         ])
+                                }))
+                   debouncedInputEv <- debounce 0.5 (updated (_textArea_value input))
+                   debouncedInputDyn <- foldDyn const defaultInput debouncedInputEv
+                   result <- mapDyn compileAndRun debouncedInputDyn
+                   col
+                     6
+                     (do stepsText <- mapDyn printSteps result
+                         row
+                           (col
+                              12
+                              (do el "h2" (text "Steps")
+                                  el
+                                    "p"
+                                    (textArea
+                                       (def :: TextAreaConfig Spider)
+                                       { _textAreaConfig_initialValue =
+                                           printSteps
+                                             (compileAndRun defaultInput)
+                                       , _textAreaConfig_attributes =
+                                           constDyn
+                                             (M.fromList
+                                                [ ("class", "form-control")
+                                                , ("rows", "15")
+                                                , ( "style"
+                                                  , "font-family: monospace")
+                                                ])
+                                       , _textAreaConfig_setValue =
+                                           updated stepsText
+                                       }))))
+                   pure result))
         errorAttrs <-
           mapDyn
             (M.fromList .
@@ -76,7 +98,7 @@ main =
                (const [("class", "container")])
                (const [("style", "display: none")]))
             result
-        errorMessage <- mapDyn (either show (const "")) result
+        errorMessage <- mapDyn (either displayException (const "")) result
         elDynAttr
           "div"
           errorAttrs
@@ -86,37 +108,19 @@ main =
                 (elClass
                    "div"
                    "alert alert-danger"
-                   (el "p" (dynText errorMessage)))))
-        stepsAttrs <-
-          mapDyn
-            (M.fromList .
-             either
-               (const [("style", "display: none")])
-               (const [("class", "container")]))
-            result
-        stepsText <- mapDyn (either (const "") unlines) result
-        elDynAttr
-          "div"
-          stepsAttrs
-          (row
-             (col
-                12
-                (do el "h2" (text "Steps")
-                    el
+                   (elAttr
                       "p"
-                      (textArea
-                         (def :: TextAreaConfig Spider)
-                         { _textAreaConfig_initialValue = "..."
-                         , _textAreaConfig_attributes =
-                             constDyn
-                               (M.fromList
-                                  [ ("class", "form-control")
-                                  , ("rows", "15")
-                                  , ("style", "font-family: monospace")
-                                  ])
-                         , _textAreaConfig_setValue = updated stepsText
-                         }))))
+                      (M.fromList [("style", "white-space: pre")])
+                      (dynText errorMessage)))))
         pure ())
+  where
+    defaultInput = "main = 1 * 2"
+    printSteps = either (const "") (unlines . reverse)
+    compileAndRun text =
+      evalSupplyT
+        (do (binds, context) <- createContext "<interactive>" (T.pack text)
+            execWriterT (runStepper context binds "main"))
+        [1 ..] :: Either SomeException [String]
 
 --------------------------------------------------------------------------------
 -- Bootstrap short-hands
@@ -128,46 +132,73 @@ col n = elClass "div" ("col-md-" ++ show (n :: Int))
 --------------------------------------------------------------------------------
 -- Context setup
 
+data ContextException = ContextException (SpecialTypes Name) SomeException
+  deriving (Show, Typeable)
+
+instance Exception ContextException where
+  displayException (ContextException specialTypes (SomeException se)) =
+    maybe
+      (maybe
+         (maybe
+            (maybe
+               (maybe
+                  (displayException se)
+                  (displayRenamerException specialTypes)
+                  (cast se))
+               (displayInferException specialTypes)
+               (cast se))
+            (displayStepperException specialTypes)
+            (cast se))
+         (displayResolveException specialTypes)
+         (cast se))
+      displayParseException
+      (cast se)
+
 -- | Create a context of all renamed, checked and resolved code.
 createContext
-  :: (MonadSupply Int m, MonadThrow m)
+  :: (MonadSupply Int m, MonadThrow m, MonadCatch m)
   => String
   -> Text
   -> m ([BindGroup Type Name (TypeSignature Type Name Location)], Context Type Name Location)
 createContext file text = do
-  do decls <- parseText file text
-     builtins <- setupEnv mempty
+  do builtins <- setupEnv mempty
      let specials = builtinsSpecials builtins
-     -- Renaming
-     (typeClasses, signatures, renamedBindings, scope, dataTypes) <-
-       renameEverything decls specials builtins
-     -- Type class definition
-     addedTypeClasses <- addClasses builtins typeClasses
-     -- Type checking
-     (bindGroups, typeCheckedClasses) <-
-       typeCheckModule
-         addedTypeClasses
-         signatures
-         (builtinsSpecialTypes builtins)
-         renamedBindings
-     -- Type class resolution
-     resolvedTypeClasses <-
-       resolveTypeClasses typeCheckedClasses (builtinsSpecialTypes builtins)
-     resolvedBindGroups <-
-       mapM
-         (resolveBindGroup resolvedTypeClasses (builtinsSpecialTypes builtins))
-         bindGroups
-     -- Create a context of everything
-     let context =
-           Context
-           { contextSpecialSigs = builtinsSpecialSigs builtins
-           , contextSpecialTypes = builtinsSpecialTypes builtins
-           , contextSignatures = signatures
-           , contextScope = scope
-           , contextTypeClasses = resolvedTypeClasses
-           , contextDataTypes = dataTypes
-           }
-     pure (resolvedBindGroups, context)
+     catch
+       (do decls <- parseText file text
+           (typeClasses, signatures, renamedBindings, scope, dataTypes) <-
+             renameEverything decls specials builtins
+           -- Type class definition
+           addedTypeClasses <- addClasses builtins typeClasses
+               -- Type checking
+           (bindGroups, typeCheckedClasses) <-
+             typeCheckModule
+               addedTypeClasses
+               signatures
+               (builtinsSpecialTypes builtins)
+               renamedBindings
+           -- Type class resolution
+           resolvedTypeClasses <-
+             resolveTypeClasses
+               typeCheckedClasses
+               (builtinsSpecialTypes builtins)
+           resolvedBindGroups <-
+             mapM
+               (resolveBindGroup
+                  resolvedTypeClasses
+                  (builtinsSpecialTypes builtins))
+               bindGroups
+           -- Create a context of everything
+           let context =
+                 Context
+                 { contextSpecialSigs = builtinsSpecialSigs builtins
+                 , contextSpecialTypes = builtinsSpecialTypes builtins
+                 , contextSignatures = signatures
+                 , contextScope = scope
+                 , contextTypeClasses = resolvedTypeClasses
+                 , contextDataTypes = dataTypes
+                 }
+           pure (resolvedBindGroups, context))
+       (throwM . ContextException (builtinsSpecialTypes builtins))
 
 --------------------------------------------------------------------------------
 -- Stepper

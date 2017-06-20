@@ -13,6 +13,12 @@ import           Duet.Printer
 import           Duet.Types
 import           Text.EditDistance
 
+displayParseException :: ParseException -> String
+displayParseException e =
+  case e of
+    TokenizerError pe -> show pe
+    ParserError pe -> show pe
+
 displayResolveException :: SpecialTypes Name -> ResolveException -> String
 displayResolveException specialTypes =
   \case
