@@ -31,96 +31,125 @@ import           Duet.Supply
 import           Duet.Types
 import           Reflex.Dom
 
+--------------------------------------------------------------------------------
+-- Constants
+
+defaultInput = "main = 1 * 2"
+
+maxSteps = 100
+
+inputName = "<interactive>"
+
+mainFunc = "main"
+
+--------------------------------------------------------------------------------
+-- Main entry point
+
 main =
   mainWidget
-    (do container
-          (row
-             (col
-                12
-                (do el "h1" (text "Duet (delta)")
-                    el
-                      "p"
-                      (text
-                         "Duet is a dialect of Haskell. This is a demonstration page with an in-browser type-checker and interpreter."))))
+    (do makeHeader
         result <-
           container
             (row
-               (do input <-
-                     col
-                       6
-                       (do el "h2" (text "Input program")
-                           el
-                             "p"
-                             (textArea
-                                def
-                                { _textAreaConfig_initialValue = defaultInput
-                                , _textAreaConfig_attributes =
-                                    constDyn
-                                      (M.fromList
-                                         [ ("class", "form-control")
-                                         , ("rows", "15")
-                                         , ("style", "font-family: monospace")
-                                         ])
-                                }))
-                   debouncedInputEv <- debounce 0.5 (updated (_textArea_value input))
-                   debouncedInputDyn <- foldDyn const defaultInput debouncedInputEv
-                   result <- mapDyn compileAndRun debouncedInputDyn
-                   col
-                     6
-                     (do stepsText <- mapDyn printSteps result
-                         row
-                           (col
-                              12
-                              (do el "h2" (text "Steps")
-                                  el
-                                    "p"
-                                    (textArea
-                                       (def :: TextAreaConfig Spider)
-                                       { _textAreaConfig_initialValue =
-                                           printSteps
-                                             (compileAndRun defaultInput)
-                                       , _textAreaConfig_attributes =
-                                           constDyn
-                                             (M.fromList
-                                                [ ("class", "form-control")
-                                                , ("rows", "15")
-                                                , ( "style"
-                                                  , "font-family: monospace")
-                                                ])
-                                       , _textAreaConfig_setValue =
-                                           updated stepsText
-                                       }))))
+               (do input <- col 6 makeSourceInput
+                   result <- mapDyn compileAndRun input
+                   col 6 (makeStepsBox result)
                    pure result))
-        errorAttrs <-
-          mapDyn
-            (M.fromList .
-             either
-               (const [("class", "container")])
-               (const [("style", "display: none")]))
-            result
-        errorMessage <- mapDyn (either displayException (const "")) result
-        elDynAttr
-          "div"
-          errorAttrs
-          (row
-             (col
-                12
-                (elClass
-                   "div"
-                   "alert alert-danger"
-                   (elAttr
-                      "p"
-                      (M.fromList [("style", "white-space: pre")])
-                      (dynText errorMessage)))))
-        pure ())
+        makeErrorsBox result)
+
+makeHeader =
+  container
+    (row
+       (col
+          12
+          (do el "h1" (text "Duet (delta)")
+              el
+                "p"
+                (text
+                   "Duet is a dialect of Haskell. This is a demonstration page with an in-browser type-checker and interpreter."))))
+
+makeSourceInput = do
+  input <-
+    do el "h2" (text "Input program")
+       el
+         "p"
+         (textArea
+            def
+            { _textAreaConfig_initialValue = defaultInput
+            , _textAreaConfig_attributes =
+                constDyn
+                  (M.fromList
+                     [ ("class", "form-control")
+                     , ("rows", "15")
+                     , ("style", "font-family: monospace")
+                     ])
+            })
+  debouncedInputEv <- debounce 0.5 (updated (_textArea_value input))
+  foldDyn const defaultInput debouncedInputEv
+
+makeStepsBox result = do
+  stepsText <-
+    foldDyn
+      (\result last -> either (const last) (printSteps . Right) result)
+      initialValue
+      (updated result)
+  el "h2" (text "Steps")
+  attributes <-
+    mapDyn
+      (either
+         (const
+            (M.fromList
+               (defaultAttributes ++
+                [("style", "font-family: monospace; color:#aaa")])))
+         (const
+            (M.fromList
+               (defaultAttributes ++ [("style", "font-family: monospace")]))))
+      result
+  el
+    "p"
+    (textArea
+       (def :: TextAreaConfig Spider)
+       { _textAreaConfig_initialValue = initialValue
+       , _textAreaConfig_attributes = attributes
+       , _textAreaConfig_setValue = updated stepsText
+       })
   where
-    defaultInput = "main = 1 * 2"
-    printSteps = either (const "") (unlines . reverse)
-    compileAndRun text =
-      evalSupplyT
-        (do (binds, context) <- createContext "<interactive>" (T.pack text)
-            execWriterT (runStepper context binds "main"))
-        [1 ..] :: Either SomeException [String]
+    initialValue = printSteps (compileAndRun defaultInput)
+    defaultAttributes = [("class", "form-control"), ("rows", "15")]
+
+makeErrorsBox result = do
+  errorAttrs <-
+    mapDyn
+      (M.fromList .
+       either
+         (const [("class", "container")])
+         (const [("style", "display: none")]))
+      result
+  errorMessage <- mapDyn (either displayException (const "")) result
+  elDynAttr
+    "div"
+    errorAttrs
+    (row
+       (col
+          12
+          (elClass
+             "div"
+             "alert alert-danger"
+             (elAttr
+                "p"
+                (M.fromList [("style", "white-space: pre")])
+                (dynText errorMessage)))))
+
+--------------------------------------------------------------------------------
+-- Shared functions
+
+compileAndRun text =
+  evalSupplyT
+    (do (binds, context) <- createContext inputName (T.pack text)
+        execWriterT (runStepper maxSteps context binds mainFunc))
+    [1 ..] :: Either SomeException [String]
+
+printSteps = either (const "") (unlines . reverse)
 
 --------------------------------------------------------------------------------
 -- Bootstrap short-hands
@@ -206,28 +235,31 @@ createContext file text = do
 -- | Run the substitution model on the code.
 runStepper
   :: (MonadWriter [String] m, MonadSupply Int m, MonadThrow m)
-  => Context Type Name Location
+  => Int
+  -> Context Type Name Location
   -> [BindGroup Type Name (TypeSignature Type Name Location)]
   -> String
   -> m ()
-runStepper context bindGroups' i = do
+runStepper maxSteps context bindGroups' i = do
   e0 <- lookupNameByString i bindGroups'
   fix
-    (\loopy lastString e -> do
+    (\loopy count lastString e -> do
        e' <- expandSeq1 context bindGroups' e
        let string = printExpression (defaultPrint) e
        when
          (string /= lastString && (True || cleanExpression e))
          (tell [string])
-       if fmap (const ()) e' /= fmap (const ()) e
+       if (fmap (const ()) e' /= fmap (const ()) e) && count < maxSteps
          then do
            renameExpression
              (contextSpecials context)
              (contextScope context)
              (contextDataTypes context)
              e' >>=
-             loopy string
-         else pure ())
+             loopy (count + 1) string
+         else when (count >= maxSteps)
+                   (tell ["<max steps exceeded: " ++ show maxSteps ++ ">"]))
+    1
     ""
     e0
 
