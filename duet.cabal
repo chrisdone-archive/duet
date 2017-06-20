@@ -19,7 +19,7 @@ library
     text,
     edit-distance
   ghc-options:
-    -Wall -O0
+    -Wall -O2
   default-language:
     Haskell2010
   exposed-modules:
