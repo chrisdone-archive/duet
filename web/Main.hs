@@ -49,7 +49,8 @@ exampleInputs =
   ,("Factorial",facSource)
   ,("Lists",listsSource)
   ,("Folds", foldsSource)
-  ,("Monad", monadSource)]
+  ,("Monad", monadSource)
+  ,("Read/Show",readshowSource)]
 
 defaultExample = "Arithmetic"
 
@@ -567,3 +568,46 @@ facSource = "go = \\n res ->\n\
              \    n -> n * factorial (n - 1)\n\
              \\n\
              \main = fac 5"
+
+readshowSource = "class Reader a where\n\
+                  \  reader :: List Ch -> a\n\
+                  \class Shower a where\n\
+                  \  shower :: a -> List Ch\n\
+                  \instance Shower Nat where\n\
+                  \  shower = \\n ->\n\
+                  \    case n of\n\
+                  \      Zero -> Cons Z Nil\n\
+                  \      Succ n -> Cons S (shower n)\n\
+                  \data Nat = Succ Nat | Zero\n\
+                  \instance Reader Nat where\n\
+                  \  reader = \\cs ->\n\
+                  \    case cs of\n\
+                  \      Cons Z Nil -> Zero\n\
+                  \      Cons S xs  -> Succ (reader xs)\n\
+                  \      _ -> Zero\n\
+                  \data List a = Nil | Cons a (List a)\n\
+                  \data Ch = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z\n\
+                  \class Equal a where\n\
+                  \  equal :: a -> a -> Bool\n\
+                  \instance Equal Nat where\n\
+                  \  equal =\n\
+                  \    \\a b ->\n\
+                  \      case a of\n\
+                  \        Zero ->\n\
+                  \          case b of\n\
+                  \            Zero -> True\n\
+                  \            _ -> False\n\
+                  \        Succ n ->\n\
+                  \          case b of\n\
+                  \            Succ m -> equal n m\n\
+                  \            _ -> False\n\
+                  \        _ -> False\n\
+                  \not = \\b -> case b of\n\
+                  \              True -> False\n\
+                  \              False -> True\n\
+                  \\n\
+                  \notEqual :: Equal a => a -> a -> Bool\n\
+                  \notEqual = \\x y -> not (equal x y)\n\
+                  \\n\
+                  \main = equal (reader (shower (Succ Zero))) (Succ Zero)\n\
+                  \"
