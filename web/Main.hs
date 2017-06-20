@@ -36,7 +36,7 @@ import           Reflex.Dom
 --------------------------------------------------------------------------------
 -- Constants
 
-defaultInput = "main = 1 * 2"
+defaultInput = "main = 2 * (10 - (5 + -3))"
 
 maxSteps = 100
 
@@ -45,7 +45,7 @@ inputName = "<interactive>"
 mainFunc = "main"
 
 exampleInputs =
-  [("Arithmetic","main = 2 * (10 + 5 + -3)")
+  [("Arithmetic",defaultInput)
   ,("Factorial",facSource)
   ,("Lists",listsSource)
   ,("Folds", foldsSource)
