@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
@@ -11,12 +12,14 @@ module Main where
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.Fix
+import           Control.Monad.IO.Class
+import           Control.Monad.Logger
 import           Control.Monad.Supply
-import           Control.Monad.Trans
 import           Data.Map.Strict (Map)
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Text (Text)
+import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Duet.Context
 import           Duet.Infer
@@ -36,10 +39,13 @@ main = do
   case args of
     (file:is) -> do
       text <- T.readFile file
-      evalSupplyT
-        (do (binds, context) <- createContext "<interactive>" text
-            maybe (return ()) (runStepper context binds) (listToMaybe is))
-        [1 ..]
+      runStdoutLoggingT
+        (filterLogger
+           (\_ level -> level >= LevelInfo)
+           (evalSupplyT
+              (do (binds, context) <- createContext "<interactive>" text
+                  maybe (return ()) (runStepper context binds) (listToMaybe is))
+              [1 ..]))
     _ -> error "usage: duet <file>"
 
 --------------------------------------------------------------------------------
@@ -47,7 +53,7 @@ main = do
 
 -- | Create a context of all renamed, checked and resolved code.
 createContext
-  :: (MonadSupply Int m, MonadThrow m)
+  :: (MonadSupply Int m, MonadThrow m, MonadLogger m)
   => String
   -> Text
   -> m ([BindGroup Type Name (TypeSignature Type Name Location)], Context Type Name Location)
@@ -67,6 +73,7 @@ createContext file text = do
          signatures
          (builtinsSpecialTypes builtins)
          renamedBindings
+     printDebugDicts builtins bindGroups
      -- Type class resolution
      resolvedTypeClasses <-
        resolveTypeClasses typeCheckedClasses (builtinsSpecialTypes builtins)
@@ -74,6 +81,7 @@ createContext file text = do
        mapM
          (resolveBindGroup resolvedTypeClasses (builtinsSpecialTypes builtins))
          bindGroups
+     printDebugTypeChecked builtins resolvedBindGroups
      -- Create a context of everything
      let context =
            Context
@@ -87,24 +95,82 @@ createContext file text = do
      pure (resolvedBindGroups, context)
 
 --------------------------------------------------------------------------------
+-- Debug info
+
+printDebugTypeChecked
+  :: (PrintableType t, Printable i, Foldable t1, MonadLogger m)
+  => Builtins t2 i l -> t1 (BindGroup t i (TypeSignature Type i b)) -> m ()
+printDebugTypeChecked builtins bindGroups = do
+  $logDebug "\n--- Explicitly typed\n"
+  mapM_
+    (\(BindGroup es is) -> do
+       (mapM_
+          ($logDebug . T.pack .
+           printExplicitlyTypedBinding
+             defaultPrint
+             { printTypes =
+                 \x -> Just (builtinsSpecialTypes builtins, fmap (const ()) x)
+             }
+             (builtinsSpecialTypes builtins))
+          es)
+       mapM_
+         (mapM_
+            ($logDebug . T.pack .
+             printImplicitlyTypedBinding
+               defaultPrint
+               { printTypes =
+                   \x -> Just (builtinsSpecialTypes builtins, fmap (const ()) x)
+               }))
+         is)
+    bindGroups
+
+printDebugDicts
+  :: (PrintableType t, Printable i, Foldable t1, MonadLogger m)
+  => Builtins t2 i l -> t1 (BindGroup t i (TypeSignature Type i b)) -> m ()
+printDebugDicts builtins bindGroups = do
+  $logDebug "\n--- Explicitly typed\n"
+  mapM_
+    (\(BindGroup es is) -> do
+       (mapM_
+          ($logDebug . T.pack .
+           printExplicitlyTypedBinding
+             defaultPrint
+             { printDictionaries = True
+             }
+             (builtinsSpecialTypes builtins))
+          es)
+       mapM_
+         (mapM_
+            ($logDebug . T.pack .
+             printImplicitlyTypedBinding
+               defaultPrint
+               { printDictionaries = True
+               }))
+         is)
+    bindGroups
+
+--------------------------------------------------------------------------------
 -- Stepper
 
 -- | Run the substitution model on the code.
 runStepper
-  :: (MonadIO m, MonadSupply Int m, MonadThrow m)
+  :: (MonadSupply Int m, MonadThrow m, MonadLogger m, MonadIO m)
   => Context Type Name Location
   -> [BindGroup Type Name (TypeSignature Type Name Location)]
   -> String
   -> m ()
 runStepper context bindGroups' i = do
+  $logDebug "\n-- Stepping ...\n"
   e0 <- lookupNameByString i bindGroups'
   fix
     (\loopy lastString e -> do
        e' <- expandSeq1 context bindGroups' e
-       let string = printExpression (defaultPrint) e
+       let string =
+             printExpression defaultPrint e
        when
          (string /= lastString && (True || cleanExpression e))
-         (liftIO (putStrLn string))
+         (do liftIO (putStrLn string)
+             $logDebug (T.pack (show (fmap (const ()) e))))
        if fmap (const ()) e' /= fmap (const ()) e
          then do
            renameExpression

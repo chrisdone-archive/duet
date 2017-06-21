@@ -98,7 +98,7 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                          (concatMap
                             (map instanceDictionary . classInstances)
                             (M.elems typeClassEnv)) of
-                    Nothing -> error "Dictionary missing."
+                    Nothing -> throwM (CouldntFindMethodDict dictName)
                     Just dict ->
                       case M.lookup
                              methodName
@@ -245,7 +245,7 @@ substitute i arg = go
         x@ConstructorExpression {} -> x
         x@ConstantExpression {} -> x
         ApplicationExpression l f x -> ApplicationExpression l (go f) (go x)
-        InfixExpression l x f y -> InfixExpression l (go x) f (go y)
+        InfixExpression l x (s, f) y -> InfixExpression l (go x) (s, go f) (go y)
         LetExpression {} -> error "let expressions unsupported."
         CaseExpression l e cases ->
           CaseExpression l (go e) (map (\(pat, e') -> (pat, go e')) cases)

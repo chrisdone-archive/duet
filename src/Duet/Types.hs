@@ -127,6 +127,7 @@ data StepException
   = CouldntFindName !Name
   | CouldntFindNameByString !String
   | TypeAtValueScope !Name
+  | CouldntFindMethodDict !Name
   deriving (Typeable, Show)
 instance Exception StepException
 

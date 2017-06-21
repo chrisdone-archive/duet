@@ -27,21 +27,22 @@ displayResolveException specialTypes =
 displayStepperException :: a -> StepException -> String
 displayStepperException _ =
   \case
-    CouldntFindName n -> "Not in scope: " ++ curlyQuotes (printit defaultPrint n)
+    CouldntFindName n ->
+      "Not in scope: " ++ curlyQuotes (printit defaultPrint n)
+    CouldntFindMethodDict n ->
+      "No instance dictionary for: " ++ curlyQuotes (printit defaultPrint n)
     CouldntFindNameByString n ->
       "The starter variable isn't defined: " ++
-      curlyQuotes n ++
-      "\nPlease define a variable called " ++ curlyQuotes n
+      curlyQuotes n ++ "\nPlease define a variable called " ++ curlyQuotes n
     TypeAtValueScope k -> "Type at value scope: " ++ show k
 
 displayInferException :: SpecialTypes Name -> InferException -> [Char]
 displayInferException specialTypes =
   \case
     ExplicitTypeMismatch sc1 sc2 ->
-      "The type of a definition doesn't match its explicit type:\n\n  " ++
-     printScheme defaultPrint specialTypes sc1 ++ "\n\nand\n\n  " ++
-
-     printScheme defaultPrint specialTypes sc2
+      "The type of a definition, \n\n  " ++
+      printScheme defaultPrint specialTypes sc2 ++ "\n\ndoesn't match the explicit type:\n\n  " ++
+     printScheme defaultPrint specialTypes sc1
     NotInScope scope name ->
       "Not in scope " ++
       curlyQuotes (printit defaultPrint name) ++

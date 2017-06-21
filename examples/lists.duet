@@ -16,5 +16,7 @@ zip = \xs ys ->
     Tuple _ Nil -> Nil
     Tuple (Cons x xs1) (Cons y ys1) ->
       Cons (Tuple x y) (zip xs1 ys1)
-list = (Cons True (Cons False Nil))
-main = zip list list
+list = (Cons 1 (Cons 2 Nil))
+multiply = \x y -> x * y
+doubleAll = \xs -> map (multiply 2) xs
+main = doubleAll list

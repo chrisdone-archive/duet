@@ -22,6 +22,7 @@ module Control.Monad.Supply
 
 import Control.Monad.Catch
 import Control.Monad.Identity
+import Control.Monad.Logger
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer
@@ -33,7 +34,7 @@ class Monad m => MonadSupply s m | m -> s where
 
 -- | Supply monad transformer.
 newtype SupplyT s m a = SupplyT (StateT [s] m a)
-  deriving (Functor, Applicative, Monad, MonadTrans, MonadIO, MonadFix, MonadCatch, MonadThrow)
+  deriving (Functor, Applicative, Monad, MonadTrans, MonadIO, MonadFix, MonadCatch, MonadThrow, MonadLogger)
 
 -- | Supply monad.
 newtype Supply s a = Supply (SupplyT s Identity a)

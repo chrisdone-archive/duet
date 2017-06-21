@@ -8,7 +8,6 @@ module Duet.Context where
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.Supply
-import           Data.List
 import qualified Data.Map.Strict as M
 import           Data.Maybe
 import           Data.Monoid
@@ -100,6 +99,7 @@ contextSpecials :: Context t i l -> Specials i
 contextSpecials context =
   Specials (contextSpecialSigs context) (contextSpecialTypes context)
 
+generateAllSignatures :: (MonadThrow m, Traversable t, Traversable t1) => Builtins Type Name l1 -> t1 (DataType Type Name) -> t (Class Type Name l) -> m [TypeSignature Type Name Name]
 generateAllSignatures builtins dataTypes typeClasses =
   do consSigs <-
        fmap
@@ -108,6 +108,7 @@ generateAllSignatures builtins dataTypes typeClasses =
      methodSigs <- fmap concat (mapM classSignatures typeClasses)
      pure (builtinsSignatures builtins <> consSigs <> methodSigs)
 
+makeScope :: Applicative f => M.Map Identifier (Class t2 Name l) -> [TypeSignature t1 t Name] -> f (M.Map Identifier Name)
 makeScope typeClasses signatures =
   pure
     (M.fromList
@@ -121,6 +122,7 @@ makeScope typeClasses signatures =
           signatures) <>
      M.map className typeClasses)
 
+renameEverything :: (Show l1, MonadThrow m, MonadSupply Int m) => [Decl UnkindedType Identifier l1] -> Specials Name -> Builtins Type Name l -> m (M.Map Identifier (Class Type Name l1), [TypeSignature Type Name Name], [BindGroup Type Name l1], M.Map Identifier Name, [DataType Type Name])
 renameEverything decls specials builtins = do
   dataTypes <- renameDataTypes specials (declsDataTypes decls)
   (typeClasses, signatures, subs) <-
@@ -176,6 +178,7 @@ renameEverything decls specials builtins = do
                _ -> Nothing)
             decls
 
+addClasses :: (MonadThrow m, Foldable t) => Builtins Type Name l -> t (Class Type Name l) -> m (M.Map Name (Class Type Name l))
 addClasses builtins typeClasses =
   foldM
     (\e0 typeClass ->
