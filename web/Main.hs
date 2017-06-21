@@ -194,7 +194,7 @@ compileAndRun text =
 printSteps complete =
   either
     (const "")
-    (unlines . map (printExpression defaultPrint) . filter mode . reverse)
+    (unlines . map (printExpression defaultPrint) . filter mode)
   where
     mode =
       if complete
