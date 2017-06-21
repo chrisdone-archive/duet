@@ -17,8 +17,10 @@ library
     exceptions,
     parsec,
     text,
-    edit-distance,
-    monad-logger
+    edit-distance
+  if !impl(ghcjs)
+    build-depends:
+       monad-logger
   ghc-options:
     -Wall -O2
   default-language:
@@ -54,8 +56,10 @@ executable duet
     exceptions,
     mtl,
     containers,
-    edit-distance,
-    monad-logger
+    edit-distance
+  if !impl(ghcjs)
+    build-depends:
+       monad-logger
   default-language:
     Haskell2010
 

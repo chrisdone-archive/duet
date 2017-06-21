@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -22,7 +23,9 @@ module Control.Monad.Supply
 
 import Control.Monad.Catch
 import Control.Monad.Identity
+#ifndef __GHCJS__
 import Control.Monad.Logger
+#endif
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer
@@ -34,8 +37,11 @@ class Monad m => MonadSupply s m | m -> s where
 
 -- | Supply monad transformer.
 newtype SupplyT s m a = SupplyT (StateT [s] m a)
+#ifdef __GHCJS__
+  deriving (Functor, Applicative, Monad, MonadTrans, MonadIO, MonadFix, MonadCatch, MonadThrow)
+#else
   deriving (Functor, Applicative, Monad, MonadTrans, MonadIO, MonadFix, MonadCatch, MonadThrow, MonadLogger)
-
+#endif
 -- | Supply monad.
 newtype Supply s a = Supply (SupplyT s Identity a)
   deriving (Functor, Applicative, Monad, MonadSupply s, MonadFix)
