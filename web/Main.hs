@@ -36,7 +36,7 @@ import           Reflex.Dom
 --------------------------------------------------------------------------------
 -- Constants
 
-maxSteps = 100
+maxSteps = 200
 
 inputName = "<interactive>"
 
@@ -49,7 +49,8 @@ exampleInputs =
   ,("Folds", foldsSource)
   ,("Currying", curryinglistsSource)
   ,("Monad", monadSource)
-  ,("Read/Show",readshowSource)]
+  ,("Read/Show",readshowSource)
+  ,("Lists factorial",listsFactorialSource)]
 
 --------------------------------------------------------------------------------
 -- Main entry point
@@ -642,3 +643,16 @@ curryinglistsSource = "data List a = Nil | Cons a (List a)\n\
                        \multiply = \\x y -> x * y\n\
                        \doubleAll = map (multiply 2)\n\
                        \main = doubleAll (Cons 1 (Cons 2 Nil))"
+
+listsFactorialSource = "data List a = Nil | Cons a (List a)\n\
+                        \id = \\x -> x\n\
+                        \foldr = \\cons nil l ->\n\
+                        \  case l of\n\
+                        \    Nil -> nil\n\
+                        \    Cons x xs -> cons x (foldr cons nil xs)\n\
+                        \enumFromTo = \\from to ->\n\
+                        \  case to of\n\
+                        \   0 -> Nil\n\
+                        \   _ -> Cons from (enumFromTo (from + 1) (to - 1))\n\
+                        \fac = \\n -> foldr (\\x g n -> g (x * n)) id (enumFromTo 1 n) 1\n\
+                        \main = fac 3"
