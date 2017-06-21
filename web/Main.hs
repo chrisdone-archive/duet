@@ -413,11 +413,61 @@ setupEnv env = do
                (Location 0 0 0 0)
                (PrimopName PrimopIntegerSubtract)))
       ]
+  numRational <-
+    makeInst
+      specials
+      (IsIn
+         (className numClass)
+         [ConstructorType (specialTypesRationaleger specialTypes)])
+      [ ( "times"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopRationalTimes)))
+      , ( "plus"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopRationalPlus)))
+      ]
+  negRational <-
+    makeInst
+      specials
+      (IsIn
+         (className negClass)
+         [ConstructorType (specialTypesRationaleger specialTypes)])
+      [ ( "subtract"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopRationalSubtract)))
+      ]
+  fracRational <-
+    makeInst
+      specials
+      (IsIn
+         (className negClass)
+         [ConstructorType (specialTypesInteger specialTypes)])
+      [ ( "divide"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopRationalDivide)))
+      ]
   env' <-
     let update =
           addClass numClass >=>
           addClass negClass >=>
-          addClass fracClass >=> addInstance numInt >=> addInstance negInt
+          addClass fracClass >=>
+          addInstance numInt >=> addInstance negInt >=> addInstance fracRational
     in update env
   pure
     Builtins

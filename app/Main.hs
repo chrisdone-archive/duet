@@ -285,11 +285,64 @@ setupEnv env = do
                (Location 0 0 0 0)
                (PrimopName PrimopIntegerSubtract)))
       ]
+  numRational <-
+    makeInst
+      specials
+      (IsIn
+         (className numClass)
+         [ConstructorType (specialTypesRational specialTypes)])
+      [ ( "times"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopRationalTimes)))
+      , ( "plus"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopRationalPlus)))
+      ]
+  negRational <-
+    makeInst
+      specials
+      (IsIn
+         (className negClass)
+         [ConstructorType (specialTypesRational specialTypes)])
+      [ ( "subtract"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopRationalSubtract)))
+      ]
+  fracRational <-
+    makeInst
+      specials
+      (IsIn
+         (className fracClass)
+         [ConstructorType (specialTypesRational specialTypes)])
+      [ ( "divide"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopRationalDivide)))
+      ]
   env' <-
     let update =
           addClass numClass >=>
           addClass negClass >=>
-          addClass fracClass >=> addInstance numInt >=> addInstance negInt
+          addClass fracClass >=>
+          addInstance numInt >=>
+          addInstance negInt >=>
+          addInstance fracRational >=>
+          addInstance negRational >=> addInstance numRational
     in update env
   pure
     Builtins
@@ -307,19 +360,41 @@ makePrimOps
   => SpecialTypes Name -> m [TypeSignature Type Name Name]
 makePrimOps SpecialTypes {..} = do
   let sigs =
-        [ TypeSignature
-            (PrimopName PrimopIntegerSubtract)
-            (toScheme (integer --> integer --> integer))
-        , TypeSignature
-            (PrimopName PrimopIntegerTimes)
-            (toScheme (integer --> integer --> integer))
-        , TypeSignature
-            (PrimopName PrimopIntegerPlus)
-            (toScheme (integer --> integer --> integer))
-        ]
+        map
+          ((\case
+              PrimopIntegerPlus ->
+                TypeSignature
+                  (PrimopName PrimopIntegerPlus)
+                  (toScheme (integer --> integer --> integer))
+              PrimopIntegerSubtract ->
+                TypeSignature
+                  (PrimopName PrimopIntegerSubtract)
+                  (toScheme (integer --> integer --> integer))
+              PrimopIntegerTimes ->
+                TypeSignature
+                  (PrimopName PrimopIntegerTimes)
+                  (toScheme (integer --> integer --> integer))
+              PrimopRationalDivide ->
+                TypeSignature
+                  (PrimopName PrimopRationalDivide)
+                  (toScheme (rational --> rational --> rational))
+              PrimopRationalPlus ->
+                TypeSignature
+                  (PrimopName PrimopRationalPlus)
+                  (toScheme (rational --> rational --> rational))
+              PrimopRationalSubtract ->
+                TypeSignature
+                  (PrimopName PrimopRationalSubtract)
+                  (toScheme (rational --> rational --> rational))
+              PrimopRationalTimes ->
+                TypeSignature
+                  (PrimopName PrimopRationalTimes)
+                  (toScheme (rational --> rational --> rational))))
+          [minBound .. maxBound]
   pure sigs
   where
     integer = ConstructorType specialTypesInteger
+    rational = ConstructorType specialTypesRational
     infixr 1 -->
     (-->) :: Type Name -> Type Name -> Type Name
     a --> b =

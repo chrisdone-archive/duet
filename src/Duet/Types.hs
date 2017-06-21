@@ -107,7 +107,11 @@ data Primop
   = PrimopIntegerPlus
   | PrimopIntegerSubtract
   | PrimopIntegerTimes
-  deriving (Show, Eq, Ord)
+  | PrimopRationalDivide
+  | PrimopRationalPlus
+  | PrimopRationalSubtract
+  | PrimopRationalTimes
+  deriving (Show, Eq, Ord, Enum, Bounded)
 
 -- | State of inferring.
 data InferState = InferState
@@ -414,7 +418,7 @@ instance Identifiable Name where
       ConstructorName _ c -> pure (Identifier c)
       DictName _ i -> pure (Identifier i)
       MethodName _ i -> pure (Identifier i)
-      PrimopName {} -> error"wtf"
+      PrimopName {} -> error "identifyValue PrimopName"
       n -> throwM (TypeAtValueScope n)
   identifyType =
     \case

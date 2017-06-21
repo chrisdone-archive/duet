@@ -127,6 +127,15 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                               PrimopIntegerPlus -> IntegerLiteral (i1 + i2)
                               PrimopIntegerTimes -> IntegerLiteral (i1 * i2)
                               PrimopIntegerSubtract -> IntegerLiteral (i1 - i2)))
+                    (RationalLiteral i1, RationalLiteral i2) ->
+                      pure
+                        (LiteralExpression
+                           l
+                           (case primop of
+                              PrimopRationalPlus -> RationalLiteral (i1 + i2)
+                              PrimopRationalTimes -> RationalLiteral (i1 * i2)
+                              PrimopRationalSubtract -> RationalLiteral (i1 - i2)
+                              PrimopRationalDivide -> RationalLiteral (i1 / i2)))
                     _ -> pure orig
                 _ -> do
                   y' <- go y

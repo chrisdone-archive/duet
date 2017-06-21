@@ -64,6 +64,10 @@ printPrimop =
     PrimopIntegerSubtract -> "PrimopIntegerSubtract"
     PrimopIntegerTimes -> "PrimopIntegerTimes"
     PrimopIntegerPlus -> "PrimopIntegerPlus"
+    PrimopRationalSubtract -> "PrimopRationalSubtract"
+    PrimopRationalTimes -> "PrimopRationalTimes"
+    PrimopRationalPlus -> "PrimopRationalPlus"
+    PrimopRationalDivide -> "PrimopRationalDivide"
 
 instance Printable Identifier where
   printit _ =
