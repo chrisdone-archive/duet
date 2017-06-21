@@ -47,6 +47,7 @@ exampleInputs =
   ,("Factorial",facSource)
   ,("Lists",listsSource)
   ,("Folds", foldsSource)
+  ,("Currying", curryinglistsSource)
   ,("Monad", monadSource)
   ,("Read/Show",readshowSource)]
 
@@ -632,3 +633,12 @@ readshowSource = "class Reader a where\n\
                   \"
 
 arithmeticSource = "main = 2 * (10 - (5 + -3))"
+
+curryinglistsSource = "data List a = Nil | Cons a (List a)\n\
+                       \map = \\f xs ->\n\
+                       \  case xs of\n\
+                       \    Nil -> Nil\n\
+                       \    Cons x xs -> Cons (f x) (map f xs)\n\
+                       \multiply = \\x y -> x * y\n\
+                       \doubleAll = map (multiply 2)\n\
+                       \main = doubleAll (Cons 1 (Cons 2 Nil))"
