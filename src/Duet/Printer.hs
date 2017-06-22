@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE Strict #-}
@@ -18,6 +19,9 @@ import           Text.Printf
 
 class PrintableType (t :: * -> *) where
   printType :: Printable i => Print i l -> SpecialTypes i -> t i -> String
+
+instance PrintableType (Predicate Type) where
+  printType = printPredicate
 
 class (Eq a, Identifiable a) => Printable a where
   printit :: Print i l -> a -> String
@@ -286,7 +290,7 @@ printLiteral (RationalLiteral i) = printf "%f" (fromRational i :: Double)
 printLiteral (StringLiteral x) = show x
 printLiteral (CharacterLiteral x) = show x
 
-printScheme :: (Printable i, Eq i, PrintableType t) => Print i l -> SpecialTypes i -> Scheme t i -> [Char]
+printScheme :: (Printable i, Eq i, PrintableType t, PrintableType t1) => Print i l -> SpecialTypes i -> Scheme t i t1 -> [Char]
 printScheme printer specialTypes (Forall kinds qualifiedType') =
   (if null kinds
      then ""
@@ -316,6 +320,7 @@ printScheme printer specialTypes (Forall kinds qualifiedType') =
             (map (printPredicate printer specialTypes) predicates) ++
           ") => " ++ printType printer specialTypes typ
 
+
 printClass :: Printable i => Print i l -> SpecialTypes i -> Class Type i l -> String
 printClass printer specialTypes (Class vars supers instances i methods) =
   "class " ++
@@ -326,16 +331,14 @@ printClass printer specialTypes (Class vars supers instances i methods) =
   intercalate "\n  " (map (printMethod printer specialTypes) (M.toList methods)) ++
   "\n" ++ intercalate "\n" (map (printInstance printer specialTypes) instances)
 
-printMethod :: Printable i =>  Print i l -> SpecialTypes i -> (i, Scheme Type i) -> String
+printMethod :: Printable i =>  Print i l -> SpecialTypes i -> (i, Scheme Type i Type) -> String
 printMethod printer specialTypes (i, scheme) =
   printit printer i ++ " :: " ++ printScheme printer specialTypes scheme
 
 printInstance :: Printable i => Print i l -> SpecialTypes i -> Instance Type i l -> String
-printInstance printer specialTypes (Instance (Qualified predicates typ) _) =
+printInstance printer specialTypes (Instance scheme _) =
   "instance " ++
-  if null predicates
-    then printPredicate printer specialTypes typ
-    else printSupers printer specialTypes predicates ++ printPredicate printer specialTypes typ
+  printScheme printer specialTypes scheme
 
 printSupers :: Printable i => Print i l -> SpecialTypes i -> [Predicate Type i] -> [Char]
 printSupers printer specialTypes supers
@@ -347,7 +350,10 @@ printSupers printer specialTypes supers
 printPredicate :: (Eq i, Printable i, PrintableType t) => Print i l -> SpecialTypes i -> Predicate t i -> [Char]
 printPredicate printer specialTypes (IsIn identifier types) =
   printIdentifier printer identifier ++
-  " " ++ unwords (map (printType printer specialTypes) types)
+  " " ++ unwords (map (wrap . printType printer specialTypes) types)
+  where wrap x = if any isSpace x
+                    then "(" ++ x ++ ")"
+                    else x
 
 printKind :: Kind -> [Char]
 printKind =

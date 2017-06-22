@@ -31,14 +31,14 @@ makeInst specials pred' methods = do
          key' <- supplyMethodName (Identifier key)
          pure (key', alt))
       methods
-  pure (Instance (Qualified [] pred') (Dictionary name (M.fromList methods')))
+  pure (Instance (Forall [] (Qualified [] pred')) (Dictionary name (M.fromList methods')))
 
 -- | Make a class.
 makeClass
   :: MonadSupply Int m
   => Identifier
   -> [TypeVariable Name]
-  -> [(Name, Scheme t Name)]
+  -> [(Name, Scheme t Name t)]
   -> m (Class t Name l)
 makeClass name vars methods = do
   name' <- supplyClassName name

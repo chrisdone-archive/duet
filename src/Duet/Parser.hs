@@ -148,7 +148,7 @@ kindableTypeVariable = (unkinded <|> kinded) <?> "type variable (e.g. ‘a’, �
 
 parseScheme
   :: Stream s m (Token, Location)
-  => ParsecT s Int m (Scheme UnkindedType Identifier)
+  => ParsecT s Int m (Scheme UnkindedType Identifier UnkindedType)
 parseScheme = do
   explicit <-
     fmap (const True) (lookAhead (equalToken ForallToken)) <|> pure False
@@ -165,6 +165,25 @@ parseScheme = do
       ty <- parseQualified
       pure (Forall vars ty)
 
+parseSchemePredicate
+  :: Stream s m (Token, Location)
+  => ParsecT s Int m (Scheme UnkindedType Identifier (Predicate UnkindedType))
+parseSchemePredicate = do
+  explicit <-
+    fmap (const True) (lookAhead (equalToken ForallToken)) <|> pure False
+  if explicit
+    then quantified
+    else do
+      ty@(Qualified _ (IsIn _ qt)) <- parseQualifiedPredicate
+      pure (Forall (nub (concatMap collectTypeVariables qt)) ty)
+  where
+    quantified = do
+      _ <- equalToken ForallToken
+      vars <- many1 kindableTypeVariable <?> "type variables"
+      _ <- equalToken Period
+      ty <- parseQualifiedPredicate
+      pure (Forall vars ty)
+
 parseQualified
   :: Stream s m (Token, Location)
   => ParsecT s Int m (Qualified UnkindedType Identifier (UnkindedType Identifier))
@@ -175,6 +194,19 @@ parseQualified = do
        where toUnkindedPred (IsIn c ts) = IsIn c <$> mapM toType ts
      _ -> do
        t <- toType ty
+       pure (Qualified [] t)) <?>
+    "qualified type e.g. Show x => x"
+
+parseQualifiedPredicate
+  :: Stream s m (Token, Location)
+  => ParsecT s Int m (Qualified UnkindedType Identifier (Predicate UnkindedType Identifier))
+parseQualifiedPredicate = do
+  ty <- parsedTypeLike
+  (case ty of
+     ParsedQualified ps x -> Qualified <$> mapM toUnkindedPred ps <*> toPredicateUnkinded x
+       where toUnkindedPred (IsIn c ts) = IsIn c <$> mapM toType ts
+     _ -> do
+       t <- toPredicateUnkinded ty
        pure (Qualified [] t)) <?>
     "qualified type e.g. Show x => x"
 
@@ -193,13 +225,7 @@ instancedecl =
       u <- getState
       loc <- equalToken InstanceToken
       setState (locationStartColumn loc)
-      (c, _) <-
-        consumeToken
-          (\case
-             Constructor c -> Just c
-             _ -> Nothing) <?>
-        "class name e.g. Show"
-      ty <- parseType
+      predicate@(Forall _ (Qualified _ (IsIn (Identifier c) _))) <- parseSchemePredicate
       mwhere <-
         fmap (const True) (equalToken Where) <|> fmap (const False) endOfDecl
       methods <-
@@ -216,8 +242,7 @@ instancedecl =
           else (pure [])
       setState u
       _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
-      let predicate = Qualified [] (IsIn (Identifier (T.unpack c)) [ty])
-          dictName = "$dict" ++ T.unpack c
+      let dictName = "$dict" ++ c
       pure
         (Instance
          { instancePredicate = predicate
@@ -254,6 +279,10 @@ parseType :: Stream s m (Token, Location) => ParsecT s Int m (UnkindedType Ident
 parseType = do
   x <- parsedTypeLike
   toType x
+
+toPredicateUnkinded :: Stream s m t => ParsedType i -> ParsecT s u m (Predicate UnkindedType i)
+toPredicateUnkinded = toPredicate >=> go
+  where go (IsIn c tys) = IsIn c <$> mapM toType tys
 
 toType :: Stream s m t => ParsedType i -> ParsecT s u m (UnkindedType i)
 toType = go
@@ -434,14 +463,12 @@ parsedTypeToPredicates =
   \case
     ParsedTuple xs -> mapM toPredicate xs
     x -> fmap return (toPredicate x)
-  where
 
 toPredicate :: Stream s m t => ParsedType i -> ParsecT s u m (Predicate ParsedType i)
 toPredicate t =
   case targs t of
     (ParsedTypeConstructor i, vars@ (_:_)) -> do
-      vs <- mapM toVar vars
-      pure (IsIn i vs)
+      pure (IsIn i vars)
     _ -> unexpected "non-class constraint"
 
 toVar :: Stream s m t1 => ParsedType t -> ParsecT s u m (ParsedType t)

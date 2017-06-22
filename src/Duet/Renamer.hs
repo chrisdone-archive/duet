@@ -218,7 +218,7 @@ renameInstance
   -> [Class Type Name l]
   -> Instance UnkindedType Identifier l
   -> m (Instance Type Name l)
-renameInstance specials subs types classes inst@(Instance (Qualified _ (IsIn className' _)) _) = do
+renameInstance specials subs types classes inst@(Instance (Forall _ (Qualified _ (IsIn className' _))) _) = do
   {-trace ("renameInstance: Classes: " ++ show (map className classes)) (return ())-}
   table <- mapM (\c -> fmap (, c) (identifyClass (className c))) classes
   {-trace ("renameInstance: Table: " ++ show table) (return ())-}
@@ -234,7 +234,8 @@ renameInstance specials subs types classes inst@(Instance (Qualified _ (IsIn cla
         mapM
           (\v@(TypeVariable i _) -> fmap (, v) (identifyType i))
           (classTypeVariables typeClass)
-      renameInstance' specials subs types vars inst
+      instr <- renameInstance' specials subs types vars inst
+      pure instr
 
 renameInstance'
   :: (MonadThrow m, MonadSupply Int m)
@@ -244,14 +245,16 @@ renameInstance'
   -> [(Identifier, TypeVariable Name)]
   -> Instance UnkindedType Identifier l
   -> m (Instance Type Name l)
-renameInstance' specials subs types _tyVars (Instance (Qualified preds ty) dict) = do
+renameInstance' specials subs types _tyVars (Instance (Forall vars (Qualified preds ty)) dict) = do
   let vars0 =
         nub
-          (concat
-             (map
-                collectTypeVariables
-                (case ty of
-                   IsIn _ t -> t)))
+          (if null vars
+              then concat
+                     (map
+                        collectTypeVariables
+                        (case ty of
+                           IsIn _ t -> t))
+              else vars)
   vars <-
     mapM
       (\(TypeVariable i k) -> do
@@ -261,7 +264,7 @@ renameInstance' specials subs types _tyVars (Instance (Qualified preds ty) dict)
   preds' <- mapM (renamePredicate specials subs vars types) preds
   ty' <- renamePredicate specials subs vars types ty
   dict' <- renameDict specials subs types dict  ty'
-  pure (Instance (Qualified preds' ty') dict')
+  pure (Instance (Forall (map snd vars) (Qualified preds' ty')) dict')
   where
     collectTypeVariables :: UnkindedType i -> [TypeVariable i]
     collectTypeVariables =
@@ -328,8 +331,8 @@ renameScheme
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
-  -> Scheme t i
-  -> m (Scheme Type Name)
+  -> Scheme t i t
+  -> m (Scheme Type Name Type)
 renameScheme specials subs  types (Forall tyvars (Qualified ps ty)) = do
   tyvars' <-
     mapM

@@ -145,6 +145,7 @@ collectMethods binds =
        pure (name, cls {classInstances = insts})) .
   M.toList
 
+
 classMethodsToGroups
   :: MonadThrow m
   => SpecialTypes Name -> Map Name (Class Type Name l) -> m [BindGroup Type Name l]
@@ -175,14 +176,14 @@ instanceMethodScheme
   :: MonadThrow m
   => SpecialTypes Name
   -> Class Type Name l
-  -> Scheme Type Name
-  -> Qualified Type Name (Predicate Type Name)
-  -> m (Scheme Type Name)
-instanceMethodScheme _specialTypes cls (Forall methodVars0 (Qualified methodPreds methodType0)) (Qualified preds (IsIn _ headTypes)) = do
+  -> Scheme Type Name Type
+  -> Scheme Type Name (Predicate Type)
+  -> m (Scheme Type Name Type)
+instanceMethodScheme specialTypes cls (Forall methodVars0 (Qualified methodPreds methodType0)) instScheme@(Forall instanceVars0 (Qualified preds (IsIn _ headTypes))) = do
   methodQual <- instantiateQual (Qualified (methodPreds ++ preds) methodType0)
   pure (Forall methodVars methodQual)
   where
-    methodVars = filter (not . flip elem (classTypeVariables cls)) methodVars0
+    methodVars = filter (not . flip elem (classTypeVariables cls)) (methodVars0 ++ instanceVars0)
     table = zip (classTypeVariables cls) headTypes
     instantiateQual (Qualified ps t) =
       Qualified <$> mapM instantiatePred ps <*> instantiate t
@@ -199,7 +200,7 @@ instanceMethodScheme _specialTypes cls (Forall methodVars0 (Qualified methodPred
 
 classMethodScheme
   :: MonadThrow m
-  => Class t Name l -> Scheme Type Name -> m (Scheme Type Name)
+  => Class t Name l -> Scheme Type Name Type -> m (Scheme Type Name Type)
 classMethodScheme cls (Forall methodVars (Qualified methodPreds methodType)) = do
   ty' <- pure methodType
   headVars <- mapM (pure . VariableType) (classTypeVariables cls)
@@ -288,7 +289,7 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding identifier sc alts
            else return (ds, ExplicitlyTypedBinding identifier sc alts')
 
 -- | Are two type schemes alpha-equivalent?
-schemesEquivalent :: Scheme Type Name ->  Scheme Type Name -> Bool
+schemesEquivalent :: Scheme Type Name Type ->  Scheme Type Name Type -> Bool
 schemesEquivalent (Forall vs1 q1) (Forall vs2 q2) =
   length vs1 == length vs2 &&
   evalState (goQ q1 q2) (mempty,mempty)
@@ -541,7 +542,7 @@ oneWayMatchLists ts ts' = do
 
 lookupName
   :: MonadThrow m
-  => Name -> [(TypeSignature Type Name Name)] -> m (Scheme Type Name)
+  => Name -> [(TypeSignature Type Name Name)] -> m (Scheme Type Name Type)
 lookupName name cands = go name cands where
   go n [] = throwM (NotInScope cands n)
   go i ((TypeSignature i'  sc):as) =
@@ -690,20 +691,21 @@ addInstance
   => Instance Type Name l
   -> Map Name (Class Type Name l)
   -> m (Map Name (Class Type Name l))
-addInstance (Instance (Qualified _ p@(IsIn i _)) dict) ce =
+addInstance (Instance (Forall vs (Qualified preds p@(IsIn i _))) dict) ce =
   case M.lookup i ce of
     Nothing -> throwM NoSuchClassForInstance
     Just typeClass
       | any (overlap p) qs -> throwM OverlappingInstance
       | otherwise -> return (M.insert i c ce)
       where its = classInstances typeClass
-            qs = [q | Instance (Qualified _ q) _ <- its]
+            qs = [q | Instance (Forall _ (Qualified _ q)) _ <- its]
             ps = []
             c =
               (Class
                  (classTypeVariables typeClass)
                  (classSuperclasses typeClass)
-                 (Instance (Qualified ps p) dict : its)
+                 (Instance (Forall vs (Qualified (nub (ps ++ preds)) p)) dict :
+                  its)
                  i
                  (classMethods typeClass))
 
@@ -731,7 +733,7 @@ byInst ce p@(IsIn i _) =
     Just typeClass ->
       (msum [tryInst it | it <- classInstances typeClass])
   where
-    tryInst (Instance (Qualified ps h) dict) = do
+    tryInst (Instance (Forall _ (Qualified ps h)) dict) = do
       (return ())
       case oneWayMatchPredicate h p of
         Just u ->
@@ -762,14 +764,14 @@ elimTauts ce ps = [p | p <- ps, not (entail ce [] p)]
 scEntail :: Map Name (Class Type Name l) -> [Predicate Type Name] -> Predicate Type Name -> Bool
 scEntail ce ps p = any (p `elem`) (map (bySuper ce) ps)
 
-quantify :: [TypeVariable Name] -> Qualified Type Name (Type Name) -> Scheme Type Name
+quantify :: [TypeVariable Name] -> Qualified Type Name (Type Name) -> Scheme Type Name Type
 quantify vs qt = Forall vs' qt
   where
     vs' = [v | v <- getQualifiedTypeVariables qt, v `elem` vs]
     {-ks = map typeVariableKind vs'-}
     {-s = zipWith Substitution vs' (map undefined {-GenericType-} [0 ..])-}
 
-toScheme :: Type Name -> Scheme Type Name
+toScheme :: Type Name -> Scheme Type Name Type
 toScheme t = Forall [] (Qualified [] t)
 
 merge
@@ -890,7 +892,7 @@ inferAltType0
   :: (Show t1, MonadThrow m)
   => Map Name (Class Type Name t1)
   -> [TypeSignature Type Name Name]
-  -> (t1 -> Scheme Type Name -> [Pattern Type Name (TypeSignature Type Name t1)] -> Expression Type Name (TypeSignature Type Name t1) -> t)
+  -> (t1 -> Scheme Type Name Type -> [Pattern Type Name (TypeSignature Type Name t1)] -> Expression Type Name (TypeSignature Type Name t1) -> t)
   -> Alternative Type Name t1
   -> InferT m ([Predicate Type Name], Type Name, t)
 inferAltType0 ce as makeAlt (Alternative l pats e) = do
@@ -913,7 +915,7 @@ inferAltType0 ce as makeAlt (Alternative l pats e) = do
 -- But type-checked and generalized.
 makeAltForDecl
   :: a
-  -> Scheme Type i1
+  -> Scheme Type i1 Type
   -> [Pattern Type i (TypeSignature Type i1 a)]
   -> Expression Type i (TypeSignature Type i1 a)
   -> Alternative Type i (TypeSignature Type i1 a)
@@ -1005,7 +1007,7 @@ defaultSubst = withDefaults "defaultSubst" (\vps ts -> zipWith Substitution (map
 
 freshInst
   :: Monad m
-  => Scheme Type Name -> InferT m (Qualified Type Name (Type Name))
+  => Scheme Type Name Type -> InferT m (Qualified Type Name (Type Name))
 freshInst (Forall ks qt) = do
   ts <- mapM (\vorig -> (vorig, ) <$> newVariableType (typeVariableKind vorig)) ks
   return (instantiateQualified ts qt)

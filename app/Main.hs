@@ -129,7 +129,7 @@ printDebugDicts
   :: (PrintableType t, Printable i, Foldable t1, MonadLogger m)
   => Builtins t2 i l -> t1 (BindGroup t i (TypeSignature Type i b)) -> m ()
 printDebugDicts builtins bindGroups = do
-  $logDebug "\n--- Explicitly typed\n"
+  $logDebug "\n--- Dictionaries inserted\n"
   mapM_
     (\(BindGroup es is) -> do
        (mapM_

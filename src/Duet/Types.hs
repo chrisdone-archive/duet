@@ -118,7 +118,6 @@ data InferState = InferState
   { inferStateSubstitutions :: ![Substitution Name]
   , inferStateCounter :: !Int
   , inferStateSpecialTypes :: !(SpecialTypes Name)
-  -- , inferStateExpressionTypes :: ![(Expression (), Scheme)]
   } deriving (Show)
 
 data ParseException
@@ -170,7 +169,7 @@ instance Exception ResolveException
 
 -- | A type error.
 data InferException
-  = ExplicitTypeMismatch (Scheme Type Name) (Scheme Type Name)
+  = ExplicitTypeMismatch (Scheme Type Name Type) (Scheme Type Name Type)
   | ContextTooWeak
   | OccursCheckFails
   | KindMismatch
@@ -190,7 +189,7 @@ instance Exception InferException
 -- | Specify the type of @a@.
 data TypeSignature (t :: * -> *) i a = TypeSignature
   { typeSignatureA :: a
-  , typeSignatureScheme :: Scheme t i
+  , typeSignatureScheme :: Scheme t i t
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
 data BindGroup (t :: * -> *) i l = BindGroup
@@ -214,7 +213,7 @@ data ImplicitlyTypedBinding (t :: * -> *) i l = ImplicitlyTypedBinding
 -- do not need to enforce that here.
 data ExplicitlyTypedBinding t i l = ExplicitlyTypedBinding
   { explicitlyTypedBindingId :: !i
-  , explicitlyTypedBindingScheme :: !(Scheme t i)
+  , explicitlyTypedBindingScheme :: !(Scheme t i t)
   , explicitlyTypedBindingAlternatives :: ![(Alternative t i l)]
   } deriving (Show, Functor, Traversable, Foldable, Eq)
 
@@ -350,17 +349,17 @@ data Class (t :: * -> *) i l = Class
   , classSuperclasses :: ![Predicate t i]
   , classInstances :: ![Instance t i l]
   , className :: i
-  , classMethods :: Map i (Scheme t i)
+  , classMethods :: Map i (Scheme t i t)
   } deriving (Show)
 
 -- | Class instance.
 data Instance (t :: * -> *) i l = Instance
-  { instancePredicate :: !(Qualified t i (Predicate t i))
+  { instancePredicate :: !(Scheme t i (Predicate t))
   , instanceDictionary :: !(Dictionary t i l)
   } deriving (Show)
 
 instanceClassName :: Instance t1 i t -> i
-instanceClassName (Instance (Qualified _ (IsIn x _)) _) = x
+instanceClassName (Instance (Forall _ (Qualified _ (IsIn x _))) _) = x
 
 -- | A dictionary for a class.
 data Dictionary (t :: * -> *) i l = Dictionary
@@ -375,8 +374,8 @@ data TypeConstructor i = TypeConstructor
   } deriving (Eq, Show)
 
 -- | A type scheme.
-data Scheme t i =
-  Forall [TypeVariable i] (Qualified t i (t i))
+data Scheme t i typ =
+  Forall [TypeVariable i] (Qualified t i (typ i))
   deriving (Eq, Show)
 
 data Result a
