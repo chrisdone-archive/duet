@@ -74,7 +74,8 @@ createContext file text = do
          signatures
          (builtinsSpecialTypes builtins)
          renamedBindings
-     printDebugDicts builtins bindGroups
+     printDebugTypeChecked builtins bindGroups
+
      -- Type class resolution
      resolvedTypeClasses <-
        resolveTypeClasses typeCheckedClasses (builtinsSpecialTypes builtins)
@@ -82,7 +83,7 @@ createContext file text = do
        mapM
          (resolveBindGroup resolvedTypeClasses (builtinsSpecialTypes builtins))
          bindGroups
-     printDebugTypeChecked builtins resolvedBindGroups
+     printDebugDicts builtins resolvedBindGroups
      -- Create a context of everything
      let context =
            Context
@@ -166,8 +167,7 @@ runStepper context bindGroups' i = do
   fix
     (\loopy lastString e -> do
        e' <- expandSeq1 context bindGroups' e
-       let string =
-             printExpression defaultPrint e
+       let string = printExpression defaultPrint {printDictionaries = True} e
        when
          (string /= lastString && (True || cleanExpression e))
          (do liftIO (putStrLn string)

@@ -76,8 +76,8 @@ resolveExplicit
   -> SpecialTypes Name
   -> ExplicitlyTypedBinding Type Name (TypeSignature Type Name l)
   -> m (ExplicitlyTypedBinding Type Name (TypeSignature Type Name l))
-resolveExplicit classes specialTypes (ExplicitlyTypedBinding l name alts) =
-  ExplicitlyTypedBinding l name <$> mapM (resolveAlt classes specialTypes) alts
+resolveExplicit classes specialTypes (ExplicitlyTypedBinding scheme name alts) =
+  ExplicitlyTypedBinding scheme name <$> mapM (resolveAlt classes specialTypes) alts
 
 resolveAlt
   :: (MonadSupply Int m, MonadThrow m, Show l)
@@ -85,7 +85,7 @@ resolveAlt
   -> SpecialTypes Name
   -> Alternative Type Name (TypeSignature Type Name l)
   -> m (Alternative Type Name (TypeSignature Type Name l))
-resolveAlt classes specialTypes (Alternative l ps e) = do
+resolveAlt classes specialTypes alt@(Alternative l ps e) = do
   dicts <-
     mapM
       (\pred' ->
@@ -126,7 +126,7 @@ resolveExp classes _ dicts = go
     go =
       \case
         VariableExpression l i -> do
-          dictArgs <- mapM (lookupDictionary l) predicates
+          dictArgs <- fmap concat (mapM (lookupDictionary l) predicates)
           pure
             (foldl (ApplicationExpression l) (VariableExpression l i) dictArgs)
           where Forall _ (Qualified predicates _) = typeSignatureScheme l
@@ -144,9 +144,10 @@ resolveExp classes _ dicts = go
         e@LiteralExpression {} -> pure e
     lookupDictionary l p =
       (case byInst classes p of
-         Just (_, dict) -> do
-           pure (VariableExpression l (dictionaryName dict))
+         Just (preds, dict) -> do
+           do parents <- fmap concat (mapM (lookupDictionary l) preds)
+              pure (VariableExpression l (dictionaryName dict) : parents)
          Nothing ->
            case lookup p dicts of
              Nothing -> throwM (NoInstanceFor p)
-             Just v -> pure (VariableExpression l v))
+             Just v -> pure [VariableExpression l v])
