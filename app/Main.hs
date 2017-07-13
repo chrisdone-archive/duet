@@ -15,9 +15,7 @@ import           Control.Monad.Fix
 import           Control.Monad.IO.Class
 import           Control.Monad.Logger
 import           Control.Monad.Supply
-import           Data.Map.Strict (Map)
 import           Data.Maybe
-import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -28,7 +26,6 @@ import           Duet.Printer
 import           Duet.Renamer
 import           Duet.Resolver
 import           Duet.Stepper
-import           Duet.Supply
 import           Duet.Types
 import           Shared
 import           System.Environment
@@ -75,7 +72,6 @@ createContext file text = do
          (builtinsSpecialTypes builtins)
          renamedBindings
      printDebugTypeChecked builtins bindGroups
-
      -- Type class resolution
      resolvedTypeClasses <-
        resolveTypeClasses typeCheckedClasses (builtinsSpecialTypes builtins)
