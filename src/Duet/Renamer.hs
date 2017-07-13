@@ -37,6 +37,7 @@ import           Data.Char
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+import           Data.Maybe
 import           Duet.Infer
 import           Duet.Printer
 import           Duet.Supply
@@ -120,30 +121,49 @@ renameField specials typeConstructors vars name fe = do
       case find ((\(j, _, _, _) -> j == i)) typeConstructors of
         Just (_, name', vs, _) -> pure (name', vs)
         Nothing ->
-          case specialTypesBool (specialsTypes specials) of
-            DataType n@(TypeName _ i') vars _
-              | Identifier i' == i ->
-                pure
-                  ( n
-                  , map
-                      (\case
-                         (TypeVariable n@(TypeName _ i) k) ->
-                           (Identifier i, TypeVariable n k))
-                      vars)
+          case specialTypesFunction (specialsTypes specials) of
+            TypeConstructor n@(TypeName _ i') _
+              | Identifier i' == i -> do
+                fvars <-
+                  mapM
+                    (\vari ->
+                       (vari, ) <$>
+                       fmap
+                         (\varn -> TypeVariable varn StarKind)
+                         (supplyTypeVariableName vari))
+                    (map Identifier ["a", "b"])
+                pure (n, fvars)
             _ ->
-              case specialTypesFunction (specialsTypes specials) of
-                TypeConstructor n@(TypeName _ i') _
-                  | Identifier i' == i -> do
-                    vars <-
-                      mapM
-                        (\i ->
-                           (i, ) <$>
-                           fmap
-                             (\n -> TypeVariable n StarKind)
-                             (supplyTypeVariableName i))
-                        (map Identifier ["a", "b"])
-                    pure (n, vars)
-
+              case listToMaybe (mapMaybe (matches i) builtinStarTypes) of
+                Just ty -> pure ty
+                Nothing ->
+                  case find
+                         (\case
+                            TypeName _ tyi -> Identifier tyi == i
+                            _ -> False)
+                         (map
+                            typeConstructorIdentifier
+                            [ specialTypesChar (specialsTypes specials)
+                            , specialTypesInteger (specialsTypes specials)
+                            , specialTypesRational (specialsTypes specials)
+                            , specialTypesString (specialsTypes specials)
+                            ]) of
+                    Just ty -> pure (ty, [])
+                    _ -> throwM (TypeNotInScope [] i)
+    matches i t =
+      case t of
+        DataType n@(TypeName _ i') vs _
+          | Identifier i' == i ->
+            Just
+              ( n
+              , mapMaybe
+                  (\case
+                     (TypeVariable n'@(TypeName _ tyi) k) ->
+                       Just (Identifier tyi, TypeVariable n' k)
+                     _ -> Nothing)
+                  vs)
+        _ -> Nothing
+    builtinStarTypes = [specialTypesBool (specialsTypes specials)]
 
 --------------------------------------------------------------------------------
 -- Class renaming
@@ -172,8 +192,8 @@ renameClass specials subs types cls = do
     fmap
       M.fromList
       (mapM
-         (\(name, (Forall vars (Qualified preds ty))) -> do
-            name' <- supplyMethodName name
+         (\(mname, (Forall vars (Qualified preds ty))) -> do
+            name' <- supplyMethodName mname
             methodVars <- mapM (renameMethodTyVar classVars) vars
             let classAndMethodVars = nub (classVars ++ methodVars)
             ty' <- renameType specials classAndMethodVars types ty
@@ -255,16 +275,16 @@ renameInstance' specials subs types _tyVars (Instance (Forall vars (Qualified pr
                         (case ty of
                            IsIn _ t -> t))
               else vars)
-  vars <-
+  vars'' <-
     mapM
       (\(TypeVariable i k) -> do
          n <- supplyTypeName i
          pure (i, TypeVariable n k))
       vars0
-  preds' <- mapM (renamePredicate specials subs vars types) preds
-  ty' <- renamePredicate specials subs vars types ty
+  preds' <- mapM (renamePredicate specials subs vars'' types) preds
+  ty' <- renamePredicate specials subs vars'' types ty
   dict' <- renameDict specials subs types dict  ty'
-  pure (Instance (Forall (map snd vars) (Qualified preds' ty')) dict')
+  pure (Instance (Forall (map snd vars'') (Qualified preds' ty')) dict')
   where
     collectTypeVariables :: UnkindedType i -> [TypeVariable i]
     collectTypeVariables =
@@ -297,8 +317,8 @@ renameDict specials subs types (Dictionary _ methods) predicate = do
   pure (Dictionary name' methods')
 
 predicateToDict :: Specials Name -> ((Predicate Type Name)) -> String
-predicateToDict specials pred =
-  "$dict" ++ map normalize (printPredicate defaultPrint (specialsTypes specials) pred)
+predicateToDict specials p =
+  "$dict" ++ map normalize (printPredicate defaultPrint (specialsTypes specials) p)
   where
     normalize c
       | isDigit c || isLetter c = c
@@ -313,15 +333,15 @@ renamePredicate
   -> [DataType Type Name]
   -> Predicate t i
   -> m (Predicate Type Name)
-renamePredicate specials subs tyVars types (IsIn className types0) =
-  do className' <- substituteClass subs className
+renamePredicate specials subs tyVars types (IsIn className' types0) =
+  do subbedClassName <- substituteClass subs className'
      types' <- mapM (renameType specials tyVars types -- >=> forceStarKind
                     ) types0
-     pure (IsIn className' types')
+     pure (IsIn subbedClassName types')
 
 -- | Force that the type has kind *.
-forceStarKind :: MonadThrow m => Type Name -> m (Type Name)
-forceStarKind ty =
+_forceStarKind :: MonadThrow m => Type Name -> m (Type Name)
+_forceStarKind ty =
   case typeKind ty of
     StarKind -> pure ty
     _ -> throwM (MustBeStarKind ty (typeKind ty))
@@ -341,8 +361,8 @@ renameScheme specials subs  types (Forall tyvars (Qualified ps ty)) = do
               case nonrenamableName i of
                 Just k -> pure k
                 Nothing -> do
-                  i <- identifyType i
-                  supplyTypeName i
+                  i' <- identifyType i
+                  supplyTypeName i'
             ident <- identifyType n
             (ident, ) <$> (TypeVariable <$> pure n <*> pure kind))
       tyvars
@@ -373,7 +393,7 @@ renameType specials tyVars types t = either go pure (isType t)
                        (TypeNotInScope
                           (map dataTypeToConstructor (map snd ms))
                           i)
-                   Just t -> pure (ConstructorType t)
+                   Just t' -> pure (ConstructorType t')
             Just dty -> pure (dataTypeConstructor dty)
         UnkindedTypeVariable i -> do
           case lookup i tyVars of
@@ -393,6 +413,10 @@ renameType specials tyVars types t = either go pure (isType t)
               throwM (KindTooManyArgs f' (typeKind f') a')
     specials' =
       [ setup (specialTypesFunction . specialsTypes)
+      , setup (specialTypesInteger . specialsTypes)
+      , setup (specialTypesChar . specialsTypes)
+      , setup (specialTypesRational . specialsTypes)
+      , setup (specialTypesString . specialsTypes)
       , setup (dataTypeToConstructor . specialTypesBool . specialsTypes)
       ]
       where
@@ -560,7 +584,7 @@ renameExpression specials subs types = go
         InfixExpression l x (orig, VariableExpression l0 i) y -> do
           i' <-
             case nonrenamableName i of
-              Just x -> pure x
+              Just nr -> pure nr
               Nothing -> do
                 ident <- identifyValue i
                 case lookup ident operatorTable of
@@ -615,14 +639,6 @@ substituteClass subs i0 =
        _ -> do s <- identifyValue i
                throwM (IdentifierNotInClassScope subs s)
 
-substituteType :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
-substituteType subs i0 =
-  do i <- identifyType i0
-     case M.lookup i subs of
-       Just name@TypeName{} -> pure name
-       _ -> do s <- identifyType i
-               throwM (IdentifierNotInTypeScope subs s)
-
 substituteCons :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
 substituteCons subs i0 =
   do i <- identifyValue i0
@@ -630,6 +646,7 @@ substituteCons subs i0 =
        Just name@ConstructorName{} -> pure name
        _ -> do  throwM (IdentifierNotInConScope subs i)
 
+operatorTable :: [(Identifier, SpecialSigs i -> i)]
 operatorTable =
   map
     (first Identifier)
