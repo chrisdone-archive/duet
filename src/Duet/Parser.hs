@@ -597,7 +597,7 @@ altParser e' startCol =
   \  Just bar -> bar"
 
 altPat :: TokenParser (Pattern UnkindedType Identifier Location)
-altPat = varp <|> intliteral <|> consParser
+altPat = varp <|> intliteral <|> consParser <|> stringlit
   where
     patInner = parenpat <|> varp <|> intliteral <|> unaryConstructor
     parenpat = go
@@ -608,14 +608,23 @@ altPat = varp <|> intliteral <|> consParser
           _ <- equalToken CloseParen <?> "closing parenthesis ‘)’"
           pure e
     intliteral = go <?> "integer (e.g. 42, 123)"
-                where
-                  go = do
-                    (c, loc) <-
-                      consumeToken
-                        (\case
-                           Integer c -> Just c
-                           _ -> Nothing)
-                    pure (LiteralPattern loc (IntegerLiteral c))
+      where
+        go = do
+          (c, loc) <-
+            consumeToken
+              (\case
+                 Integer c -> Just c
+                 _ -> Nothing)
+          pure (LiteralPattern loc (IntegerLiteral c))
+    stringlit = go <?> "string (e.g. 42, 123)"
+      where
+        go = do
+          (c, loc) <-
+            consumeToken
+              (\case
+                 String c -> Just c
+                 _ -> Nothing)
+          pure (LiteralPattern loc (StringLiteral (T.unpack c)))
     varp = go <?> "variable pattern (e.g. x)"
       where
         go = do
@@ -624,9 +633,10 @@ altPat = varp <|> intliteral <|> consParser
               (\case
                  Variable i -> Just i
                  _ -> Nothing)
-          pure (if T.isPrefixOf "_" v
-                   then WildcardPattern loc (T.unpack v)
-                   else VariablePattern loc (Identifier (T.unpack v)))
+          pure
+            (if T.isPrefixOf "_" v
+               then WildcardPattern loc (T.unpack v)
+               else VariablePattern loc (Identifier (T.unpack v)))
     unaryConstructor = go <?> "unary constructor (e.g. Nothing)"
       where
         go = do
