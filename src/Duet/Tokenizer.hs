@@ -107,7 +107,7 @@ tokenTokenizer prespaces =
     , parsing
         String
         (do _ <- string "\""
-            chars <- many1 (satisfy (\c -> c /= '"'))
+            chars <- many (satisfy (\c -> c /= '"'))
             when
               (any (== '\\') chars)
               (unexpected "\\ character, not allowed inside a string.")
