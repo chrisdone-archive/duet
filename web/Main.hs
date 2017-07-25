@@ -44,8 +44,7 @@ inputName = "<interactive>"
 mainFunc = "main"
 
 exampleInputs =
-  [ ("Terminal", terminalSource)
-  , ("Arithmetic", arithmeticSource)
+  [ ("Arithmetic", arithmeticSource)
   , ("Factorial", facSource)
   , ("Lists", listsSource)
   , ("Folds", foldsSource)
