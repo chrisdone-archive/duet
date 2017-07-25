@@ -44,14 +44,16 @@ inputName = "<interactive>"
 mainFunc = "main"
 
 exampleInputs =
-  [("Arithmetic",arithmeticSource)
-  ,("Factorial",facSource)
-  ,("Lists",listsSource)
-  ,("Folds", foldsSource)
-  ,("Currying", curryinglistsSource)
-  ,("Monad", monadSource)
-  ,("Read/Show",readshowSource)
-  ,("Lists factorial",listsFactorialSource)]
+  [ ("Terminal", terminalSource)
+  , ("Arithmetic", arithmeticSource)
+  , ("Factorial", facSource)
+  , ("Lists", listsSource)
+  , ("Folds", foldsSource)
+  , ("Currying", curryinglistsSource)
+  , ("Monad", monadSource)
+  , ("Read/Show", readshowSource)
+  , ("Lists factorial", listsFactorialSource)
+  ]
 
 --------------------------------------------------------------------------------
 -- Main entry point
@@ -255,7 +257,7 @@ createContext
   -> Text
   -> m ([BindGroup Type Name (TypeSignature Type Name Location)], Context Type Name Location)
 createContext file text = do
-  do builtins <- setupEnv mempty
+  do builtins <- setupEnv mempty terminalTypes
      let specials = builtinsSpecials builtins
      catch
        (do decls <- parseText file text
@@ -293,6 +295,45 @@ createContext file text = do
                  }
            pure (resolvedBindGroups, context))
        (throwM . ContextException (builtinsSpecialTypes builtins))
+
+terminalTypes
+  :: (MonadSupply Int m, MonadThrow m, MonadCatch m)
+  => [SpecialTypes Name -> m (DataType Type Name)]
+terminalTypes = [makeTerminal, makeUnit]
+  where
+    makeUnit specialTypes = do
+      name <- supplyTypeName "Unit"
+      cons <- supplyConstructorName "Unit"
+      pure (DataType name [] [DataTypeConstructor cons []])
+    makeTerminal specialTypes = do
+      name <- supplyTypeName "Terminal"
+      return' <- supplyConstructorName "Return"
+      getLine' <- supplyConstructorName "GetLine"
+      print' <- supplyConstructorName "Print"
+      a' <-
+        fmap
+          (flip TypeVariable StarKind)
+          (supplyTypeVariableName "a")
+      let a = VariableType a'
+          terminal =
+            ConstructorType
+              (TypeConstructor name (FunctionKind StarKind StarKind))
+          string = ConstructorType (specialTypesString specialTypes)
+      pure
+        (DataType
+           name
+           [a']
+           [ DataTypeConstructor return' [a]
+           , DataTypeConstructor print' [string, ApplicationType terminal a]
+           , DataTypeConstructor
+               getLine'
+               [ ApplicationType
+                   (ApplicationType
+                      (ConstructorType (specialTypesFunction specialTypes))
+                      string)
+                   (ApplicationType terminal a)
+               ]
+           ])
 
 --------------------------------------------------------------------------------
 -- Stepper
@@ -480,3 +521,13 @@ listsFactorialSource = "data List a = Nil | Cons a (List a)\n\
                         \   _ -> Cons from (enumFromTo (from + 1) (to - 1))\n\
                         \fac = \\n -> foldr (\\x g n -> g (x * n)) id (enumFromTo 1 n) 1\n\
                         \main = fac 3"
+
+terminalSource =
+  "main = \n\
+   \  Print\n\
+   \    \"Please enter your name: \"\n\
+   \    (GetLine \n\
+   \      (\\name -> \n\
+   \        Print \n\
+   \          (append \"Hello, \" (append name \"!\"))\n\
+   \          (Return Unit)))"

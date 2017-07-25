@@ -26,8 +26,9 @@ import           Duet.Types
 setupEnv
   :: (MonadThrow m, MonadSupply Int m)
   => Map Name (Class Type Name Location)
+  -> [SpecialTypes Name -> m (DataType Type Name)]
   -> m (Builtins Type Name Location)
-setupEnv env = do
+setupEnv env typeMakers = do
   theArrow <- supplyTypeName "(->)"
   theChar <- supplyTypeName "Char"
   theString <- supplyTypeName "String"
@@ -62,10 +63,17 @@ setupEnv env = do
   (fracClass, divide) <- makeFracClass function
   (monoidClass) <- makeMonoidClass function
   boolSigs <- dataTypeSignatures specialTypes boolDataType
+  typesSigs <-
+    fmap
+      concat
+      (mapM ($ specialTypes) typeMakers >>=
+       mapM (dataTypeSignatures specialTypes))
   classSigs <-
-    fmap concat (mapM classSignatures [numClass, negClass, fracClass, monoidClass])
+    fmap
+      concat
+      (mapM classSignatures [numClass, negClass, fracClass, monoidClass])
   primopSigs <- makePrimOps specialTypes
-  let signatures = boolSigs <> classSigs <> primopSigs
+  let signatures = boolSigs <> classSigs <> primopSigs <> typesSigs
       specialSigs =
         SpecialSigs
         { specialSigsTrue = true
