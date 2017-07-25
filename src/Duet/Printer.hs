@@ -65,13 +65,14 @@ instance Printable Name where
 printPrimop :: Primop -> [Char]
 printPrimop =
   \case
-    PrimopIntegerSubtract -> "PrimopIntegerSubtract"
-    PrimopIntegerTimes -> "PrimopIntegerTimes"
-    PrimopIntegerPlus -> "PrimopIntegerPlus"
-    PrimopRationalSubtract -> "PrimopRationalSubtract"
-    PrimopRationalTimes -> "PrimopRationalTimes"
-    PrimopRationalPlus -> "PrimopRationalPlus"
-    PrimopRationalDivide -> "PrimopRationalDivide"
+    PrimopIntegerSubtract -> "subtract"
+    PrimopIntegerTimes -> "times"
+    PrimopIntegerPlus -> "plus"
+    PrimopRationalSubtract -> "subtract"
+    PrimopRationalTimes -> "times"
+    PrimopRationalPlus -> "plus"
+    PrimopRationalDivide -> "divide"
+    PrimopStringAppend -> "append"
 
 instance Printable Identifier where
   printit _ =

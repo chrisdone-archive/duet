@@ -111,6 +111,7 @@ data Primop
   | PrimopRationalPlus
   | PrimopRationalSubtract
   | PrimopRationalTimes
+  | PrimopStringAppend
   deriving (Show, Eq, Ord, Enum, Bounded)
 
 -- | State of inferring.

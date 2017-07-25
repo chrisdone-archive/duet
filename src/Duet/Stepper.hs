@@ -78,6 +78,21 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
         LiteralExpression {} -> return x
         ConstructorExpression {} -> return x
         ConstantExpression {} -> return x
+        ApplicationExpression l (ApplicationExpression l1 op@(VariableExpression _ (PrimopName primop)) x) y ->
+          case x of
+            LiteralExpression _ (StringLiteral sx) ->
+              case y of
+                LiteralExpression _ (StringLiteral sy) ->
+                  case primop of
+                    PrimopStringAppend ->
+                      pure (LiteralExpression l (StringLiteral (sx <> sy)))
+                _ -> do
+                  y' <- go y
+                  pure
+                    (ApplicationExpression l (ApplicationExpression l1 op x) y')
+            _ -> do
+              x' <- go x
+              pure (ApplicationExpression l (ApplicationExpression l1 op x') y)
         ApplicationExpression l func arg ->
           case func of
             LambdaExpression l0 (Alternative l' params body) ->
@@ -134,7 +149,8 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                            (case primop of
                               PrimopRationalPlus -> RationalLiteral (i1 + i2)
                               PrimopRationalTimes -> RationalLiteral (i1 * i2)
-                              PrimopRationalSubtract -> RationalLiteral (i1 - i2)
+                              PrimopRationalSubtract ->
+                                RationalLiteral (i1 - i2)
                               PrimopRationalDivide -> RationalLiteral (i1 / i2)))
                     _ -> pure orig
                 _ -> do

@@ -191,7 +191,7 @@ runStepper context bindGroups' i = do
   fix
     (\loopy lastString e -> do
        e' <- expandSeq1 context bindGroups' e
-       let string = printExpression defaultPrint {printDictionaries = True} e
+       let string = printExpression defaultPrint e
        when
          (string /= lastString && (True || cleanExpression e))
          (do liftIO (putStrLn string)

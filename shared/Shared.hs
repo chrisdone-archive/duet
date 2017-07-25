@@ -10,24 +10,14 @@ module Shared where
 
 import           Control.Monad
 import           Control.Monad.Catch
-import           Control.Monad.Fix
 import           Control.Monad.Supply
-import           Control.Monad.Trans
 import           Data.Map.Strict (Map)
-import           Data.Maybe
 import           Data.Monoid
-import           Data.Text (Text)
-import qualified Data.Text.IO as T
 import           Duet.Context
 import           Duet.Infer
-import           Duet.Parser
-import           Duet.Printer
 import           Duet.Renamer
-import           Duet.Resolver
-import           Duet.Stepper
 import           Duet.Supply
 import           Duet.Types
-import           System.Environment
 
 --------------------------------------------------------------------------------
 -- Setting the context
@@ -70,9 +60,10 @@ setupEnv env = do
   (numClass, plus, times) <- makeNumClass function
   (negClass, subtract') <- makeNegClass function
   (fracClass, divide) <- makeFracClass function
+  (monoidClass) <- makeMonoidClass function
   boolSigs <- dataTypeSignatures specialTypes boolDataType
   classSigs <-
-    fmap concat (mapM classSignatures [numClass, negClass, fracClass])
+    fmap concat (mapM classSignatures [numClass, negClass, fracClass, monoidClass])
   primopSigs <- makePrimOps specialTypes
   let signatures = boolSigs <> classSigs <> primopSigs
       specialSigs =
@@ -85,6 +76,25 @@ setupEnv env = do
         , specialSigsDivide = divide
         }
       specials = Specials specialSigs specialTypes
+  stringMonoid <-
+    makeInst
+      specials
+      (IsIn
+         (className monoidClass)
+         [ConstructorType (specialTypesString specialTypes)])
+      [ ( "append"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (VariableExpression
+               (Location 0 0 0 0)
+               (PrimopName PrimopStringAppend)))
+      , ( "empty"
+        , Alternative
+            (Location 0 0 0 0)
+            []
+            (LiteralExpression (Location 0 0 0 0) (StringLiteral "")))
+      ]
   numInt <-
     makeInst
       specials
@@ -174,8 +184,10 @@ setupEnv env = do
           addClass numClass >=>
           addClass negClass >=>
           addClass fracClass >=>
+          addClass monoidClass >=>
           addInstance numInt >=>
           addInstance negInt >=>
+          addInstance stringMonoid >=>
           addInstance fracRational >=>
           addInstance negRational >=> addInstance numRational
     in update env
@@ -224,12 +236,17 @@ makePrimOps SpecialTypes {..} = do
               PrimopRationalTimes ->
                 TypeSignature
                   (PrimopName PrimopRationalTimes)
-                  (toScheme (rational --> rational --> rational))))
+                  (toScheme (rational --> rational --> rational))
+              PrimopStringAppend ->
+                TypeSignature
+                  (PrimopName PrimopStringAppend)
+                  (toScheme (string --> string --> string))))
           [minBound .. maxBound]
   pure sigs
   where
     integer = ConstructorType specialTypesInteger
     rational = ConstructorType specialTypesRational
+    string = ConstructorType specialTypesString
     infixr 1 -->
     (-->) :: Type Name -> Type Name -> Type Name
     a --> b =
@@ -291,6 +308,25 @@ makeFracClass function = do
       , (recip', Forall [a] (Qualified [] (a' --> a')))
       ]
   pure (cls, divide)
+  where
+    infixr 1 -->
+    (-->) :: Type Name -> Type Name -> Type Name
+    a --> b = ApplicationType (ApplicationType (ConstructorType function) a) b
+
+makeMonoidClass :: MonadSupply Int m => TypeConstructor Name -> m (Class Type Name l)
+makeMonoidClass function = do
+  a <- fmap (\n -> TypeVariable n StarKind) (supplyTypeName "a")
+  let a' = VariableType a
+  append <- supplyMethodName "append"
+  empty <- supplyMethodName "empty"
+  cls <-
+    makeClass
+      "Monoid"
+      [a]
+      [ (append, Forall [a] (Qualified [] (a' --> a' --> a')))
+      , (empty, Forall [a] (Qualified [] (a')))
+      ]
+  pure cls
   where
     infixr 1 -->
     (-->) :: Type Name -> Type Name -> Type Name
