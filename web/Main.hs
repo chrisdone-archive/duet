@@ -71,8 +71,8 @@ main =
                          makeErrorsBox result
                          pure (currentSource, result))
                  col 6 (do el "h2" (text "Steps")
-                           currentMode <- stepmodes
-                           makeStepsBox currentMode currentSource result)
+                           (currentMode, showDicts) <- stepmodes
+                           makeStepsBox currentMode showDicts currentSource result)
                  pure ())))
 
 stepmodes =
@@ -81,9 +81,17 @@ stepmodes =
     (do dropper <-
           dropdown
             True
-            (constDyn (M.fromList [(True, "Complete output"),(False, "Concise output")]))
+            (constDyn
+               (M.fromList
+                  [(True, "Complete output"), (False, "Concise output")]))
             (def :: DropdownConfig Spider Bool)
-        pure (_dropdown_value dropper))
+        checker <-
+          elClass
+            "label" "show-dicts"
+            (do checker <- checkbox False (def :: CheckboxConfig Spider)
+                text " Show dictionaries"
+                pure checker)
+        pure (_dropdown_value dropper, _checkbox_value checker))
 
 examples = do
   el
@@ -131,10 +139,15 @@ makeSourceInput currentSource = do
   debouncedInputEv <- debounce 0.5 (updated (_textArea_value input))
   foldDyn const defInput debouncedInputEv
 
-makeStepsBox currentMode currentSource result = do
+makeStepsBox currentMode currentDicts currentSource result = do
   initialMode <- sample (current currentMode)
-  initialValue <- fmap (initialValue initialMode) (sample (current currentSource))
-  modesAndResults <- combineDyn (,) currentMode result
+  initialDicts <- sample (current currentDicts)
+  initialValue <-
+    fmap
+      (initialValue (initialMode, initialDicts))
+      (sample (current currentSource))
+  modes <- combineDyn (,) currentMode currentDicts
+  modesAndResults <- combineDyn (,) modes result
   stepsText <-
     foldDyn
       (\(mode, result) last ->
@@ -191,10 +204,12 @@ compileAndRun text =
         execWriterT (runStepper maxSteps context binds mainFunc))
     [1 ..] :: Either SomeException [Expression Type Name ()]
 
-printSteps complete =
+printSteps (complete, dicts) =
   either
     (const "")
-    (unlines . map (printExpression defaultPrint) . filter mode)
+    (unlines .
+     map (printExpression defaultPrint {printDictionaries = dicts}) .
+     filter mode)
   where
     mode =
       if complete
