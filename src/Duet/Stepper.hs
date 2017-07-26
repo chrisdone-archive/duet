@@ -14,6 +14,7 @@ module Duet.Stepper
   , lookupNameByString
   ) where
 
+import           Control.Applicative
 import           Control.Arrow
 import           Control.Monad.Catch
 import           Control.Monad.State
@@ -292,14 +293,21 @@ lookupName identifier binds =
     Nothing -> throwM (CouldntFindName identifier)
     Just i -> pure i
   where
-    findIdent (BindGroup _ is) =
+    findIdent (BindGroup es is) =
       listToMaybe
         (mapMaybe
            (\case
               ImplicitlyTypedBinding _ i [Alternative _ [] e]
                 | i == identifier -> Just e
               _ -> Nothing)
-           (concat is))
+           (concat is)) <|>
+      listToMaybe
+        (mapMaybe
+           (\case
+              ExplicitlyTypedBinding i _ [Alternative _ [] e]
+                | i == identifier -> Just e
+              _ -> Nothing)
+           es)
 
 lookupNameByString
   :: (MonadThrow m)
@@ -311,11 +319,18 @@ lookupNameByString identifier binds =
     Nothing -> throwM (CouldntFindNameByString identifier)
     Just i -> pure i
   where
-    findIdent (BindGroup _ is) =
+    findIdent (BindGroup es is) =
       listToMaybe
         (mapMaybe
            (\case
               ImplicitlyTypedBinding _ (ValueName _ i) [Alternative _ [] e]
                 | i == identifier -> Just e
               _ -> Nothing)
-           (concat is))
+           (concat is)) <|>
+      listToMaybe
+        (mapMaybe
+           (\case
+              ExplicitlyTypedBinding (ValueName _ i) _ [Alternative _ [] e]
+                | i == identifier -> Just e
+              _ -> Nothing)
+           es)
