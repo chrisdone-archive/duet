@@ -17,6 +17,9 @@ import           Duet.Printer
 import           Duet.Types
 import           Reflex.Dom
 
+--------------------------------------------------------------------------------
+-- Main entry point
+
 main :: IO ()
 main =
   mainWidget
@@ -28,6 +31,9 @@ main =
             astDyn
         el "p" (dynText printedDyn))
 
+--------------------------------------------------------------------------------
+-- Expression editing
+
 expressionEditor
   :: MonadWidget t m
   => Maybe (Expression UnkindedType Identifier Location)
@@ -37,42 +43,6 @@ expressionEditor =
     (printExpression defaultPrint)
     (parseTextWith expParser "input" . T.pack)
     renderExpression
-
-someEditor
-  :: MonadWidget t m
-  => (Expression UnkindedType Identifier Location -> String)
-  -> (String -> Either SomeException (Expression UnkindedType Identifier Location))
-  -> (Expression UnkindedType Identifier Location -> m (Event t (Maybe (Either SomeException (Expression UnkindedType Identifier Location)))))
-  -> Maybe (Expression UnkindedType Identifier Location)
-  -> m (Event t (Expression UnkindedType Identifier Location))
-someEditor printer parser renderer mdef = do
-  inputWidget <-
-    textInput
-      def
-      { _textInputConfig_initialValue =
-          maybe "" printer mdef
-      }
-  parseResultDyn <-
-    foldDyn
-      (const . Just . parser)
-      (fmap Right mdef)
-      (_textInput_input inputWidget)
-  widgetDyn <-
-    mapDyn
-      (\case
-         Nothing -> pure (updated (constDyn Nothing))
-         Just (Left e) -> do
-           divClass "danger" (text (show e))
-           pure (updated (constDyn (Just (Left e))))
-         Just (Right e) ->
-           renderer e)
-      parseResultDyn
-  streamsEv <- dyn widgetDyn
-  currentValuesEv <- switchPromptly never streamsEv
-  pure
-    (fmapMaybe
-       (>>= either (const Nothing) Just)
-       (leftmost [updated parseResultDyn, currentValuesEv]))
 
 renderExpression
   :: MonadWidget t m
@@ -117,3 +87,42 @@ renderExpression e =
       pure (updated (constDyn (Just (Right e))))
     child v = expressionEditor (Just v) >>= holdDyn v
     bubble = pure . fmapMaybe (Just . Just . Right) . updated
+
+--------------------------------------------------------------------------------
+-- Editor combinators
+
+someEditor
+  :: MonadWidget t m
+  => (Expression UnkindedType Identifier Location -> String)
+  -> (String -> Either SomeException (Expression UnkindedType Identifier Location))
+  -> (Expression UnkindedType Identifier Location -> m (Event t (Maybe (Either SomeException (Expression UnkindedType Identifier Location)))))
+  -> Maybe (Expression UnkindedType Identifier Location)
+  -> m (Event t (Expression UnkindedType Identifier Location))
+someEditor printer parser renderer mdef = do
+  inputWidget <-
+    textInput
+      def
+      { _textInputConfig_initialValue =
+          maybe "" printer mdef
+      }
+  parseResultDyn <-
+    foldDyn
+      (const . Just . parser)
+      (fmap Right mdef)
+      (_textInput_input inputWidget)
+  widgetDyn <-
+    mapDyn
+      (\case
+         Nothing -> pure (updated (constDyn Nothing))
+         Just (Left e) -> do
+           divClass "danger" (text (show e))
+           pure (updated (constDyn (Just (Left e))))
+         Just (Right e) ->
+           renderer e)
+      parseResultDyn
+  streamsEv <- dyn widgetDyn
+  currentValuesEv <- switchPromptly never streamsEv
+  pure
+    (fmapMaybe
+       (>>= either (const Nothing) Just)
+       (leftmost [updated parseResultDyn, currentValuesEv]))
