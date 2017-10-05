@@ -36,6 +36,17 @@ parseText fp inp =
         Left e -> throwM (ParserError e)
         Right ast -> pure ast
 
+parseTextWith
+  :: (Num u, MonadThrow m)
+  => Parsec [(Token, Location)] u a -> SourceName -> Text -> m a
+parseTextWith p fp inp =
+  case parse tokensTokenizer fp (inp) of
+    Left e -> throwM (TokenizerError e)
+    Right tokens' ->
+      case runParser p 0 fp tokens' of
+        Left e -> throwM (ParserError e)
+        Right ast -> pure ast
+
 parseType' :: Num u => SourceName -> Parsec [(Token, Location)] u b -> Text -> Either ParseError b
 parseType' fp p inp =
   case parse tokensTokenizer fp (inp) of
