@@ -6,6 +6,7 @@
 
 module Main where
 
+import           Control.Exception
 import           Control.Monad
 import           Data.Maybe
 import           Data.Monoid
@@ -48,26 +49,10 @@ expressionEditor mdef = do
       (\case
          Nothing -> pure (updated (constDyn Nothing))
          Just (Left e) -> do
-           void (divClass "danger" (text (show e)))
+           divClass "danger" (text (show e))
            pure (updated (constDyn (Just (Left e))))
          Just (Right e) ->
-           case e of
-             VariableExpression {} -> do
-               text (printExpression defaultPrint e)
-               pure (updated (constDyn (Just (Right e))))
-             ApplicationExpression l f x -> do
-               void (text "(")
-               fDyn <- expressionEditor (Just f) >>= holdDyn f
-               xDyn <- expressionEditor (Just x) >>= holdDyn x
-               void (text ")")
-               appsDyn <- combineDyn (ApplicationExpression l) fDyn xDyn
-               pure (fmapMaybe (Just . Just . Right) (updated appsDyn))
-             _ -> do
-               void
-                 (divClass
-                    "warning"
-                    (text ("Unsupported node type: " <> show e)))
-               pure (updated (constDyn (Just (Right e)))))
+           childExpression e)
       parseResultDyn
   streamsEv <- dyn widgetDyn
   currentValuesEv <- switchPromptly never streamsEv
@@ -75,3 +60,30 @@ expressionEditor mdef = do
     (fmapMaybe
        (>>= either (const Nothing) Just)
        (leftmost [updated parseResultDyn, currentValuesEv]))
+
+childExpression
+  :: MonadWidget t m
+  => Expression UnkindedType Identifier Location
+  -> m (Event t (Maybe (Either SomeException (Expression UnkindedType Identifier Location))))
+childExpression e =
+  case e of
+    VariableExpression {} -> atomic
+    LiteralExpression {} -> atomic
+    ConstructorExpression {} -> atomic
+    ConstantExpression {} -> atomic
+    ApplicationExpression l f x -> do
+      text "("
+      fDyn <- child f
+      xDyn <- child x
+      text ")"
+      appsDyn <- combineDyn (ApplicationExpression l) fDyn xDyn
+      bubble appsDyn
+    _ -> do
+      divClass "warning" (text ("Unsupported node type: " <> show e))
+      pure (updated (constDyn (Just (Right e))))
+  where
+    atomic = do
+      text (printExpression defaultPrint e)
+      pure (updated (constDyn (Just (Right e))))
+    child v = expressionEditor (Just v) >>= holdDyn v
+    bubble = pure . fmapMaybe (Just . Just . Right) . updated
