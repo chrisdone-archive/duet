@@ -78,6 +78,16 @@ childExpression e =
       text ")"
       appsDyn <- combineDyn (ApplicationExpression l) fDyn xDyn
       bubble appsDyn
+    IfExpression l cond then' else' -> do
+      text "if"
+      condDyn <- child cond
+      text "then"
+      thenDyn <- child then'
+      text "else"
+      elseDyn <- child else'
+      makeIfDyn <- combineDyn (IfExpression l) condDyn thenDyn
+      ifDyn <- combineDyn ($) makeIfDyn elseDyn
+      bubble ifDyn
     _ -> do
       divClass "warning" (text ("Unsupported node type: " <> show e))
       pure (updated (constDyn (Just (Right e))))
