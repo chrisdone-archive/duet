@@ -88,6 +88,13 @@ childExpression e =
       makeIfDyn <- combineDyn (IfExpression l) condDyn thenDyn
       ifDyn <- combineDyn ($) makeIfDyn elseDyn
       bubble ifDyn
+    InfixExpression l left (str, op) right -> do
+      leftDyn <- child left
+      opDyn <- child op
+      rightDyn <- child right
+      makeOpDyn <- combineDyn (IfExpression l) leftDyn opDyn
+      opDyn <- combineDyn ($) makeOpDyn rightDyn
+      bubble opDyn
     _ -> do
       divClass "warning" (text ("Unsupported node type: " <> show e))
       pure (updated (constDyn (Just (Right e))))
