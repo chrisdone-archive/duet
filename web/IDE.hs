@@ -32,16 +32,29 @@ expressionEditor
   :: MonadWidget t m
   => Maybe (Expression UnkindedType Identifier Location)
   -> m (Event t (Expression UnkindedType Identifier Location))
-expressionEditor mdef = do
+expressionEditor =
+  someEditor
+    (printExpression defaultPrint)
+    (parseTextWith expParser "input" . T.pack)
+    renderExpression
+
+someEditor
+  :: MonadWidget t m
+  => (Expression UnkindedType Identifier Location -> String)
+  -> (String -> Either SomeException (Expression UnkindedType Identifier Location))
+  -> (Expression UnkindedType Identifier Location -> m (Event t (Maybe (Either SomeException (Expression UnkindedType Identifier Location)))))
+  -> Maybe (Expression UnkindedType Identifier Location)
+  -> m (Event t (Expression UnkindedType Identifier Location))
+someEditor printer parser renderer mdef = do
   inputWidget <-
     textInput
       def
       { _textInputConfig_initialValue =
-          maybe "" (printExpression defaultPrint) mdef
+          maybe "" printer mdef
       }
   parseResultDyn <-
     foldDyn
-      (const . Just . parseTextWith expParser "input" . T.pack)
+      (const . Just . parser)
       (fmap Right mdef)
       (_textInput_input inputWidget)
   widgetDyn <-
@@ -52,7 +65,7 @@ expressionEditor mdef = do
            divClass "danger" (text (show e))
            pure (updated (constDyn (Just (Left e))))
          Just (Right e) ->
-           childExpression e)
+           renderer e)
       parseResultDyn
   streamsEv <- dyn widgetDyn
   currentValuesEv <- switchPromptly never streamsEv
@@ -61,11 +74,11 @@ expressionEditor mdef = do
        (>>= either (const Nothing) Just)
        (leftmost [updated parseResultDyn, currentValuesEv]))
 
-childExpression
+renderExpression
   :: MonadWidget t m
   => Expression UnkindedType Identifier Location
   -> m (Event t (Maybe (Either SomeException (Expression UnkindedType Identifier Location))))
-childExpression e =
+renderExpression e =
   case e of
     VariableExpression {} -> atomic
     LiteralExpression {} -> atomic
