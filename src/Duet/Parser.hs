@@ -734,6 +734,22 @@ expParser = case' <|> lambda <|> ifParser <|> infix' <|> app <|> atomic
     unambiguous = parensExpr <|> atomic
     parensExpr = parens expParser
 
+operatorParser
+  :: Stream s m (Token, Location)
+  => ParsecT s Int m (String, Expression t Identifier Location)
+operatorParser = do
+  tok <-
+    satisfyToken
+      (\case
+         Operator {} -> True
+         _ -> False)
+  pure
+    (case tok of
+       (Operator t, _) ->
+         let i = (T.unpack t)
+         in (i, VariableExpression (Location 0 0 0 0) (Identifier i))
+       _ -> error "should be operator...")
+
 lambda :: TokenParser (Expression UnkindedType Identifier Location)
 lambda = do
   loc <- equalToken Backslash <?> "lambda expression (e.g. \\x -> x)"

@@ -41,7 +41,7 @@ expressionEditor
 expressionEditor =
   someEditor
     (printExpression defaultPrint)
-    (parseTextWith expParser "input" . T.pack)
+    (parseTextWith expParser "expression" . T.pack)
     renderExpression
 
 renderExpression
@@ -71,11 +71,11 @@ renderExpression e =
       makeIfDyn <- combineDyn (IfExpression l) condDyn thenDyn
       ifDyn <- combineDyn ($) makeIfDyn elseDyn
       bubble ifDyn
-    InfixExpression l left (str, op) right -> do
+    InfixExpression l left op right -> do
       leftDyn <- child left
-      opDyn <- child op
+      opDyn <- operatorEditor (Just op) >>= holdDyn op
       rightDyn <- child right
-      makeOpDyn <- combineDyn (IfExpression l) leftDyn opDyn
+      makeOpDyn <- combineDyn (InfixExpression l) leftDyn opDyn
       opDyn <- combineDyn ($) makeOpDyn rightDyn
       bubble opDyn
     _ -> do
@@ -89,15 +89,30 @@ renderExpression e =
     bubble = pure . fmapMaybe (Just . Just . Right) . updated
 
 --------------------------------------------------------------------------------
+-- Operator editing
+
+operatorEditor
+  :: MonadWidget t m
+  => Maybe (String, Expression UnkindedType Identifier Location)
+  -> m (Event t (String, Expression UnkindedType Identifier Location))
+operatorEditor =
+  someEditor
+    (\(string, _op) -> string)
+    (\input -> parseTextWith operatorParser "operator" (" " <> T.pack input <> " "))
+    (\(string, op) -> do
+       text string
+       pure (updated (constDyn (Just (Right (string, op))))))
+
+--------------------------------------------------------------------------------
 -- Editor combinators
 
 someEditor
   :: MonadWidget t m
-  => (Expression UnkindedType Identifier Location -> String)
-  -> (String -> Either SomeException (Expression UnkindedType Identifier Location))
-  -> (Expression UnkindedType Identifier Location -> m (Event t (Maybe (Either SomeException (Expression UnkindedType Identifier Location)))))
-  -> Maybe (Expression UnkindedType Identifier Location)
-  -> m (Event t (Expression UnkindedType Identifier Location))
+  => (node -> String)
+  -> (String -> Either SomeException node)
+  -> (node -> m (Event t (Maybe (Either SomeException node))))
+  -> Maybe node
+  -> m (Event t node)
 someEditor printer parser renderer mdef = do
   inputWidget <-
     textInput
