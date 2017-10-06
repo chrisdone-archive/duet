@@ -86,7 +86,6 @@ renderExpression e =
       text (printExpression defaultPrint e)
       pure (updated (constDyn (Just (Right e))))
     child v = expressionEditor (Just v) >>= holdDyn v
-    bubble = pure . fmapMaybe (Just . Just . Right) . updated
 
 --------------------------------------------------------------------------------
 -- Operator editing
@@ -144,13 +143,17 @@ alternativeEditor =
   someEditor
     (printAlt defaultPrint)
     (parseTextWith (altParser Nothing 0) "alternative" . T.pack)
-    (\alt -> do
-       text (printAlt defaultPrint alt)
-       pure (updated (constDyn (Just (Right alt)))))
+    (\(pat, expr) -> do
+       patDyn <- patternEditor (Just pat) >>= holdDyn pat
+       text " -> "
+       exprDyn <- expressionEditor (Just expr) >>= holdDyn expr
+       altDyn <- combineDyn (,) patDyn exprDyn
+       bubble altDyn)
 
 --------------------------------------------------------------------------------
 -- Editor combinators
 
+-- | Produce an editor from a printer, parser and renderer.
 someEditor
   :: MonadWidget t m
   => (node -> String)
@@ -186,3 +189,10 @@ someEditor printer parser renderer mdef = do
     (fmapMaybe
        (>>= either (const Nothing) Just)
        (leftmost [updated parseResultDyn, currentValuesEv]))
+
+-- | Bubble the value of an AST element upwards as a correctly parsed,
+-- available value.
+bubble
+  :: MonadWidget t m
+  => Dynamic t a -> m (Event t (Maybe (Either SomeException a)))
+bubble = pure . fmapMaybe (Just . Just . Right) . updated
