@@ -104,6 +104,51 @@ operatorEditor =
        pure (updated (constDyn (Just (Right (string, op))))))
 
 --------------------------------------------------------------------------------
+-- Parameter editor
+
+parameterEditor
+  :: MonadWidget t m
+  => Maybe (Pattern UnkindedType Identifier Location)
+  -> m (Event t (Pattern UnkindedType Identifier Location))
+parameterEditor =
+  someEditor
+    (printPat defaultPrint)
+    (parseTextWith funcParam "parameter" . T.pack)
+    (\pat -> do
+       text (printPat defaultPrint pat)
+       pure (updated (constDyn (Just (Right pat)))))
+
+--------------------------------------------------------------------------------
+-- Pattern editor
+
+patternEditor
+  :: MonadWidget t m
+  => Maybe (Pattern UnkindedType Identifier Location)
+  -> m (Event t (Pattern UnkindedType Identifier Location))
+patternEditor =
+  someEditor
+    (printPat defaultPrint)
+    (parseTextWith altPat "pattern" . T.pack)
+    (\pat -> do
+       text (printPat defaultPrint pat)
+       pure (updated (constDyn (Just (Right pat)))))
+
+--------------------------------------------------------------------------------
+-- Alt editor
+
+alternativeEditor
+  :: MonadWidget t m
+  => Maybe (Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)
+  -> m (Event t (Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location))
+alternativeEditor =
+  someEditor
+    (printAlt defaultPrint)
+    (parseTextWith (altParser Nothing 0) "alternative" . T.pack)
+    (\alt -> do
+       text (printAlt defaultPrint alt)
+       pure (updated (constDyn (Just (Right alt)))))
+
+--------------------------------------------------------------------------------
 -- Editor combinators
 
 someEditor

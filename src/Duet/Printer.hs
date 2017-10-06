@@ -151,17 +151,7 @@ printExpression printer e =
        CaseExpression _ e alts ->
          "case " ++
          indent 5 (printExpressionIfPred printer e) ++
-         " of\n" ++
-         indented
-           (intercalate
-              "\n"
-              (map
-                 (\(p, e') ->
-                    let inner = printExpression printer e'
-                    in if any (== '\n') inner
-                         then printPat printer p ++ " ->\n" ++ indented inner
-                         else printPat printer p ++ " -> " ++ indent 2 inner)
-                 alts))
+         " of\n" ++ indented (intercalate "\n" (map (printAlt printer) alts))
        ApplicationExpression _ f x ->
          case x of
            VariableExpression _ (nonrenamableName -> Just (DictName {}))
@@ -174,17 +164,15 @@ printExpression printer e =
                    inner = printExpressionAppArg printer x
        LambdaExpression _ (Alternative _ args e) ->
          if null filteredArgs
-            then inner
-            else if any (== '\n') inner
-                   then "\\" ++ prefix ++ "->\n" ++ indented inner
-                   else "\\" ++ prefix ++ "-> " ++ indent (length prefix + 4) inner
+           then inner
+           else if any (== '\n') inner
+                  then "\\" ++ prefix ++ "->\n" ++ indented inner
+                  else "\\" ++
+                       prefix ++ "-> " ++ indent (length prefix + 4) inner
          where inner = (printExpression printer e)
                filteredArgs = filter dictPred args
                prefix =
-                 concat
-                   (map
-                      (\x -> printPattern printer x ++ " ")
-                      filteredArgs)
+                 concat (map (\x -> printPattern printer x ++ " ") filteredArgs)
                dictPred =
                  if printDictionaries printer
                    then const True
@@ -201,8 +189,9 @@ printExpression printer e =
          printExpressionAppArg printer f ++
          " " ++
          (if printDictionaries printer
-             then "`" ++ printExpression printer ov ++ "`"
-             else o) ++ " " ++ printExpressionAppArg printer x
+            then "`" ++ printExpression printer ov ++ "`"
+            else o) ++
+         " " ++ printExpressionAppArg printer x
        _ -> "<TODO>")
   where
     wrapType x =
@@ -215,6 +204,16 @@ printExpression printer e =
                   if any isSpace k
                     then "(" ++ k ++ ")"
                     else k
+
+printAlt
+  :: (PrintableType t, PrintableType t1, Printable i)
+  => Print i l -> (Pattern t1 i l, Expression t i l) -> [Char]
+printAlt printer =
+  \(p, e') ->
+    let inner = printExpression printer e'
+    in if any (== '\n') inner
+         then printPat printer p ++ " ->\n" ++ indented inner
+         else printPat printer p ++ " -> " ++ indent 2 inner
 
 indented :: String -> [Char]
 indented x = intercalate "\n" (map ("  "++) (lines x))

@@ -574,14 +574,14 @@ case' = do
   loc <- equalToken Case
   setState (locationStartColumn loc)
   e <- expParser <?> "expression to do case analysis e.g. case e of ..."
-  _ <-  equalToken Of
+  _ <- equalToken Of
   p <- lookAhead altPat <?> "case pattern"
-  alts <- many (altParser e (locationStartColumn (patternLabel p)))
+  alts <- many (altParser (Just e) (locationStartColumn (patternLabel p)))
   setState u
   pure (CaseExpression loc e alts)
 
 altParser
-  :: Expression UnkindedType Identifier Location
+  :: Maybe (Expression UnkindedType Identifier Location)
   -> Int
   -> TokenParser (Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)
 altParser e' startCol =
@@ -599,13 +599,15 @@ altParser e' startCol =
       e <- expParser
       setState u
       pure (p, e)) <?>
-  "indented case alternative e.g.\n\n\
-  \case " ++
-  printExpression
-    defaultPrint
-    e' ++
-  " of\n\
-  \  Just bar -> bar"
+  ("case alternative" ++
+   (case e' of
+      Just e' ->
+        " e.g.\n\n\
+                             \case " ++
+        printExpression defaultPrint e' ++
+        " of\n\
+                             \  Just bar -> bar"
+      Nothing -> ""))
 
 altPat :: TokenParser (Pattern UnkindedType Identifier Location)
 altPat = varp <|> intliteral <|> consParser <|> stringlit
