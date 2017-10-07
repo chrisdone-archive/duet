@@ -1,3 +1,4 @@
+{-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -8,6 +9,8 @@ module Main where
 
 import           Control.Exception
 import           Control.Monad
+import           Data.Map.Lazy (Map)
+import qualified Data.Map.Lazy as M
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Text (Text)
@@ -233,24 +236,34 @@ newEditorEvent
   :: MonadWidget t m
   => Editor t m a -> Maybe a -> m (Event t a)
 newEditorEvent (Editor printer parser renderer) mdef = do
-  inputWidget <-
-    textArea def {_textAreaConfig_initialValue = maybe "" printer mdef}
-  parseResultDyn <-
-    foldDyn
-      (const . Just . parser)
-      (fmap Right mdef)
-      (_textArea_input inputWidget)
-  widgetDyn <-
-    mapDyn
-      (\case
-         Nothing -> pure (updated (constDyn Nothing))
-         Just (Left e) -> do
-           divClass "danger" (text (show e))
-           pure (updated (constDyn (Just (Left e))))
-         Just (Right e) -> renderer e)
-      parseResultDyn
-  streamsEv <- dyn widgetDyn
-  currentValuesEv <- switchPromptly never streamsEv
+  rec inputWidget <-
+        elClass
+          "div"
+          "duet-input"
+          (textArea
+             def
+             { _textAreaConfig_initialValue = maybe "" printer mdef
+             , _textAreaConfig_setValue =
+                 fmapMaybe
+                   (>>= either (const Nothing) (Just . printer))
+                   currentValuesEv
+             })
+      parseResultDyn <-
+        foldDyn
+          (const . Just . parser)
+          (fmap Right mdef)
+          (_textArea_input inputWidget)
+      widgetDyn <-
+        mapDyn
+          (\case
+             Nothing -> pure (updated (constDyn Nothing))
+             Just (Left e) -> do
+               divClass "danger" (text (show e))
+               pure (updated (constDyn (Just (Left e))))
+             Just (Right e) -> renderer e)
+          parseResultDyn
+      streamsEv <- dyn widgetDyn
+      currentValuesEv <- switchPromptly never streamsEv
   pure
     (fmapMaybe
        (>>= either (const Nothing) Just)
