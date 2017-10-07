@@ -135,8 +135,8 @@ parameterEditor =
   , editorParser = parseTextWith funcParam "parameter" . T.pack
   , editorRenderer =
       \param -> do
-       text (printPat defaultPrint param)
-       pure (updated (constDyn (Just (Right param))))
+        text (printPat defaultPrint param)
+        pure (updated (constDyn (Just (Right param))))
   }
 
 parametersEditor
