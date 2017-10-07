@@ -237,8 +237,7 @@ newEditorEvent
   => Editor t m a -> Maybe a -> m (Event t a)
 newEditorEvent (Editor printer parser renderer) mdef = do
   rec inputWidget <-
-        elClass
-          "div"
+        divClass
           "duet-input"
           (textArea
              def
@@ -258,7 +257,7 @@ newEditorEvent (Editor printer parser renderer) mdef = do
           (\case
              Nothing -> pure (updated (constDyn Nothing))
              Just (Left e) -> do
-               divClass "danger" (text (show e))
+               divClass "bg-danger" (text (show e))
                pure (updated (constDyn (Just (Left e))))
              Just (Right e) -> renderer e)
           parseResultDyn
