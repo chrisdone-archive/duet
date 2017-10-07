@@ -23,8 +23,8 @@ import           Reflex.Dom
 main :: IO ()
 main =
   mainWidget
-    (do astEv <- el "p" (expressionEditor Nothing)
-        astDyn <- holdDyn Nothing (fmap Just (astEv))
+    (do astEv <- el "p" (runEditor expressionEditor Nothing)
+        astDyn <- holdDyn Nothing (fmap Just astEv)
         printedDyn <-
           mapDyn
             (maybe "No AST currently." (printExpression defaultPrint))
@@ -36,10 +36,9 @@ main =
 
 expressionEditor
   :: MonadWidget t m
-  => Maybe (Expression UnkindedType Identifier Location)
-  -> m (Event t (Expression UnkindedType Identifier Location))
+  => Editor t m (Expression UnkindedType Identifier Location)
 expressionEditor =
-  someEditor
+  Editor
     (printExpression defaultPrint)
     (parseTextWith expParser "expression" . T.pack)
     renderExpression
@@ -73,14 +72,14 @@ renderExpression e =
       bubble ifDyn
     InfixExpression l left op right -> do
       leftDyn <- child left
-      opDyn <- operatorEditor (Just op) >>= holdDyn op
+      opDyn <- runEditor operatorEditor (Just op) >>= holdDyn op
       rightDyn <- child right
       makeOpDyn <- combineDyn (InfixExpression l) leftDyn opDyn
       opDyn <- combineDyn ($) makeOpDyn rightDyn
       bubble opDyn
     LambdaExpression l (Alternative l' params expr) -> do
       text "\\"
-      paramsDyn <- parametersEditor (Just params) >>= holdDyn params
+      paramsDyn <- runEditor parametersEditor (Just params) >>= holdDyn params
       text "->"
       exprDyn <- child expr
       lamDyn <-
@@ -89,6 +88,11 @@ renderExpression e =
           paramsDyn
           exprDyn
       bubble lamDyn
+    CaseExpression l expr alts ->
+      do text "case"
+         exprDyn <- child expr
+         text "of"
+         undefined
     _ -> do
       divClass "warning" (text ("Unsupported node type: " <> show e))
       pure (updated (constDyn (Just (Right e))))
@@ -96,17 +100,16 @@ renderExpression e =
     atomic = do
       text (printExpression defaultPrint e)
       pure (updated (constDyn (Just (Right e))))
-    child v = expressionEditor (Just v) >>= holdDyn v
+    child v = runEditor expressionEditor (Just v) >>= holdDyn v
 
 --------------------------------------------------------------------------------
 -- Operator editing
 
 operatorEditor
   :: MonadWidget t m
-  => Maybe (String, Expression UnkindedType Identifier Location)
-  -> m (Event t (String, Expression UnkindedType Identifier Location))
+  => Editor t m (String, Expression UnkindedType Identifier Location)
 operatorEditor =
-  someEditor
+  Editor
     (\(string, _op) -> string)
     (\input -> parseTextWith operatorParser "operator" (" " <> T.pack input <> " "))
     (\(string, op) -> do
@@ -118,10 +121,9 @@ operatorEditor =
 
 parametersEditor
   :: MonadWidget t m
-  => Maybe [Pattern UnkindedType Identifier Location]
-  -> m (Event t [Pattern UnkindedType Identifier Location])
+  => Editor t m [Pattern UnkindedType Identifier Location]
 parametersEditor =
-  someEditor
+  Editor
     (unwords . map (printPat defaultPrint))
     (parseTextWith funcParams "parameters" . T.pack)
     (\params -> do
@@ -133,10 +135,9 @@ parametersEditor =
 
 patternEditor
   :: MonadWidget t m
-  => Maybe (Pattern UnkindedType Identifier Location)
-  -> m (Event t (Pattern UnkindedType Identifier Location))
+  => Editor t m (Pattern UnkindedType Identifier Location)
 patternEditor =
-  someEditor
+  Editor
     (printPat defaultPrint)
     (parseTextWith altPat "pattern" . T.pack)
     (\pat -> do
@@ -148,37 +149,36 @@ patternEditor =
 
 alternativeEditor
   :: MonadWidget t m
-  => Maybe (Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)
-  -> m (Event t (Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location))
+  => Editor t m (Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)
 alternativeEditor =
-  someEditor
+  Editor
     (printAlt defaultPrint)
     (parseTextWith (altParser Nothing 0) "alternative" . T.pack)
     (\(pat, expr) -> do
-       patDyn <- patternEditor (Just pat) >>= holdDyn pat
+       patDyn <- runEditor patternEditor (Just pat) >>= holdDyn pat
        text " -> "
-       exprDyn <- expressionEditor (Just expr) >>= holdDyn expr
+       exprDyn <- runEditor expressionEditor (Just expr) >>= holdDyn expr
        altDyn <- combineDyn (,) patDyn exprDyn
        bubble altDyn)
 
 --------------------------------------------------------------------------------
 -- Editor combinators
 
+data Editor t m a = Editor
+  { editorPrinter :: a -> String
+  , editorParser :: String -> Either SomeException a
+  , editorRenderer :: a -> m (Event t (Maybe (Either SomeException a)))
+  }
+
 -- | Produce an editor from a printer, parser and renderer.
-someEditor
+runEditor
   :: MonadWidget t m
-  => (node -> String)
-  -> (String -> Either SomeException node)
-  -> (node -> m (Event t (Maybe (Either SomeException node))))
-  -> Maybe node
-  -> m (Event t node)
-someEditor printer parser renderer mdef = do
+  => Editor t m a
+  -> Maybe a
+  -> m (Event t a)
+runEditor (Editor printer parser renderer) mdef = do
   inputWidget <-
-    textInput
-      def
-      { _textInputConfig_initialValue =
-          maybe "" printer mdef
-      }
+    textInput def {_textInputConfig_initialValue = maybe "" printer mdef}
   parseResultDyn <-
     foldDyn
       (const . Just . parser)
@@ -191,8 +191,7 @@ someEditor printer parser renderer mdef = do
          Just (Left e) -> do
            divClass "danger" (text (show e))
            pure (updated (constDyn (Just (Left e))))
-         Just (Right e) ->
-           renderer e)
+         Just (Right e) -> renderer e)
       parseResultDyn
   streamsEv <- dyn widgetDyn
   currentValuesEv <- switchPromptly never streamsEv
