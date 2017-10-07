@@ -89,6 +89,13 @@ renderExpression e =
           paramsDyn
           exprDyn
       bubble lamDyn
+    CaseExpression l expr alts ->
+      do text "case"
+         exprDyn <- child expr
+         text "of"
+         altsDyn <- runEditor alternativesEditor (Just alts) >>= holdDyn alts
+         caseDyn <- combineDyn (CaseExpression l) exprDyn altsDyn
+         bubble caseDyn
     _ -> do
       divClass "warning" (text ("Unsupported node type: " <> show e))
       pure (updated (constDyn (Just (Right e))))
@@ -157,7 +164,7 @@ alternativeEditor
 alternativeEditor =
   Editor
   { editorPrinter = printAlt defaultPrint
-  , editorParser = parseTextWith (altParser Nothing 0) "alternative" . T.pack
+  , editorParser = parseTextWith (altParser Nothing 1) "alternative" . T.pack
   , editorRenderer =
       \(pat, expr) -> do
         patDyn <- runEditor patternEditor (Just pat) >>= holdDyn pat

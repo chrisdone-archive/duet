@@ -581,7 +581,7 @@ case' = do
   pure (CaseExpression loc e alts)
 
 altsParser :: Stream s m (Token, Location) => ParsecT s Int m [(Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)]
-altsParser = many (altParser Nothing 0)
+altsParser = many (altParser Nothing 1)
 
 altParser
   :: Maybe (Expression UnkindedType Identifier Location)
