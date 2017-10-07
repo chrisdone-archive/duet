@@ -23,7 +23,7 @@ import           Reflex.Dom
 main :: IO ()
 main =
   mainWidget
-    (do astEv <- el "div" (runEditor expressionEditor Nothing)
+    (do astEv <- el "div" (newEditorEvent expressionEditor Nothing)
         astDyn <- holdDyn Nothing (fmap Just astEv)
         printedDyn <-
           mapDyn
@@ -73,14 +73,14 @@ renderExpression e =
       bubble ifDyn
     InfixExpression l left op right -> do
       leftDyn <- child left
-      opDyn <- runEditor operatorEditor (Just op) >>= holdDyn op
+      opDyn <- newEditorDynamic operatorEditor op
       rightDyn <- child right
       makeOpDyn <- combineDyn (InfixExpression l) leftDyn opDyn
       opDyn <- combineDyn ($) makeOpDyn rightDyn
       bubble opDyn
     LambdaExpression l (Alternative l' params expr) -> do
       text "\\"
-      paramsDyn <- runEditor parametersEditor (Just params) >>= holdDyn params
+      paramsDyn <- newEditorDynamic parametersEditor params
       text "->"
       exprDyn <- child expr
       lamDyn <-
@@ -93,7 +93,7 @@ renderExpression e =
       do text "case"
          exprDyn <- child expr
          text "of"
-         altsDyn <- runEditor alternativesEditor (Just alts) >>= holdDyn alts
+         altsDyn <- newEditorDynamic alternativesEditor alts
          caseDyn <- combineDyn (CaseExpression l) exprDyn altsDyn
          bubble caseDyn
     _ -> do
@@ -103,7 +103,7 @@ renderExpression e =
     atomic = do
       text (printExpression defaultPrint e)
       pure (updated (constDyn (Just (Right e))))
-    child v = runEditor expressionEditor (Just v) >>= holdDyn v
+    child v = newEditorDynamic expressionEditor v
 
 --------------------------------------------------------------------------------
 -- Operator editing
@@ -126,6 +126,19 @@ operatorEditor =
 --------------------------------------------------------------------------------
 -- Parameter editor
 
+parameterEditor
+  :: MonadWidget t m
+  => Editor t m (Pattern UnkindedType Identifier Location)
+parameterEditor =
+  Editor
+  { editorPrinter = printPat defaultPrint
+  , editorParser = parseTextWith funcParam "parameter" . T.pack
+  , editorRenderer =
+      \param -> do
+       text (printPat defaultPrint param)
+       pure (updated (constDyn (Just (Right param))))
+  }
+
 parametersEditor
   :: MonadWidget t m
   => Editor t m [Pattern UnkindedType Identifier Location]
@@ -135,8 +148,15 @@ parametersEditor =
   , editorParser = parseTextWith funcParams "parameters" . T.pack
   , editorRenderer =
       \params -> do
-        text (unwords (map (printPat defaultPrint) params))
-        pure (updated (constDyn (Just (Right params))))
+        paramDyns <-
+          mapM
+            (\param -> do
+               e <- newEditorEvent parameterEditor (Just param)
+               text " "
+               holdDyn [param] (fmapMaybe (pure . pure) e))
+            params
+        paramsDyn <- mconcatDyn paramDyns
+        bubble paramsDyn
   }
 
 --------------------------------------------------------------------------------
@@ -167,9 +187,9 @@ alternativeEditor =
   , editorParser = parseTextWith (altParser Nothing 1) "alternative" . T.pack
   , editorRenderer =
       \(pat, expr) -> do
-        patDyn <- runEditor patternEditor (Just pat) >>= holdDyn pat
+        patDyn <- newEditorDynamic patternEditor pat
         text " -> "
-        exprDyn <- runEditor expressionEditor (Just expr) >>= holdDyn expr
+        exprDyn <- newEditorDynamic expressionEditor expr
         altDyn <- combineDyn (,) patDyn exprDyn
         bubble altDyn
   }
@@ -186,7 +206,7 @@ alternativesEditor =
         altDyns <-
           mapM
             (\alt ->
-               el "div" (runEditor alternativeEditor (Just alt)) >>=
+               el "div" (newEditorEvent alternativeEditor (Just alt)) >>=
                holdDyn [alt] . fmapMaybe (pure . pure))
             alts
         altsDyn <- mconcatDyn altDyns
@@ -202,13 +222,17 @@ data Editor t m a = Editor
   , editorRenderer :: a -> m (Event t (Maybe (Either SomeException a)))
   }
 
--- | Produce an editor from a printer, parser and renderer.
-runEditor
+-- | Run an editor with a definite value
+newEditorDynamic
   :: MonadWidget t m
-  => Editor t m a
-  -> Maybe a
-  -> m (Event t a)
-runEditor (Editor printer parser renderer) mdef = do
+  => Editor t m a -> a -> m (Dynamic t a)
+newEditorDynamic e a = newEditorEvent e (Just a) >>= holdDyn a
+
+-- | Produce an editor from a printer, parser and renderer.
+newEditorEvent
+  :: MonadWidget t m
+  => Editor t m a -> Maybe a -> m (Event t a)
+newEditorEvent (Editor printer parser renderer) mdef = do
   inputWidget <-
     textInput def {_textInputConfig_initialValue = maybe "" printer mdef}
   parseResultDyn <-
