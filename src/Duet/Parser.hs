@@ -760,6 +760,9 @@ lambda = do
   e <- expParser
   pure (LambdaExpression loc (Alternative loc args e))
 
+funcParams :: TokenParser [Pattern UnkindedType Identifier Location]
+funcParams = many1 funcParam
+
 funcParam :: TokenParser (Pattern UnkindedType Identifier Location)
 funcParam = go <?> "function parameter (e.g. ‘x’, ‘limit’, etc.)"
   where

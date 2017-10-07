@@ -78,6 +78,17 @@ renderExpression e =
       makeOpDyn <- combineDyn (InfixExpression l) leftDyn opDyn
       opDyn <- combineDyn ($) makeOpDyn rightDyn
       bubble opDyn
+    LambdaExpression l (Alternative l' params expr) -> do
+      text "\\"
+      paramsDyn <- parametersEditor (Just params) >>= holdDyn params
+      text "->"
+      exprDyn <- child expr
+      lamDyn <-
+        combineDyn
+          (\ps e -> LambdaExpression l (Alternative l' ps e))
+          paramsDyn
+          exprDyn
+      bubble lamDyn
     _ -> do
       divClass "warning" (text ("Unsupported node type: " <> show e))
       pure (updated (constDyn (Just (Right e))))
@@ -105,17 +116,17 @@ operatorEditor =
 --------------------------------------------------------------------------------
 -- Parameter editor
 
-parameterEditor
+parametersEditor
   :: MonadWidget t m
-  => Maybe (Pattern UnkindedType Identifier Location)
-  -> m (Event t (Pattern UnkindedType Identifier Location))
-parameterEditor =
+  => Maybe [Pattern UnkindedType Identifier Location]
+  -> m (Event t [Pattern UnkindedType Identifier Location])
+parametersEditor =
   someEditor
-    (printPat defaultPrint)
-    (parseTextWith funcParam "parameter" . T.pack)
-    (\pat -> do
-       text (printPat defaultPrint pat)
-       pure (updated (constDyn (Just (Right pat)))))
+    (unwords . map (printPat defaultPrint))
+    (parseTextWith funcParams "parameters" . T.pack)
+    (\params -> do
+       text (unwords (map (printPat defaultPrint) params))
+       pure (updated (constDyn (Just (Right params)))))
 
 --------------------------------------------------------------------------------
 -- Pattern editor
