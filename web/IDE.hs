@@ -234,12 +234,12 @@ newEditorEvent
   => Editor t m a -> Maybe a -> m (Event t a)
 newEditorEvent (Editor printer parser renderer) mdef = do
   inputWidget <-
-    textInput def {_textInputConfig_initialValue = maybe "" printer mdef}
+    textArea def {_textAreaConfig_initialValue = maybe "" printer mdef}
   parseResultDyn <-
     foldDyn
       (const . Just . parser)
       (fmap Right mdef)
-      (_textInput_input inputWidget)
+      (_textArea_input inputWidget)
   widgetDyn <-
     mapDyn
       (\case
