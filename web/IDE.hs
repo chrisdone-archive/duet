@@ -26,8 +26,18 @@ import           Reflex.Dom
 main :: IO ()
 main =
   mainWidget
-    (do astEv <- el "div" (newEditorEvent expressionEditor Nothing)
+    (do (astEl, astEv) <- el' "div" (newEditorEvent expressionEditor Nothing)
         astDyn <- holdDyn Nothing (fmap Just astEv)
+        keysDyn <-
+          holdDyn
+            "No keys down."
+            (fmapMaybe (pure . show) (domEvent Keydown astEl))
+        el "div" (dynText keysDyn)
+        keysDyn <-
+          holdDyn
+            "No keys pressed."
+            (fmapMaybe (pure . show) (domEvent Keypress astEl))
+        el "div" (dynText keysDyn)
         printedDyn <-
           mapDyn
             (maybe "No AST currently." (printExpression defaultPrint))
@@ -219,6 +229,7 @@ alternativesEditor =
 --------------------------------------------------------------------------------
 -- Editor combinators
 
+-- | An editor's definition: print, parse, render.
 data Editor t m a = Editor
   { editorPrinter :: a -> String
   , editorParser :: String -> Either SomeException a
