@@ -19,6 +19,7 @@ import           Duet.Parser
 import           Duet.Printer
 import           Duet.Types
 import           Reflex.Dom
+import           Reflex.Dom.Widget.Advanced
 
 --------------------------------------------------------------------------------
 -- Main entry point

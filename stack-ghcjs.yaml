@@ -8,6 +8,7 @@ extra-deps:
   - reflex-0.4.0
   - reflex-dom-0.3
   - ref-tf-0.4
+  - basic-lens-0.0.2
 
 extra-package-dbs: []
 
