@@ -350,6 +350,17 @@ newEditor (Editor printer parser renderer) input@(Input value focus) initialValu
       streamsEv <- Dom.dyn widgetDyn
       currentValuesEv <-
         switchPromptly never (fmapMaybe (pure . outputValue) streamsEv)
+  metas <- holdDyn (constDyn mempty) (fmapMaybe (pure . outputMeta) streamsEv)
+  metaDyn <-
+    mapDyn
+      (M.insert
+         uuid
+         (Meta
+          { metaNode = cons initialValue
+          , metaParent = Nothing
+          , metaChildren = mempty
+          }))
+      (joinDyn metas)
   pure
     ( Output
       { outputValue =
@@ -359,16 +370,7 @@ newEditor (Editor printer parser renderer) input@(Input value focus) initialValu
                [ updated parseResultDyn
                , fmapMaybe (pure . Right) currentValuesEv
                ])
-      , outputMeta =
-          constDyn
-            (M.insert
-               uuid
-               (Meta
-                { metaNode = cons initialValue
-                , metaParent = Nothing
-                , metaChildren = mempty
-                })
-               mempty)
+      , outputMeta = metaDyn
       }
     , uuid)
   where
