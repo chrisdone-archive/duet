@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE LambdaCase #-}
@@ -299,16 +300,19 @@ newtype ID = ID String deriving (Eq, Ord)
 
 -- | Produce an editor from a printer, parser and renderer.
 newEditor
-  :: MonadWidget t m
+  :: forall t m a.
+     MonadWidget t m
   => Editor t m a -> Input t -> a -> m (Output t a, ID)
 newEditor (Editor printer parser renderer) input@(Input value focus) initialValue = do
   uuid <- liftIO (fmap ID generateUUID)
-  rec inputWidget <-
+  rec inputAttrs <- visibilityToggler (== uuid) focus
+      inputWidget <-
         Dom.divClass
           "duet-input"
           (Dom.textArea
-             def
+             (def :: Dom.TextAreaConfig t)
              { Dom._textAreaConfig_initialValue = printer initialValue
+             , Dom._textAreaConfig_attributes = inputAttrs
              , Dom._textAreaConfig_setValue =
                  fmapMaybe (pure . printer) currentValuesEv
              })
@@ -317,14 +321,22 @@ newEditor (Editor printer parser renderer) input@(Input value focus) initialValu
           (const . parser)
           (Right initialValue)
           (Dom._textArea_input inputWidget)
+      errMsgAttrs <- visibilityToggler (== uuid) focus
+      widgetAttrs <- visibilityToggler (/= uuid) focus
       widgetDyn <-
         mapDyn
           (\case
              (Left e) -> do
-               Dom.divClass "bg-danger" (Dom.text (show (e :: SomeException)))
+               Dom.elDynAttr
+                 "div"
+                 errMsgAttrs
+                 (Dom.divClass
+                    "bg-danger"
+                    (Dom.text (show (e :: SomeException))))
                pure
                  Output {outputValue = never, outputGenealogy = constDyn mempty}
-             (Right e) -> renderer input uuid e)
+             (Right e) ->
+               Dom.elDynAttr "div" widgetAttrs (renderer input uuid e))
           parseResultDyn
       streamsEv <- Dom.dyn widgetDyn
       currentValuesEv <-
@@ -341,6 +353,16 @@ newEditor (Editor printer parser renderer) input@(Input value focus) initialValu
       , outputGenealogy = constDyn mempty
       }
     , uuid)
+  where
+    visibilityToggler f =
+      mapDyn
+        (\i ->
+           M.fromList
+             [ ( "style" :: String
+               , if f i
+                   then ""
+                   else "display:none" :: String)
+             ])
 
 -- | The wildcard or "empty slot" expression.
 wildcard :: Expression UnkindedType Identifier Location
