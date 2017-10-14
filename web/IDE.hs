@@ -21,7 +21,7 @@ import           Data.UUID
 import           Duet.Parser hiding (atomic)
 import           Duet.Printer
 import           Duet.Types
-import           Reflex.Class
+import           Reflex.Class hiding (constant)
 import           Reflex.Dom (MonadWidget)
 import qualified Reflex.Dom as Dom
 import           Reflex.Dynamic
@@ -32,8 +32,8 @@ import           Reflex.Dynamic
 main :: IO ()
 main =
   Dom.mainWidget
-    (do rec let focusDyn = constDyn (outputID astOut)
-            (astEl, astOut) <-
+    (do rec let focusDyn = constDyn oid
+            (astEl, (astOut, oid)) <-
               Dom.el'
                 "div"
                 (newEditor
@@ -80,66 +80,67 @@ renderExpression input uuid e =
   case e of
     VariableExpression {} -> do
       Dom.text (printExpression defaultPrint e)
-      atomic e
+      constant e
     LiteralExpression {} -> do
       Dom.text (printExpression defaultPrint e)
-      atomic e
+      constant e
     ConstructorExpression {} -> do
       Dom.text (printExpression defaultPrint e)
-      atomic e
+      constant e
     ConstantExpression {} -> do
       Dom.text (printExpression defaultPrint e)
-      atomic e
+      constant e
     ApplicationExpression l f x -> do
       Dom.text "("
-      fDyn <- child f
-      xDyn <- child x
+      (fDyn, fid) <- child f
+      (xDyn, xid) <- child x
       Dom.text ")"
-      appsDyn <- combineOutput (ApplicationExpression l) fDyn xDyn
+      appsDyn <- combineOutput (ApplicationExpression l) fDyn f xDyn x
       pure appsDyn
     IfExpression l cond then' else' -> do
       Dom.text "if"
-      condDyn <- child cond
+      (condDyn, cid) <- child cond
       Dom.text "then"
-      thenDyn <- child then'
+      (thenDyn, tid) <- child then'
       Dom.text "else"
-      elseDyn <- child else'
-      makeIfDyn <- combineOutput (IfExpression l) condDyn thenDyn
-      ifDyn <- combineOutput ($) makeIfDyn elseDyn
+      (elseDyn, eid) <- child else'
+      makeIfDyn <- combineOutput (IfExpression l) condDyn cond thenDyn then'
+      ifDyn <-
+        combineOutput ($) makeIfDyn (IfExpression l cond then') elseDyn else'
       pure ifDyn
     InfixExpression l left op right -> do
-      leftDyn <- child left
-      opDyn <- newEditor operatorEditor input op
-      rightDyn <- child right
-      makeOpDyn <- combineOutput (InfixExpression l) leftDyn opDyn
-      opDyn <- combineOutput ($) makeOpDyn rightDyn
+      (leftDyn, lid) <- child left
+      (opDyn, xid) <- newEditor operatorEditor input op
+      (rightDyn, rid) <- child right
+      makeOpDyn <- combineOutput (InfixExpression l) leftDyn left opDyn op
+      opDyn <-
+        combineOutput ($) makeOpDyn (InfixExpression l left op) rightDyn right
       pure opDyn
     LambdaExpression l (Alternative l' params expr) -> do
       Dom.text "\\"
-      paramsDyn <- newEditor parametersEditor input params
+      (paramsDyn, xid) <- newEditor parametersEditor input params
       Dom.text "->"
-      exprDyn <- child expr
+      (exprDyn, eid) <- child expr
       lamDyn <-
         combineOutput
           (\ps e -> LambdaExpression l (Alternative l' ps e))
           paramsDyn
+          params
           exprDyn
+          expr
       pure lamDyn
     CaseExpression l expr alts -> do
       Dom.text "case"
-      exprDyn <- child expr
+      (exprDyn, eid) <- child expr
       Dom.text "of"
-      altsDyn <- newEditor alternativesEditor input alts
-      caseDyn <- combineOutput (CaseExpression l) exprDyn altsDyn
+      (altsDyn, xid) <- newEditor alternativesEditor input alts
+      caseDyn <- combineOutput (CaseExpression l) exprDyn expr altsDyn alts
       pure caseDyn
     _ -> do
       Dom.divClass "warning" (Dom.text ("Unsupported node type: " <> show e))
       pure
         Output
-        { outputConst = e
-        , outputValue = updated (constDyn e)
-        , outputGenealogy = constDyn mempty
-        }
+        {outputValue = updated (constDyn e), outputGenealogy = constDyn mempty}
   where
     child v = newEditor expressionEditor input v
 
@@ -158,7 +159,7 @@ operatorEditor =
   , editorRenderer =
       \_ _ (string, op) -> do
         Dom.text string
-        atomic (string, op)
+        constant (string, op)
   }
 
 --------------------------------------------------------------------------------
@@ -174,7 +175,7 @@ parameterEditor =
   , editorRenderer =
       \_ _ param -> do
         Dom.text (printPat defaultPrint param)
-        atomic param
+        constant param
   }
 
 parametersEditor
@@ -189,12 +190,17 @@ parametersEditor =
         paramDyns <-
           mapM
             (\param -> do
-               e <- newEditor parameterEditor input param
+               (output, id) <- newEditor parameterEditor input param
                Dom.text " "
-              -- holdDyn [param] (fmapMaybe (pure . pure) e)
-               undefined)
+               valueDyn <-
+                 holdDyn [param] (fmapMaybe (pure . pure) (outputValue output))
+               pure (id, valueDyn, outputGenealogy output))
             params
-        undefined paramDyns
+        value <- mconcatDyn (map (\(_,v,_) -> v) paramDyns)
+        genealogy <- mconcatDyn (map (\(_,_,g) -> g) paramDyns)
+        pure
+          Output
+          {outputValue = updated value, outputGenealogy = genealogy}
   }
 
 --------------------------------------------------------------------------------
@@ -210,7 +216,7 @@ patternEditor =
   , editorRenderer =
       \_ _ pat -> do
         Dom.text (printPat defaultPrint pat)
-        atomic pat
+        constant pat
   }
 
 --------------------------------------------------------------------------------
@@ -225,10 +231,10 @@ alternativeEditor =
   , editorParser = parseTextWith (altParser Nothing 1) "alternative" . T.pack
   , editorRenderer =
       \input uuid (pat, expr) -> do
-        patDyn <- newEditor patternEditor input pat
+        (patDyn, xid) <- newEditor patternEditor input pat
         Dom.text " -> "
-        exprDyn <- newEditor expressionEditor input expr
-        altDyn <- combineOutput (,) patDyn exprDyn
+        (exprDyn, xid) <- newEditor expressionEditor input expr
+        altDyn <- combineOutput (,) patDyn pat exprDyn expr
         pure altDyn
   }
 
@@ -238,14 +244,23 @@ alternativesEditor
 alternativesEditor =
   Editor
   { editorPrinter = unlines . map (printAlt defaultPrint)
-  , editorParser = parseTextWith altsParser "alternatives" . T.pack
+  , editorParser =
+      parseTextWith altsParser "alternatives" .
+      T.unlines . map (" " <>) . T.lines . T.pack
   , editorRenderer =
-      \input _ alts -> do
+      \input uuid alts -> do
         altDyns <-
           mapM
-            (\alt -> Dom.el "div" (newEditor alternativeEditor input alt))
+            (\alt -> do
+               (output, id) <- newEditor alternativeEditor input alt
+               Dom.text " "
+               valueDyn <-
+                 holdDyn [alt] (fmapMaybe (pure . pure) (outputValue output))
+               pure (id, valueDyn, outputGenealogy output))
             alts
-        undefined altDyns
+        value <- mconcatDyn (map (\(_, v, _) -> v) altDyns)
+        genealogy <- mconcatDyn (map (\(_, _, g) -> g) altDyns)
+        pure Output {outputValue = updated value, outputGenealogy = genealogy}
   }
 
 --------------------------------------------------------------------------------
@@ -271,8 +286,6 @@ data Value
 data Output t a = Output
   { outputValue :: Event t a
   , outputGenealogy :: Dynamic t (Map ID Genealogy)
-  , outputConst :: a
-  , outputID :: ID
   }
 
 -- | An editor's ancestry and lineage.
@@ -287,43 +300,47 @@ newtype ID = ID String deriving (Eq, Ord)
 -- | Produce an editor from a printer, parser and renderer.
 newEditor
   :: MonadWidget t m
-  => Editor t m a -> Input t -> a -> m (Output t a)
-newEditor (Editor printer parser renderer) input@(Input value focus) initialVal = do
+  => Editor t m a -> Input t -> a -> m (Output t a, ID)
+newEditor (Editor printer parser renderer) input@(Input value focus) initialValue = do
   uuid <- liftIO (fmap ID generateUUID)
   rec inputWidget <-
         Dom.divClass
           "duet-input"
           (Dom.textArea
              def
-             { Dom._textAreaConfig_setValue =
-                 fmapMaybe
-                   (either (const Nothing) (Just . printer))
-                   currentValuesEv
+             { Dom._textAreaConfig_initialValue = printer initialValue
+             , Dom._textAreaConfig_setValue =
+                 fmapMaybe (pure . printer) currentValuesEv
              })
       parseResultDyn <-
         foldDyn
           (const . parser)
-          (Right initialVal)
+          (Right initialValue)
           (Dom._textArea_input inputWidget)
       widgetDyn <-
         mapDyn
           (\case
              (Left e) -> do
                Dom.divClass "bg-danger" (Dom.text (show (e :: SomeException)))
-               atomic initialVal
+               pure
+                 Output {outputValue = never, outputGenealogy = constDyn mempty}
              (Right e) -> renderer input uuid e)
-          (undefined parseResultDyn)
+          parseResultDyn
       streamsEv <- Dom.dyn widgetDyn
-      currentValuesEv <- switchPromptly never (undefined streamsEv)
+      currentValuesEv <-
+        switchPromptly never (fmapMaybe (pure . outputValue) streamsEv)
   pure
-    (Output
-     { outputValue =
-         fmapMaybe
-           (either (const Nothing) Just)
-           (leftmost [updated parseResultDyn, undefined currentValuesEv])
-     , outputGenealogy = constDyn mempty
-     , outputID = uuid
-     })
+    ( Output
+      { outputValue =
+          fmapMaybe
+            (either (const Nothing) Just)
+            (leftmost
+               [ updated parseResultDyn
+               , fmapMaybe (pure . Right) currentValuesEv
+               ])
+      , outputGenealogy = constDyn mempty
+      }
+    , uuid)
 
 -- | The wildcard or "empty slot" expression.
 wildcard :: Expression UnkindedType Identifier Location
@@ -332,23 +349,19 @@ wildcard = ConstantExpression (Location 0 0 0 0) "_"
 -- | Combine two editor outputs to form one.
 combineOutput
   :: MonadWidget t m
-  => (a -> b -> c) -> Output t a -> Output t b -> m (Output t c)
-combineOutput f a b = do
-  aDyn <- holdDyn (outputConst a) (outputValue a)
-  bDyn <- holdDyn (outputConst b) (outputValue b)
+  => (a -> b -> c) -> Output t a -> a -> Output t b -> b -> m (Output t c)
+combineOutput f a adef b bdef = do
+  aDyn <- holdDyn adef (outputValue a)
+  bDyn <- holdDyn bdef (outputValue b)
   cDyn <- combineDyn f aDyn bDyn
-  pure
-    Output
-    { outputConst = f (outputConst a) (outputConst b)
-    , outputValue = updated cDyn
-    , outputGenealogy = undefined -- M.union (outputGenealogy a) (outputGenealogy b)
-    }
+  genealogyDyn <- combineDyn M.union (outputGenealogy a) (outputGenealogy b)
+  pure Output {outputValue = updated cDyn, outputGenealogy = genealogyDyn}
 
-atomic e = do
+-- | Produce a constant output.
+constant :: MonadWidget t m => e -> m (Output t e)
+constant e = do
   pure
     Output
-    { outputConst = e
-    , outputValue = updated (constDyn e)
+    { outputValue = updated (constDyn e)
     , outputGenealogy = constDyn mempty
-    , outputID = undefined
     }

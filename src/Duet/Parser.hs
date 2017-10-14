@@ -581,7 +581,7 @@ case' = do
   pure (CaseExpression loc e alts)
 
 altsParser :: Stream s m (Token, Location) => ParsecT s Int m [(Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)]
-altsParser = many (altParser Nothing 1)
+altsParser = many1 (altParser Nothing 2)
 
 altParser
   :: Maybe (Expression UnkindedType Identifier Location)
@@ -605,11 +605,9 @@ altParser e' startCol =
   ("case alternative" ++
    (case e' of
       Just e' ->
-        " e.g.\n\n\
-                             \case " ++
+        " e.g.\n\ncase " ++
         printExpression defaultPrint e' ++
-        " of\n\
-                             \  Just bar -> bar"
+        " of\n  Just bar -> bar"
       Nothing -> ""))
 
 altPat :: TokenParser (Pattern UnkindedType Identifier Location)
