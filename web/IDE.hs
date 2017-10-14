@@ -9,41 +9,53 @@ module Main where
 
 import           Control.Exception
 import           Control.Monad
+import           Control.Monad.IO.Class
+import           Data.Default
 import           Data.Map.Lazy (Map)
 import qualified Data.Map.Lazy as M
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
-import           Duet.Parser
+import           Data.UUID
+import           Duet.Parser hiding (atomic)
 import           Duet.Printer
 import           Duet.Types
-import           Reflex.Dom
-import           Reflex.Dom.Widget.Advanced
+import           Reflex.Class
+import           Reflex.Dom (MonadWidget)
+import qualified Reflex.Dom as Dom
+import           Reflex.Dynamic
 
 --------------------------------------------------------------------------------
 -- Main entry point
 
 main :: IO ()
 main =
-  mainWidget
-    (do (astEl, astEv) <- el' "div" (newEditorEvent expressionEditor Nothing)
-        astDyn <- holdDyn Nothing (fmap Just astEv)
+  Dom.mainWidget
+    (do rec let focusDyn = constDyn (outputID astOut)
+            (astEl, astOut) <-
+              Dom.el'
+                "div"
+                (newEditor
+                   expressionEditor
+                   Input {inputFocus = focusDyn, inputValue = never}
+                   wildcard)
         keysDyn <-
           holdDyn
             "No keys down."
-            (fmapMaybe (pure . show) (domEvent Keydown astEl))
-        el "div" (dynText keysDyn)
+            (fmapMaybe (pure . show) (Dom.domEvent Dom.Keydown astEl))
+        Dom.el "div" (Dom.dynText keysDyn)
         keysDyn <-
           holdDyn
             "No keys pressed."
-            (fmapMaybe (pure . show) (domEvent Keypress astEl))
-        el "div" (dynText keysDyn)
+            (fmapMaybe (pure . show) (Dom.domEvent Dom.Keypress astEl))
+        Dom.el "div" (Dom.dynText keysDyn)
+        astDyn <- holdDyn Nothing (fmapMaybe (pure . pure) (outputValue astOut))
         printedDyn <-
           mapDyn
             (maybe "No AST currently." (printExpression defaultPrint))
             astDyn
-        el "div" (dynText printedDyn))
+        Dom.el "div" (Dom.dynText printedDyn))
 
 --------------------------------------------------------------------------------
 -- Expression editing
@@ -60,64 +72,76 @@ expressionEditor =
 
 renderExpression
   :: MonadWidget t m
-  => Expression UnkindedType Identifier Location
-  -> m (Event t (Maybe (Either SomeException (Expression UnkindedType Identifier Location))))
-renderExpression e =
+  => Input t
+  -> ID
+  -> Expression UnkindedType Identifier Location
+  -> m (Output t (Expression UnkindedType Identifier Location))
+renderExpression input uuid e =
   case e of
-    VariableExpression {} -> atomic
-    LiteralExpression {} -> atomic
-    ConstructorExpression {} -> atomic
-    ConstantExpression {} -> atomic
+    VariableExpression {} -> do
+      Dom.text (printExpression defaultPrint e)
+      atomic e
+    LiteralExpression {} -> do
+      Dom.text (printExpression defaultPrint e)
+      atomic e
+    ConstructorExpression {} -> do
+      Dom.text (printExpression defaultPrint e)
+      atomic e
+    ConstantExpression {} -> do
+      Dom.text (printExpression defaultPrint e)
+      atomic e
     ApplicationExpression l f x -> do
-      text "("
+      Dom.text "("
       fDyn <- child f
       xDyn <- child x
-      text ")"
-      appsDyn <- combineDyn (ApplicationExpression l) fDyn xDyn
-      bubble appsDyn
+      Dom.text ")"
+      appsDyn <- combineOutput (ApplicationExpression l) fDyn xDyn
+      pure appsDyn
     IfExpression l cond then' else' -> do
-      text "if"
+      Dom.text "if"
       condDyn <- child cond
-      text "then"
+      Dom.text "then"
       thenDyn <- child then'
-      text "else"
+      Dom.text "else"
       elseDyn <- child else'
-      makeIfDyn <- combineDyn (IfExpression l) condDyn thenDyn
-      ifDyn <- combineDyn ($) makeIfDyn elseDyn
-      bubble ifDyn
+      makeIfDyn <- combineOutput (IfExpression l) condDyn thenDyn
+      ifDyn <- combineOutput ($) makeIfDyn elseDyn
+      pure ifDyn
     InfixExpression l left op right -> do
       leftDyn <- child left
-      opDyn <- newEditorDynamic operatorEditor op
+      opDyn <- newEditor operatorEditor input op
       rightDyn <- child right
-      makeOpDyn <- combineDyn (InfixExpression l) leftDyn opDyn
-      opDyn <- combineDyn ($) makeOpDyn rightDyn
-      bubble opDyn
+      makeOpDyn <- combineOutput (InfixExpression l) leftDyn opDyn
+      opDyn <- combineOutput ($) makeOpDyn rightDyn
+      pure opDyn
     LambdaExpression l (Alternative l' params expr) -> do
-      text "\\"
-      paramsDyn <- newEditorDynamic parametersEditor params
-      text "->"
+      Dom.text "\\"
+      paramsDyn <- newEditor parametersEditor input params
+      Dom.text "->"
       exprDyn <- child expr
       lamDyn <-
-        combineDyn
+        combineOutput
           (\ps e -> LambdaExpression l (Alternative l' ps e))
           paramsDyn
           exprDyn
-      bubble lamDyn
-    CaseExpression l expr alts ->
-      do text "case"
-         exprDyn <- child expr
-         text "of"
-         altsDyn <- newEditorDynamic alternativesEditor alts
-         caseDyn <- combineDyn (CaseExpression l) exprDyn altsDyn
-         bubble caseDyn
+      pure lamDyn
+    CaseExpression l expr alts -> do
+      Dom.text "case"
+      exprDyn <- child expr
+      Dom.text "of"
+      altsDyn <- newEditor alternativesEditor input alts
+      caseDyn <- combineOutput (CaseExpression l) exprDyn altsDyn
+      pure caseDyn
     _ -> do
-      divClass "warning" (text ("Unsupported node type: " <> show e))
-      pure (updated (constDyn (Just (Right e))))
+      Dom.divClass "warning" (Dom.text ("Unsupported node type: " <> show e))
+      pure
+        Output
+        { outputConst = e
+        , outputValue = updated (constDyn e)
+        , outputGenealogy = constDyn mempty
+        }
   where
-    atomic = do
-      text (printExpression defaultPrint e)
-      pure (updated (constDyn (Just (Right e))))
-    child v = newEditorDynamic expressionEditor v
+    child v = newEditor expressionEditor input v
 
 --------------------------------------------------------------------------------
 -- Operator editing
@@ -132,9 +156,9 @@ operatorEditor =
       \input ->
         parseTextWith operatorParser "operator" (" " <> T.pack input <> " ")
   , editorRenderer =
-      \(string, op) -> do
-        text string
-        pure (updated (constDyn (Just (Right (string, op)))))
+      \_ _ (string, op) -> do
+        Dom.text string
+        atomic (string, op)
   }
 
 --------------------------------------------------------------------------------
@@ -148,9 +172,9 @@ parameterEditor =
   { editorPrinter = printPat defaultPrint
   , editorParser = parseTextWith funcParam "parameter" . T.pack
   , editorRenderer =
-      \param -> do
-        text (printPat defaultPrint param)
-        pure (updated (constDyn (Just (Right param))))
+      \_ _ param -> do
+        Dom.text (printPat defaultPrint param)
+        atomic param
   }
 
 parametersEditor
@@ -161,16 +185,16 @@ parametersEditor =
   { editorPrinter = unwords . map (printPat defaultPrint)
   , editorParser = parseTextWith funcParams "parameters" . T.pack
   , editorRenderer =
-      \params -> do
+      \input uuid params -> do
         paramDyns <-
           mapM
             (\param -> do
-               e <- newEditorEvent parameterEditor (Just param)
-               text " "
-               holdDyn [param] (fmapMaybe (pure . pure) e))
+               e <- newEditor parameterEditor input param
+               Dom.text " "
+              -- holdDyn [param] (fmapMaybe (pure . pure) e)
+               undefined)
             params
-        paramsDyn <- mconcatDyn paramDyns
-        bubble paramsDyn
+        undefined paramDyns
   }
 
 --------------------------------------------------------------------------------
@@ -184,9 +208,9 @@ patternEditor =
   { editorPrinter = printPat defaultPrint
   , editorParser = parseTextWith altPat "pattern" . T.pack
   , editorRenderer =
-      \pat -> do
-        text (printPat defaultPrint pat)
-        pure (updated (constDyn (Just (Right pat))))
+      \_ _ pat -> do
+        Dom.text (printPat defaultPrint pat)
+        atomic pat
   }
 
 --------------------------------------------------------------------------------
@@ -200,12 +224,12 @@ alternativeEditor =
   { editorPrinter = printAlt defaultPrint
   , editorParser = parseTextWith (altParser Nothing 1) "alternative" . T.pack
   , editorRenderer =
-      \(pat, expr) -> do
-        patDyn <- newEditorDynamic patternEditor pat
-        text " -> "
-        exprDyn <- newEditorDynamic expressionEditor expr
-        altDyn <- combineDyn (,) patDyn exprDyn
-        bubble altDyn
+      \input uuid (pat, expr) -> do
+        patDyn <- newEditor patternEditor input pat
+        Dom.text " -> "
+        exprDyn <- newEditor expressionEditor input expr
+        altDyn <- combineOutput (,) patDyn exprDyn
+        pure altDyn
   }
 
 alternativesEditor
@@ -216,15 +240,12 @@ alternativesEditor =
   { editorPrinter = unlines . map (printAlt defaultPrint)
   , editorParser = parseTextWith altsParser "alternatives" . T.pack
   , editorRenderer =
-      \alts -> do
+      \input _ alts -> do
         altDyns <-
           mapM
-            (\alt ->
-               el "div" (newEditorEvent alternativeEditor (Just alt)) >>=
-               holdDyn [alt] . fmapMaybe (pure . pure))
+            (\alt -> Dom.el "div" (newEditor alternativeEditor input alt))
             alts
-        altsDyn <- mconcatDyn altDyns
-        bubble altsDyn
+        undefined altDyns
   }
 
 --------------------------------------------------------------------------------
@@ -234,55 +255,100 @@ alternativesEditor =
 data Editor t m a = Editor
   { editorPrinter :: a -> String
   , editorParser :: String -> Either SomeException a
-  , editorRenderer :: a -> m (Event t (Maybe (Either SomeException a)))
+  , editorRenderer :: Input t -> ID -> a -> m (Output t a)
   }
 
--- | Run an editor with a definite value
-newEditorDynamic
-  :: MonadWidget t m
-  => Editor t m a -> a -> m (Dynamic t a)
-newEditorDynamic e a = newEditorEvent e (Just a) >>= holdDyn a
+-- | Input to all editors.
+data Input t = Input
+  { inputValue :: Event t (ID, Value)
+  , inputFocus :: Dynamic t ID
+  }
+
+-- | A value that can be set to any editor.
+data Value
+
+-- | An editor's output.
+data Output t a = Output
+  { outputValue :: Event t a
+  , outputGenealogy :: Dynamic t (Map ID Genealogy)
+  , outputConst :: a
+  , outputID :: ID
+  }
+
+-- | An editor's ancestry and lineage.
+data Genealogy = Genealogy
+  { genealogyParent :: Maybe ID
+  , genealogyChildren :: [ID]
+  }
+
+-- | A globally unique ID for an editor.
+newtype ID = ID String deriving (Eq, Ord)
 
 -- | Produce an editor from a printer, parser and renderer.
-newEditorEvent
+newEditor
   :: MonadWidget t m
-  => Editor t m a -> Maybe a -> m (Event t a)
-newEditorEvent (Editor printer parser renderer) mdef = do
+  => Editor t m a -> Input t -> a -> m (Output t a)
+newEditor (Editor printer parser renderer) input@(Input value focus) initialVal = do
+  uuid <- liftIO (fmap ID generateUUID)
   rec inputWidget <-
-        divClass
+        Dom.divClass
           "duet-input"
-          (textArea
+          (Dom.textArea
              def
-             { _textAreaConfig_initialValue = maybe "" printer mdef
-             , _textAreaConfig_setValue =
+             { Dom._textAreaConfig_setValue =
                  fmapMaybe
-                   (>>= either (const Nothing) (Just . printer))
+                   (either (const Nothing) (Just . printer))
                    currentValuesEv
              })
       parseResultDyn <-
         foldDyn
-          (const . Just . parser)
-          (fmap Right mdef)
-          (_textArea_input inputWidget)
+          (const . parser)
+          (Right initialVal)
+          (Dom._textArea_input inputWidget)
       widgetDyn <-
         mapDyn
           (\case
-             Nothing -> pure (updated (constDyn Nothing))
-             Just (Left e) -> do
-               divClass "bg-danger" (text (show e))
-               pure (updated (constDyn (Just (Left e))))
-             Just (Right e) -> renderer e)
-          parseResultDyn
-      streamsEv <- dyn widgetDyn
-      currentValuesEv <- switchPromptly never streamsEv
+             (Left e) -> do
+               Dom.divClass "bg-danger" (Dom.text (show (e :: SomeException)))
+               atomic initialVal
+             (Right e) -> renderer input uuid e)
+          (undefined parseResultDyn)
+      streamsEv <- Dom.dyn widgetDyn
+      currentValuesEv <- switchPromptly never (undefined streamsEv)
   pure
-    (fmapMaybe
-       (>>= either (const Nothing) Just)
-       (leftmost [updated parseResultDyn, currentValuesEv]))
+    (Output
+     { outputValue =
+         fmapMaybe
+           (either (const Nothing) Just)
+           (leftmost [updated parseResultDyn, undefined currentValuesEv])
+     , outputGenealogy = constDyn mempty
+     , outputID = uuid
+     })
 
--- | Bubble the value of an AST element upwards as a correctly parsed,
--- available value.
-bubble
+-- | The wildcard or "empty slot" expression.
+wildcard :: Expression UnkindedType Identifier Location
+wildcard = ConstantExpression (Location 0 0 0 0) "_"
+
+-- | Combine two editor outputs to form one.
+combineOutput
   :: MonadWidget t m
-  => Dynamic t a -> m (Event t (Maybe (Either SomeException a)))
-bubble = pure . fmapMaybe (Just . Just . Right) . updated
+  => (a -> b -> c) -> Output t a -> Output t b -> m (Output t c)
+combineOutput f a b = do
+  aDyn <- holdDyn (outputConst a) (outputValue a)
+  bDyn <- holdDyn (outputConst b) (outputValue b)
+  cDyn <- combineDyn f aDyn bDyn
+  pure
+    Output
+    { outputConst = f (outputConst a) (outputConst b)
+    , outputValue = updated cDyn
+    , outputGenealogy = undefined -- M.union (outputGenealogy a) (outputGenealogy b)
+    }
+
+atomic e = do
+  pure
+    Output
+    { outputConst = e
+    , outputValue = updated (constDyn e)
+    , outputGenealogy = constDyn mempty
+    , outputID = undefined
+    }

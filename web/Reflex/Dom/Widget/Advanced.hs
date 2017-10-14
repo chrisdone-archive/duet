@@ -62,6 +62,13 @@ getKeyEvent = do
 
 -}
 
+-- data PressedKey = PressedKey
+--   { pressedKeyWhich :: Int
+--   }
+
+-- type family EventResultTypeAdvanced (en :: EventTag) :: * where
+--   EventResultTypeAdvanced 'KeypressTag = KeypressEvent
+
 wrapDomEventsMaybe_
   :: ( Functor (Event t)
      , IsElement e
