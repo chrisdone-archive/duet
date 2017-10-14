@@ -50,19 +50,21 @@ main =
 
 expressionEditor
   :: MonadWidget t m
-  => Editor t m (Expression UnkindedType Identifier Location)
+  => Editor t m f (Expression UnkindedType Identifier Location)
 expressionEditor =
   Editor
   { editorPrinter = printExpression defaultPrint
   , editorParser = parseTextWith expParser "expression" . T.pack
+  , editorHandler = \_key _input _a -> Nothing
   , editorRenderer = renderExpression
   }
 
 renderExpression
   :: MonadWidget t m
-  => Expression UnkindedType Identifier Location
+  => f
+  -> Expression UnkindedType Identifier Location
   -> m (Event t (Maybe (Either SomeException (Expression UnkindedType Identifier Location))))
-renderExpression e =
+renderExpression _ e =
   case e of
     VariableExpression {} -> atomic
     LiteralExpression {} -> atomic
@@ -124,15 +126,16 @@ renderExpression e =
 
 operatorEditor
   :: MonadWidget t m
-  => Editor t m (String, Expression UnkindedType Identifier Location)
+  => Editor t m f (String, Expression UnkindedType Identifier Location)
 operatorEditor =
   Editor
   { editorPrinter = \(string, _op) -> string
   , editorParser =
       \input ->
         parseTextWith operatorParser "operator" (" " <> T.pack input <> " ")
+  , editorHandler = \_key _input _a -> Nothing
   , editorRenderer =
-      \(string, op) -> do
+      \_ (string, op) -> do
         text string
         pure (updated (constDyn (Just (Right (string, op)))))
   }
@@ -142,26 +145,28 @@ operatorEditor =
 
 parameterEditor
   :: MonadWidget t m
-  => Editor t m (Pattern UnkindedType Identifier Location)
+  => Editor t m f (Pattern UnkindedType Identifier Location)
 parameterEditor =
   Editor
   { editorPrinter = printPat defaultPrint
   , editorParser = parseTextWith funcParam "parameter" . T.pack
+  , editorHandler = \_key _input _a -> Nothing
   , editorRenderer =
-      \param -> do
+      \_ param -> do
         text (printPat defaultPrint param)
         pure (updated (constDyn (Just (Right param))))
   }
 
 parametersEditor
   :: MonadWidget t m
-  => Editor t m [Pattern UnkindedType Identifier Location]
+  => Editor t m f [Pattern UnkindedType Identifier Location]
 parametersEditor =
   Editor
   { editorPrinter = unwords . map (printPat defaultPrint)
   , editorParser = parseTextWith funcParams "parameters" . T.pack
+  , editorHandler = \_key _input _a -> Nothing
   , editorRenderer =
-      \params -> do
+      \_ params -> do
         paramDyns <-
           mapM
             (\param -> do
@@ -178,13 +183,14 @@ parametersEditor =
 
 patternEditor
   :: MonadWidget t m
-  => Editor t m (Pattern UnkindedType Identifier Location)
+  => Editor t m f (Pattern UnkindedType Identifier Location)
 patternEditor =
   Editor
   { editorPrinter = printPat defaultPrint
   , editorParser = parseTextWith altPat "pattern" . T.pack
+  , editorHandler = \_key _input _a -> Nothing
   , editorRenderer =
-      \pat -> do
+      \_ pat -> do
         text (printPat defaultPrint pat)
         pure (updated (constDyn (Just (Right pat))))
   }
@@ -194,13 +200,14 @@ patternEditor =
 
 alternativeEditor
   :: MonadWidget t m
-  => Editor t m (Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)
+  => Editor t m f (Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)
 alternativeEditor =
   Editor
   { editorPrinter = printAlt defaultPrint
   , editorParser = parseTextWith (altParser Nothing 1) "alternative" . T.pack
+  , editorHandler = \_key _input _a -> Nothing
   , editorRenderer =
-      \(pat, expr) -> do
+      \_ (pat, expr) -> do
         patDyn <- newEditorDynamic patternEditor pat
         text " -> "
         exprDyn <- newEditorDynamic expressionEditor expr
@@ -210,13 +217,14 @@ alternativeEditor =
 
 alternativesEditor
   :: MonadWidget t m
-  => Editor t m [(Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)]
+  => Editor t m f [(Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)]
 alternativesEditor =
   Editor
   { editorPrinter = unlines . map (printAlt defaultPrint)
   , editorParser = parseTextWith altsParser "alternatives" . T.pack
+  , editorHandler = \_key _input _a -> Nothing
   , editorRenderer =
-      \alts -> do
+      \_ alts -> do
         altDyns <-
           mapM
             (\alt ->
@@ -231,23 +239,24 @@ alternativesEditor =
 -- Editor combinators
 
 -- | An editor's definition: print, parse, render.
-data Editor t m a = Editor
+data Editor t m f a = Editor
   { editorPrinter :: a -> String
   , editorParser :: String -> Either SomeException a
-  , editorRenderer :: a -> m (Event t (Maybe (Either SomeException a)))
+  , editorRenderer :: Maybe f -> a -> m (Event t (Maybe (Either SomeException a)))
+  , editorHandler :: Int -> String -> a -> Maybe (f, a)
   }
 
 -- | Run an editor with a definite value
 newEditorDynamic
   :: MonadWidget t m
-  => Editor t m a -> a -> m (Dynamic t a)
+  => Editor t m f a -> a -> m (Dynamic t a)
 newEditorDynamic e a = newEditorEvent e (Just a) >>= holdDyn a
 
 -- | Produce an editor from a printer, parser and renderer.
 newEditorEvent
   :: MonadWidget t m
-  => Editor t m a -> Maybe a -> m (Event t a)
-newEditorEvent (Editor printer parser renderer) mdef = do
+  => Editor t m f a -> Maybe a -> m (Event t a)
+newEditorEvent (Editor printer parser renderer handler) mdef = do
   rec inputWidget <-
         divClass
           "duet-input"
@@ -271,7 +280,7 @@ newEditorEvent (Editor printer parser renderer) mdef = do
              Just (Left e) -> do
                divClass "bg-danger" (text (show e))
                pure (updated (constDyn (Just (Left e))))
-             Just (Right e) -> renderer e)
+             Just (Right e) -> renderer Nothing e)
           parseResultDyn
       streamsEv <- dyn widgetDyn
       currentValuesEv <- switchPromptly never streamsEv
