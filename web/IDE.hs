@@ -351,28 +351,21 @@ newEditor (Editor printer parser renderer) input@(Input value focus) initialValu
       currentValuesEv <-
         switchPromptly never (fmapMaybe (pure . outputValue) streamsEv)
   metas <- holdDyn (constDyn mempty) (fmapMaybe (pure . outputMeta) streamsEv)
+  let outputValueEvent =
+        fmapMaybe
+          (either (const Nothing) Just)
+          (leftmost
+             [updated parseResultDyn, fmapMaybe (pure . Right) currentValuesEv])
+  currentValueDyn <- holdDyn initialValue outputValueEvent
+  let makeMeta v =
+        Meta
+        { metaNode = cons v
+        , metaParent = Nothing
+        , metaChildren = mempty
+        }
   metaDyn <-
-    mapDyn
-      (M.insert
-         uuid
-         (Meta
-          { metaNode = cons initialValue
-          , metaParent = Nothing
-          , metaChildren = mempty
-          }))
-      (joinDyn metas)
-  pure
-    ( Output
-      { outputValue =
-          fmapMaybe
-            (either (const Nothing) Just)
-            (leftmost
-               [ updated parseResultDyn
-               , fmapMaybe (pure . Right) currentValuesEv
-               ])
-      , outputMeta = metaDyn
-      }
-    , uuid)
+    combineDyn (M.insert uuid . makeMeta) currentValueDyn (joinDyn metas)
+  pure (Output {outputValue = outputValueEvent, outputMeta = metaDyn}, uuid)
   where
     visibilityToggler f =
       mapDyn
