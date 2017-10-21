@@ -9,6 +9,7 @@ import           Control.Monad.State (execStateT, StateT, get, put, modify)
 import           Data.Aeson
 import           Data.Text (Text)
 import qualified Data.Text as T
+import           Duet.Types
 import           GHC.Generics
 import           GHCJS.Foreign.Callback
 import           GHCJS.Marshal (FromJSVal(..), ToJSVal(..), toJSVal_aeson)
@@ -25,9 +26,13 @@ import qualified React.Flux.Persist as Flux.Persist
 --------------------------------------------------------------------------------
 -- Types
 
+data Ignore a = Ignore
+  deriving (Generic, NFData, Show, FromJSON, ToJSON)
+
 data State = State
   { stateMode :: Mode
   , stateCursor :: Maybe Cursor
+  , stateAST :: Maybe (Expression Ignore Identifier Label)
   } deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 data Cursor = Cursor
@@ -42,7 +47,12 @@ data Action
   = ReplaceState !State
   | KeyDown !Int
   | InsertChar !Char
+  | PutExpression !(Expression Ignore Identifier Label)
   deriving (Generic, NFData, Show, FromJSON, ToJSON)
+
+data Label = Label
+  { labelUUID :: UUID
+  } deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 --------------------------------------------------------------------------------
 -- Main entry point
@@ -63,7 +73,10 @@ dispatch a = Flux.SomeStoreAction store a
 
 -- | The app's model.
 store :: ReactStore State
-store = Flux.mkStore State {stateMode = ExpressionMode, stateCursor = Nothing}
+store =
+  Flux.mkStore
+    State
+    {stateMode = ExpressionMode, stateCursor = Nothing, stateAST = Nothing}
 
 --------------------------------------------------------------------------------
 -- Model
@@ -72,7 +85,9 @@ instance Flux.StoreData State where
   type StoreAction State = Action
   transform action state = do
     putStrLn ("Action: " ++ show action)
+    putStrLn ("State before: " ++ show state)
     state' <- execStateT (interpretAction action) state
+    putStrLn ("State after: " ++ show state')
     _ <- forkIO (Flux.Persist.setAppStateVal state')
     pure state'
 
@@ -84,6 +99,22 @@ interpretAction =
   \case
     KeyDown k -> interpretKeyPress k
     ReplaceState s -> put s
+    PutExpression e ->
+      modify
+        (\s ->
+           s
+           { stateCursor =
+               Just (Cursor {cursorNode = labelUUID (expressionLabel e)})
+           , stateAST = Just e
+           })
+    InsertChar c -> do
+      s <- get
+      case stateMode s of
+        ExpressionMode ->
+          case stateCursor s of
+            Nothing -> do
+              e <- liftIO (newVariableExpression [c])
+              interpretAction (PutExpression e)
 
 interpretKeyPress :: Int -> StateT State IO ()
 interpretKeyPress k = do
@@ -101,6 +132,14 @@ codeAsLetter i =
     else Nothing
   where
     c = toEnum i
+
+--------------------------------------------------------------------------------
+-- AST constructors
+
+newVariableExpression :: String -> IO (Expression Ignore Identifier Label)
+newVariableExpression name = do
+  uuid <- Flux.Persist.generateUUID
+  pure (VariableExpression (Label {labelUUID = uuid}) (Identifier name))
 
 --------------------------------------------------------------------------------
 -- View
