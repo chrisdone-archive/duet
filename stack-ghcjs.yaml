@@ -9,6 +9,8 @@ extra-deps:
   - reflex-dom-0.3
   - ref-tf-0.4
   - basic-lens-0.0.2
+  - react-flux-1.2.3
+  - basic-lens-0.0.2
 
 extra-package-dbs: []
 
