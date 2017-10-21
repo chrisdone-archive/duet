@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase #-}
+{-# LANGUAGE BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase, TupleSections #-}
 
 module Main where
 
@@ -101,14 +101,20 @@ interpretAction =
   \case
     KeyDown k -> interpretKeyPress k
     ReplaceState s -> put s
-    PutExpression e ->
-      modify
-        (\s ->
-           s
-           { stateCursor =
-               Just (Cursor {cursorNode = labelUUID (expressionLabel e)})
-           , stateAST = Just e
-           })
+    PutExpression e -> do
+      s <- get
+      case (stateAST s, stateCursor s) of
+        (Just ast, Just cursor) -> do
+          ast' <- transformNode (cursorNode cursor) (const (pure e)) ast
+          modify (\s -> s {stateAST = Just ast'})
+        _ ->
+          modify
+            (\s ->
+               s
+               { stateCursor =
+                   Just (Cursor {cursorNode = labelUUID (expressionLabel e)})
+               , stateAST = Just e
+               })
     InsertChar c -> do
       s <- get
       case stateMode s of
@@ -117,14 +123,16 @@ interpretAction =
             Nothing -> do
               e <- liftIO (newVariableExpression [c])
               interpretAction (PutExpression e)
-            Just cursor ->
-              put
-                s
-                { stateAST =
-                    fmap
-                      (transformNode (cursorNode cursor) (insertCharVariable c))
-                      (stateAST s)
-                }
+            Just cursor -> do
+              ast <-
+                maybe
+                  (pure Nothing)
+                  (fmap Just .
+                   transformNode
+                     (cursorNode cursor)
+                     (pure . insertCharVariable c))
+                  (stateAST s)
+              put s {stateAST = ast}
 
 interpretKeyPress :: Int -> StateT State IO ()
 interpretKeyPress k = do
@@ -132,8 +140,30 @@ interpretKeyPress k = do
   case stateMode s of
     ExpressionMode ->
       case codeAsLetter k of
-        Nothing -> pure ()
+        Nothing ->
+          case stateCursor s of
+            Nothing -> pure ()
+            Just cursor ->
+              if isSpace k
+                then case stateAST s of
+                       Nothing -> pure ()
+                       Just ast -> do
+                         w <- liftIO newWildcard
+                         ast' <-
+                           transformNode
+                             (cursorNode cursor)
+                             (\f -> do liftIO (newApplicationExpression f w))
+                             ast
+                         put
+                           s
+                           { stateAST = Just ast'
+                           , stateCursor =
+                               Just (Cursor {cursorNode = labelUUID (expressionLabel w)})
+                           }
+                else pure ()
         Just c -> interpretAction (InsertChar c)
+  where
+    isSpace = (== 32)
 
 --------------------------------------------------------------------------------
 -- Interpreter utilities
@@ -148,22 +178,24 @@ insertCharVariable char =
     e -> e
 
 transformNode
-  :: UUID
-  -> (Expression Ignore Identifier Label -> Expression Ignore Identifier Label)
+  :: Monad m => UUID
+  -> (Expression Ignore Identifier Label -> m (Expression Ignore Identifier Label))
   -> Expression Ignore Identifier Label
-  -> Expression Ignore Identifier Label
+  -> m (Expression Ignore Identifier Label)
 transformNode uuid f e =
   if labelUUID (expressionLabel e) == uuid
     then f e
     else case e of
            ApplicationExpression l e1 e2 ->
-             ApplicationExpression l (go e1) (go e2)
+             ApplicationExpression l <$> (go e1) <*> (go e2)
            LambdaExpression l (Alternative al ps e) ->
-             LambdaExpression l (Alternative al ps (go e))
-           IfExpression l a b c -> IfExpression l (go a) (go b) (go c)
+             LambdaExpression l <$> (Alternative al ps <$> go e)
+           IfExpression l a b c ->
+             IfExpression l <$> (go a) <*> (go b) <*> (go c)
            CaseExpression l e alts ->
-             CaseExpression l (go e) (map (second go) alts)
-           _ -> e
+             CaseExpression l <$> (go e) <*>
+             mapM (\(x, k) -> (x, ) <$> go k) alts
+           _ -> pure e
   where
     go = transformNode uuid f
 
@@ -178,10 +210,23 @@ codeAsLetter i =
 --------------------------------------------------------------------------------
 -- AST constructors
 
+newWildcard :: IO (Expression Ignore Identifier Label)
+newWildcard = do
+  uuid <- Flux.Persist.generateUUID
+  pure (ConstantExpression (Label {labelUUID = uuid}) (Identifier "_"))
+
 newVariableExpression :: String -> IO (Expression Ignore Identifier Label)
 newVariableExpression name = do
   uuid <- Flux.Persist.generateUUID
   pure (VariableExpression (Label {labelUUID = uuid}) (Identifier name))
+
+newApplicationExpression
+  :: Expression Ignore Identifier Label
+  -> Expression Ignore Identifier Label
+  -> IO (Expression Ignore Identifier Label)
+newApplicationExpression x y = do
+  uuid <- Flux.Persist.generateUUID
+  pure (ApplicationExpression (Label {labelUUID = uuid}) x y)
 
 --------------------------------------------------------------------------------
 -- View
@@ -191,19 +236,41 @@ appview :: State -> () -> ReactElementM ViewEventHandler ()
 appview state _ =
   case stateAST state of
     Nothing -> pure ()
-    Just ast -> renderAST (stateCursor state) ast
+    Just ast -> renderExpression (stateCursor state) ast
 
-renderAST
+renderExpression
   :: Maybe Cursor
   -> Expression Ignore Identifier Label
   -> ReactElementM ViewEventHandler ()
-renderAST mcursor =
+renderExpression mcursor =
   \case
     VariableExpression label (Identifier ident) ->
-      Flux.div_
+      Flux.span_
         [ "key" @= labelUUID label
         , "className" @=
           ("duet-variable " <>
+           (if Just (labelUUID label) == fmap cursorNode mcursor
+              then "duet-selected" :: Text
+              else "duet-unselected"))
+        ]
+        (Flux.elemText (T.pack ident))
+    ApplicationExpression label f x ->
+      Flux.span_
+        [ "key" @= labelUUID label
+        , "className" @=
+          ("duet-application " <>
+           (if Just (labelUUID label) == fmap cursorNode mcursor
+              then "duet-selected" :: Text
+              else "duet-unselected"))
+        ]
+        (do renderExpression mcursor f
+            Flux.elemText " "
+            renderExpression mcursor x)
+    ConstantExpression label (Identifier ident) ->
+      Flux.span_
+        [ "key" @= labelUUID label
+        , "className" @=
+          ("duet-constant " <>
            (if Just (labelUUID label) == fmap cursorNode mcursor
               then "duet-selected" :: Text
               else "duet-unselected"))
