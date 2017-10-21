@@ -4,6 +4,7 @@ module Main where
 
 import           Control.Concurrent
 import           Control.DeepSeq
+import           Control.Monad.IO.Class
 import           Control.Monad.State (execStateT, StateT, get, put, modify)
 import           Data.Aeson
 import           Data.Text (Text)
@@ -84,7 +85,9 @@ interpretKeyPress k = do
     ExpressionMode ->
       case codeAsLetter k of
         Nothing -> pure ()
-        Just {} -> pure ()
+        Just {} -> do uuid <- liftIO Flux.Persist.generateUUID
+                      liftIO (print uuid)
+                      pure ()
 
 codeAsLetter :: Int -> Maybe Char
 codeAsLetter i =

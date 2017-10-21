@@ -12,6 +12,7 @@ import Data.Aeson.Types
 import GHCJS.Foreign.Callback
 import GHCJS.Marshal (FromJSVal(..), ToJSVal(..), toJSVal_aeson)
 import GHCJS.Types (JSVal, JSString)
+import Data.JSString
 
 foreign import javascript unsafe
     "(function(){ if (sessionStorage.getItem($1)) return JSON.parse(sessionStorage.getItem($1)); })()"
@@ -40,3 +41,10 @@ setAppStateVal app = do
       (do !val <- toJSVal_aeson app
           js_sessionStorage_setItemVal "app-state" val)
   return ()
+
+foreign import javascript unsafe "window['generateUUID']()"
+    js_generateUUID :: IO JSString
+
+generateUUID :: IO JSString
+generateUUID = -- unpack <$>
+  js_generateUUID
