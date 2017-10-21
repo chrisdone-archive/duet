@@ -4,35 +4,40 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- | Data types for the project.
 
 module Duet.Types where
 
-import           Text.Parsec (ParseError)
-import           Control.Monad.Catch
-import           Control.Monad.State
-import           Data.Map.Strict (Map)
-import           Data.Semigroup
-import           Data.String
-import           Data.Text (Text)
-import           Data.Typeable
+import Control.DeepSeq
+import Control.Monad.Catch
+import Control.Monad.State
+import Data.Map.Strict (Map)
+import Data.Semigroup
+import Data.String
+import Data.Text (Text)
+import Data.Typeable
+import GHC.Generics
+import Text.Parsec (ParseError)
 
 -- | A declaration.
+instance (NFData l, NFData i, NFData (t i)) => NFData (Decl t i l)
 data Decl t i l
   = DataDecl (DataType t i)
   | BindGroupDecl (BindGroup t i l)
   | ClassDecl (Class t i l)
   | InstanceDecl (Instance t i l)
-  deriving (Show)
+  deriving (Show, Generic)
 
 -- | Data type.
+instance (NFData i, NFData (t i)) => NFData (DataType t i )
 data DataType t i = DataType
   { dataTypeName :: i
   , dataTypeVariables :: [TypeVariable i]
   , dataTypeConstructors :: [DataTypeConstructor t i]
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 dataTypeConstructor :: DataType Type Name -> Type Name
 dataTypeConstructor (DataType name vs _) =
@@ -47,20 +52,23 @@ dataTypeToConstructor (DataType name vs _) =
   toTypeConstructor name vs
 
 -- | A data type constructor.
+instance (NFData i, NFData (t i)) => NFData (DataTypeConstructor t i)
 data DataTypeConstructor t i = DataTypeConstructor
   { dataTypeConstructorName :: i
   , dataTypeConstructorFields :: [t i]
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 -- | Type for a data typed parsed from user input.
+instance (NFData i) => NFData (UnkindedType i)
 data UnkindedType i
   = UnkindedTypeConstructor i
   | UnkindedTypeVariable i
   | UnkindedTypeApp (UnkindedType i) (UnkindedType i)
-  deriving (Show)
+  deriving (Show, Generic)
 
 -- | Special built-in types you need for type-checking patterns and
 -- literals.
+instance (NFData i) => NFData (SpecialTypes i )
 data SpecialTypes i = SpecialTypes
   { specialTypesBool       :: DataType Type i
   , specialTypesChar       :: TypeConstructor i
@@ -68,9 +76,10 @@ data SpecialTypes i = SpecialTypes
   , specialTypesFunction   :: TypeConstructor i
   , specialTypesInteger    :: TypeConstructor i
   , specialTypesRational   :: TypeConstructor i
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 -- | Special built-in signatures.
+instance (NFData i) => NFData (SpecialSigs i)
 data SpecialSigs i = SpecialSigs
   { specialSigsTrue :: i
   , specialSigsFalse :: i
@@ -78,7 +87,7 @@ data SpecialSigs i = SpecialSigs
   , specialSigsTimes :: i
   , specialSigsSubtract :: i
   , specialSigsDivide :: i
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 -- | Type inference monad.
 newtype InferT m a = InferT
@@ -100,9 +109,11 @@ data Name
   | ClassName !Int String
   | MethodName !Int String
   | PrimopName Primop
-  deriving (Show, Eq, Ord)
+  deriving (Show, Generic, Eq, Ord)
+instance NFData Name
 
 -- | Pre-defined operations.
+instance NFData (Primop)
 data Primop
   = PrimopIntegerPlus
   | PrimopIntegerSubtract
@@ -112,14 +123,15 @@ data Primop
   | PrimopRationalSubtract
   | PrimopRationalTimes
   | PrimopStringAppend
-  deriving (Show, Eq, Ord, Enum, Bounded)
+  deriving (Show, Generic, Eq, Ord, Enum, Bounded)
 
 -- | State of inferring.
+instance NFData (InferState)
 data InferState = InferState
   { inferStateSubstitutions :: ![Substitution Name]
   , inferStateCounter :: !Int
   , inferStateSpecialTypes :: !(SpecialTypes Name)
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 data ParseException
   = TokenizerError ParseError
@@ -135,6 +147,7 @@ data StepException
   deriving (Typeable, Show)
 instance Exception StepException
 
+instance NFData (RenamerException)
 data RenamerException
   = IdentifierNotInVarScope !(Map Identifier Name) !Identifier
   | IdentifierNotInConScope !(Map Identifier Name) !Identifier
@@ -150,25 +163,28 @@ data RenamerException
   | MustBeStarKind (Type Name) Kind
   | BuiltinNotDefined !String
   | RenamerNameMismatch !Name
-  deriving (Show, Typeable)
+  deriving (Show, Generic, Typeable)
 instance Exception RenamerException
 
 -- | An exception that may be thrown when reading in source code,
 -- before we do any type-checking.
+instance NFData (ReadException)
 data ReadException
   = ClassAlreadyDefined
   | NoSuchClassForInstance
   | OverlappingInstance
   | UndefinedSuperclass
-  deriving (Show, Typeable)
+  deriving (Show, Generic, Typeable)
 instance Exception ReadException
 
+instance NFData (ResolveException)
 data ResolveException =
   NoInstanceFor (Predicate Type Name)
-  deriving (Show, Typeable)
+  deriving (Show, Generic, Typeable)
 instance Exception ResolveException
 
 -- | A type error.
+instance NFData (InferException)
 data InferException
   = ExplicitTypeMismatch (Scheme Type Name Type) (Scheme Type Name Type)
   | ContextTooWeak
@@ -184,25 +200,28 @@ data InferException
   | MissingMethod
   | MissingTypeVar (TypeVariable Name) [(TypeVariable Name, Type Name)]
 
-  deriving (Show, Typeable)
+  deriving (Show, Generic, Typeable)
 instance Exception InferException
 
 -- | Specify the type of @a@.
+instance (NFData (t i), NFData i, NFData a) => NFData (TypeSignature t i a)
 data TypeSignature (t :: * -> *) i a = TypeSignature
   { typeSignatureA :: a
   , typeSignatureScheme :: Scheme t i t
-  } deriving (Show, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
 
+instance (NFData (t i),  NFData i, NFData l) => NFData (BindGroup t i l)
 data BindGroup (t :: * -> *) i l = BindGroup
   { bindGroupExplicitlyTypedBindings :: ![ExplicitlyTypedBinding t i l]
   , bindGroupImplicitlyTypedBindings :: ![[ImplicitlyTypedBinding t i l]]
-  } deriving (Show, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
 
+instance (NFData (t i),  NFData i, NFData l) => NFData (ImplicitlyTypedBinding t i l)
 data ImplicitlyTypedBinding (t :: * -> *) i l = ImplicitlyTypedBinding
   { implicitlyTypedBindingLabel :: l
   , implicitlyTypedBindingId :: !i
   , implicitlyTypedBindingAlternatives :: ![Alternative t i l]
-  } deriving (Show, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
 
 -- | The simplest case is for explicitly typed bindings, each of which
 -- is described by the name of the function that is being defined, the
@@ -212,11 +231,12 @@ data ImplicitlyTypedBinding (t :: * -> *) i l = ImplicitlyTypedBinding
 -- Haskell requires that each Alt in the definition of a given
 -- identifier has the same number of left-hand side arguments, but we
 -- do not need to enforce that here.
+instance (NFData (t i),  NFData l,NFData i) => NFData (ExplicitlyTypedBinding t i l)
 data ExplicitlyTypedBinding t i l = ExplicitlyTypedBinding
   { explicitlyTypedBindingId :: !i
   , explicitlyTypedBindingScheme :: !(Scheme t i t)
   , explicitlyTypedBindingAlternatives :: ![(Alternative t i l)]
-  } deriving (Show, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
 
 -- | Suppose, for example, that we are about to qualify a type with a
 -- list of predicates ps and that vs lists all known variables, both
@@ -226,73 +246,84 @@ data ExplicitlyTypedBinding t i l = ExplicitlyTypedBinding
 -- v to a monotype t. The type t must be chosen so that all of the
 -- predicates in ps that involve v will be satisfied once t has been
 -- substituted for v.
+instance (NFData i) => NFData (Ambiguity i)
 data Ambiguity i = Ambiguity
   { ambiguityTypeVariable :: !(TypeVariable i)
   , ambiguityPredicates :: ![Predicate Type i]
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 -- | An Alt specifies the left and right hand sides of a function
 -- definition. With a more complete syntax for Expr, values of type
 -- Alt might also be used in the representation of lambda and case
 -- expressions.
+instance (NFData (t i),  NFData l, NFData i) => NFData (Alternative t i l)
 data Alternative t i l = Alternative
   { alternativeLabel :: l
   , alternativePatterns :: ![Pattern t i l]
   , alternativeExpression :: !(Expression t i l)
-  } deriving (Show, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
 
 -- | Substitutions-finite functions, mapping type variables to
 -- types-play a major role in type inference.
+instance (NFData i) => NFData (Substitution i)
 data Substitution i = Substitution
   { substitutionTypeVariable :: !(TypeVariable i)
   , substitutionType :: !(Type i)
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 -- | A type variable.
+instance (NFData i) => NFData (TypeVariable i)
 data TypeVariable i = TypeVariable
   { typeVariableIdentifier :: !i
   , typeVariableKind :: !Kind
-  } deriving (Ord, Eq, Show)
+  } deriving (Ord, Eq, Show, Generic)
 
 -- | An identifier used for variables.
 newtype Identifier = Identifier
   { identifierString :: String
-  } deriving (Eq, IsString, Ord, Show)
+  } deriving (Eq, IsString, Ord, Show , Generic)
+instance NFData Identifier
 
 -- | Haskell types can be qualified by adding a (possibly empty) list
 -- of predicates, or class constraints, to restrict the ways in which
 -- type variables are instantiated.
+instance (NFData (t i), NFData typ, NFData i) => NFData (Qualified t i typ)
 data Qualified t i typ = Qualified
   { qualifiedPredicates :: ![Predicate t i]
   , qualifiedType :: !typ
-  } deriving (Eq, Show)
+  } deriving (Eq, Show , Generic)
 
 -- | One of potentially many predicates.
+instance (NFData (t i), NFData i) => NFData (Predicate t i)
 data Predicate t i =
   IsIn i [t i]
-  deriving (Eq, Show)
+  deriving (Eq, Show , Generic)
 
 -- | A simple Haskell type.
+instance (NFData i) => NFData (Type i)
 data Type i
   = VariableType (TypeVariable i)
   | ConstructorType (TypeConstructor i)
   | ApplicationType (Type i) (Type i)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
 
 -- | Kind of a type.
+instance NFData (Kind)
 data Kind
   = StarKind
   | FunctionKind Kind Kind
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Generic)
 
+instance NFData (Location)
 data Location = Location
   { locationStartLine :: !Int
   , locationStartColumn :: !Int
   , locationEndLine :: !Int
   , locationEndColumn :: !Int
-  } deriving (Show, Eq)
+  } deriving (Show, Generic, Eq)
 
 -- | A Haskell expression.
+instance (NFData (t i),  NFData l,NFData i) => NFData (Expression t  i l)
 data Expression (t :: * -> *) i l
   = VariableExpression l i
   | ConstructorExpression l i
@@ -304,7 +335,7 @@ data Expression (t :: * -> *) i l
   | LambdaExpression l (Alternative t i l)
   | IfExpression l (Expression t i l) (Expression t i l) (Expression t i l)
   | CaseExpression l (Expression t i l) [(Pattern t i l, (Expression t i l))]
-  deriving (Show, Functor, Traversable, Foldable, Eq)
+  deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
 
 expressionLabel :: Expression t i l -> l
 expressionLabel =
@@ -321,6 +352,7 @@ expressionLabel =
      ConstructorExpression l _ -> l
 
 -- | A pattern match.
+instance (NFData l,NFData i) => NFData (Pattern t  i l)
 data Pattern (t :: * -> *) i l
   = VariablePattern l i
   | WildcardPattern l String
@@ -328,7 +360,7 @@ data Pattern (t :: * -> *) i l
   | LiteralPattern l Literal
   | ConstructorPattern l i [Pattern t i l]
 --  | LazyPattern Pattern
-  deriving (Show , Eq , Functor, Traversable, Foldable)
+  deriving (Show, Generic , Eq , Functor, Traversable, Foldable)
 
 patternLabel :: Pattern ty t t1 -> t1
 patternLabel (VariablePattern loc _) = loc
@@ -337,52 +369,59 @@ patternLabel (WildcardPattern l _) = l
 patternLabel (AsPattern l  _ _) = l
 patternLabel (LiteralPattern l _) =l
 
+instance NFData (Literal)
 data Literal
   = IntegerLiteral Integer
   | CharacterLiteral Char
   | RationalLiteral Rational
   | StringLiteral String
-  deriving (Show, Eq)
+  deriving (Show, Generic, Eq)
 
 -- | A class.
+instance (NFData (t i), NFData l,NFData i) => NFData (Class t  i l)
 data Class (t :: * -> *) i l = Class
   { classTypeVariables :: ![TypeVariable i]
   , classSuperclasses :: ![Predicate t i]
   , classInstances :: ![Instance t i l]
   , className :: i
   , classMethods :: Map i (Scheme t i t)
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 -- | Class instance.
+instance (NFData (t i),  NFData l,NFData i) => NFData (Instance t i l)
 data Instance (t :: * -> *) i l = Instance
   { instancePredicate :: !(Scheme t i (Predicate t))
   , instanceDictionary :: !(Dictionary t i l)
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 instanceClassName :: Instance t1 i t -> i
 instanceClassName (Instance (Forall _ (Qualified _ (IsIn x _))) _) = x
 
 -- | A dictionary for a class.
+instance (NFData (t i),  NFData l,NFData i) => NFData (Dictionary t i l)
 data Dictionary (t :: * -> *) i l = Dictionary
   { dictionaryName :: i
   , dictionaryMethods :: Map i (Alternative t i l)
-  } deriving (Show, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
 
 -- | A type constructor.
+instance (NFData i) => NFData (TypeConstructor i)
 data TypeConstructor i = TypeConstructor
   { typeConstructorIdentifier :: !i
   , typeConstructorKind :: !Kind
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Generic)
 
 -- | A type scheme.
+instance (NFData (typ i), NFData (t i), NFData i) => NFData (Scheme t i typ)
 data Scheme t i typ =
   Forall [TypeVariable i] (Qualified t i (typ i))
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
 
+instance (NFData a) => NFData (Result a)
 data Result a
   = OK a
   | Fail
-  deriving (Show, Functor)
+  deriving (Show, Generic, Functor)
 
 instance Semigroup a => Semigroup (Result a) where
   Fail <> _ = Fail
@@ -440,6 +479,7 @@ instance Identifiable Name where
       PrimopName {} -> pure n
 
 -- | Context for the type checker.
+instance (NFData (t i),NFData l,  NFData i) => NFData (Context t i l)
 data Context t i l = Context
   { contextSpecialSigs :: SpecialSigs i
   , contextSpecialTypes :: SpecialTypes i
@@ -447,15 +487,16 @@ data Context t i l = Context
   , contextScope :: Map Identifier i
   , contextTypeClasses :: Map i (Class t i (TypeSignature t i l))
   , contextDataTypes :: [DataType t i]
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 -- | Builtin context.
+instance (NFData l,NFData (t i), NFData i) => NFData (Builtins t i l)
 data Builtins t i l = Builtins
   { builtinsSpecialSigs :: SpecialSigs i
   , builtinsSpecialTypes :: SpecialTypes i
   , builtinsSignatures :: [TypeSignature t i i]
   , builtinsTypeClasses :: Map i (Class t i l)
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 data Token
   = If

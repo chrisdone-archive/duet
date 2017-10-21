@@ -17,7 +17,8 @@ library
     exceptions,
     parsec,
     text,
-    edit-distance
+    edit-distance,
+    deepseq
   if !impl(ghcjs)
     build-depends:
        monad-logger
