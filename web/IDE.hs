@@ -130,7 +130,7 @@ interpretAction =
                   (fmap Just .
                    transformNode
                      (cursorNode cursor)
-                     (pure . insertCharVariable c))
+                     (pure . insertCharInto c))
                   (stateAST s)
               put s {stateAST = ast}
 
@@ -158,7 +158,9 @@ interpretKeyPress k = do
                            s
                            { stateAST = Just ast'
                            , stateCursor =
-                               Just (Cursor {cursorNode = labelUUID (expressionLabel w)})
+                               Just
+                                 (Cursor
+                                  {cursorNode = labelUUID (expressionLabel w)})
                            }
                 else pure ()
         Just c -> interpretAction (InsertChar c)
@@ -168,13 +170,17 @@ interpretKeyPress k = do
 --------------------------------------------------------------------------------
 -- Interpreter utilities
 
-insertCharVariable :: Char
-                   -> Expression Ignore Identifier Label
-                   -> Expression Ignore Identifier Label
-insertCharVariable char =
+insertCharInto :: Char
+               -> Expression Ignore Identifier Label
+               -> Expression Ignore Identifier Label
+insertCharInto char =
   \case
     VariableExpression l (Identifier s) ->
       VariableExpression l (Identifier (s ++ [char]))
+    ConstantExpression l (Identifier "_") ->
+      VariableExpression l (Identifier [char])
+    ConstantExpression l (Identifier s) ->
+      ConstantExpression l (Identifier (s ++ [char]))
     e -> e
 
 transformNode
