@@ -18,7 +18,8 @@ library
     parsec,
     text,
     edit-distance,
-    deepseq
+    deepseq,
+    aeson
   if !impl(ghcjs)
     build-depends:
        monad-logger
