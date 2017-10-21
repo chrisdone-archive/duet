@@ -1,18 +1,22 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 -- |
 
 module React.Flux.Persist where
 
 import Control.Concurrent
+import Control.DeepSeq
 import Control.Exception
 import Data.Aeson
 import Data.Aeson.Types
+import Data.JSString
+import GHC.Generics
 import GHCJS.Foreign.Callback
 import GHCJS.Marshal (FromJSVal(..), ToJSVal(..), toJSVal_aeson)
 import GHCJS.Types (JSVal, JSString)
-import Data.JSString
 
 foreign import javascript unsafe
     "(function(){ if (sessionStorage.getItem($1)) return JSON.parse(sessionStorage.getItem($1)); })()"
@@ -45,6 +49,8 @@ setAppStateVal app = do
 foreign import javascript unsafe "window['generateUUID']()"
     js_generateUUID :: IO JSString
 
-generateUUID :: IO JSString
-generateUUID = -- unpack <$>
-  js_generateUUID
+newtype UUID = UUID String
+  deriving (Ord, Eq, Show, NFData, FromJSON, ToJSON, Generic)
+
+generateUUID :: IO UUID
+generateUUID = UUID . unpack <$> js_generateUUID

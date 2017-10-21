@@ -19,14 +19,20 @@ import qualified React.Flux as Flux
 import qualified React.Flux.Events as Flux.Events
 import           React.Flux.Internal (ReactElementM)
 import qualified React.Flux.Lifecycle as Flux.Lifecycle
+import           React.Flux.Persist (UUID)
 import qualified React.Flux.Persist as Flux.Persist
 
 --------------------------------------------------------------------------------
 -- Types
 
-data State =
-  State {stateMode :: Mode}
-  deriving (Generic, NFData, Show, FromJSON, ToJSON)
+data State = State
+  { stateMode :: Mode
+  , stateCursor :: Maybe Cursor
+  } deriving (Generic, NFData, Show, FromJSON, ToJSON)
+
+data Cursor = Cursor
+  { cursorNode :: UUID
+  } deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 data Mode =
   ExpressionMode
@@ -35,6 +41,7 @@ data Mode =
 data Action
   = ReplaceState !State
   | KeyDown !Int
+  | InsertChar !Char
   deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 --------------------------------------------------------------------------------
@@ -56,7 +63,7 @@ dispatch a = Flux.SomeStoreAction store a
 
 -- | The app's model.
 store :: ReactStore State
-store = Flux.mkStore State {stateMode = ExpressionMode}
+store = Flux.mkStore State {stateMode = ExpressionMode, stateCursor = Nothing}
 
 --------------------------------------------------------------------------------
 -- Model
@@ -85,9 +92,7 @@ interpretKeyPress k = do
     ExpressionMode ->
       case codeAsLetter k of
         Nothing -> pure ()
-        Just {} -> do uuid <- liftIO Flux.Persist.generateUUID
-                      liftIO (print uuid)
-                      pure ()
+        Just c -> interpretAction (InsertChar c)
 
 codeAsLetter :: Int -> Maybe Char
 codeAsLetter i =
