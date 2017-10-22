@@ -8,6 +8,7 @@ import           Control.Concurrent
 import           Control.DeepSeq
 import           Control.Monad.IO.Class
 import           Control.Monad.State (execStateT, StateT, get, put, modify, runStateT)
+import           Control.Monad.Trans
 import           Data.Aeson
 import           Data.Monoid
 import           Data.Text (Text)
@@ -229,23 +230,45 @@ interpretKeyPress k = do
 
 interpretSpaceCompletion :: Cursor -> Expression Ignore Identifier Label -> StateT State IO ()
 interpretSpaceCompletion cursor ast = do
-  ast' <-
-    transformNode
-      (cursorNode cursor)
-      (\_ f -> do
-         case f of
-           VariableExpression _ (Identifier "case") -> do
-             c <- liftIO newCaseExpression
-             case c of
-               CaseExpression _ e _ -> focusNode (expressionLabel e)
-               _ -> pure ()
-             pure c
-           _ -> do
-             w <- liftIO newExpression
-             focusNode (expressionLabel w)
-             liftIO (newApplicationExpression f w))
-      ast
-  modify (\s -> s {stateAST = Just ast'})
+  (ast', parentEditAllowed) <-
+    runStateT
+      (transformNode
+         (cursorNode cursor)
+         (\_ f -> do
+            case f of
+              VariableExpression _ (Identifier "case") -> do
+                c <- liftIO newCaseExpression
+                case c of
+                  CaseExpression _ e _ -> do
+                    lift(focusNode (expressionLabel e))
+                    put False
+                  _ -> pure ()
+                pure c
+              _ -> do
+                w <- liftIO newExpression
+                lift (focusNode (expressionLabel w))
+                liftIO (newApplicationExpression f w))
+         ast)
+      True
+  ast'' <-
+    if parentEditAllowed
+      then do
+        let mparent = findNodeParent (cursorNode cursor) ast
+        case mparent of
+          Just parent ->
+            case parent of
+              ApplicationExpression {} ->
+                transformNode
+                  (labelUUID (expressionLabel parent))
+                  (\_ ap -> do
+                     w <- liftIO newExpression
+                     focusNode (expressionLabel w)
+                     liftIO (newApplicationExpression ap w))
+                  ast
+              _ -> pure ast'
+          Nothing -> pure ast'
+      else pure ast'
+  modify (\s -> s {stateAST = Just ast''})
 
 --------------------------------------------------------------------------------
 -- Interpreter utilities
@@ -277,20 +300,20 @@ insertCharInto char =
 findNodeParent
   :: UUID
   -> Expression Ignore Identifier Label
-  -> Maybe UUID
+  -> Maybe (Expression Ignore Identifier Label)
 findNodeParent uuid = go Nothing
   where
     go mparent e =
       if labelUUID (expressionLabel e) == uuid
-        then fmap labelUUID mparent
+        then mparent
         else case e of
                ApplicationExpression l e1 e2 ->
-                 go (Just l) e1 <|> go (Just l) e2
-               LambdaExpression l (Alternative al ps e') -> go (Just l) e'
+                 go (Just e) e1 <|> go (Just e) e2
+               LambdaExpression l (Alternative al ps e') -> go (Just e) e'
                IfExpression l a b c ->
-                 go (Just l) a <|> go (Just l) b <|> go (Just l) c
+                 go (Just e) a <|> go (Just e) b <|> go (Just e) c
                CaseExpression l e' alts ->
-                 go (Just l) e' <|> foldr (<|>) Nothing (map (\(x, k) -> go (Just l) k) alts)
+                 go (Just e) e' <|> foldr (<|>) Nothing (map (\(x, k) -> go (Just e) k) alts)
                _ -> Nothing
 
 transformNode
@@ -381,7 +404,9 @@ renderExpression mcursor =
       renderExpr
         label
         "duet-application"
-        (do parens f (renderExpression mcursor f)
+        (do case f of
+              ApplicationExpression {} -> renderExpression mcursor f
+              _ -> parens f (renderExpression mcursor f)
             Flux.elemText " "
             parens x (renderExpression mcursor x))
     ConstantExpression label (Identifier ident) ->
@@ -407,7 +432,6 @@ renderExpression mcursor =
               alts)
     _ -> pure ()
   where
-
     renderExpr label className' =
       renderNode mcursor label ("duet-expression " <> className')
 
