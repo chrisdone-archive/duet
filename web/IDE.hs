@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase, TupleSections, ExtendedDefaultRules, FlexibleContexts #-}
+{-# LANGUAGE BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase, TupleSections, ExtendedDefaultRules, FlexibleContexts, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 
 module Main where
@@ -30,9 +30,23 @@ data Ignore a = Ignore
   deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 data State = State
-  { stateCursor :: Cursor
-  , stateAST :: Expression Ignore Identifier Label
+  { stateCursor :: !Cursor
+  , stateAST :: !Node
   } deriving (Generic, NFData, Show, FromJSON, ToJSON)
+
+data Node
+  = ExpressionNode !(Expression Ignore Identifier Label)
+  | DeclNode !(Decl Ignore Identifier Label)
+  deriving (Generic, NFData, Show, FromJSON, ToJSON)
+
+nodeUUID :: Node -> UUID
+nodeUUID = labelUUID . nodeLabel
+
+nodeLabel :: Node -> Label
+nodeLabel =
+  \case
+    ExpressionNode e -> expressionLabel e
+    DeclNode d -> declLabel d
 
 data Cursor = Cursor
   { cursorUUID :: UUID
@@ -91,11 +105,36 @@ store :: ReactStore State
 store = do
   Flux.mkStore
     State
-    { stateCursor = Cursor {cursorUUID = uuid}
-    , stateAST = ConstantExpression (Label {labelUUID = uuid}) (Identifier "_")
+    { stateCursor = Cursor {cursorUUID = uuidE}
+    , stateAST =
+        DeclNode
+          (BindGroupDecl
+             (Label {labelUUID = uuidD})
+             (BindGroup
+              { bindGroupImplicitlyTypedBindings =
+                  [ [ ImplicitlyTypedBinding
+                      { implicitlyTypedBindingLabel =
+                          Label (Flux.Persist.UUID "STARTER-BINDING")
+                      , implicitlyTypedBindingId = Identifier "_"
+                      , implicitlyTypedBindingAlternatives =
+                          [ Alternative
+                            { alternativeLabel = Label (Flux.Persist.UUID "STARTER-ALT")
+                            , alternativePatterns = []
+                            , alternativeExpression =
+                                ConstantExpression
+                                  (Label {labelUUID = uuidE})
+                                  (Identifier "_")
+                            }
+                          ]
+                      }
+                    ]
+                  ]
+              , bindGroupExplicitlyTypedBindings = []
+              }))
     }
   where
-    uuid = Flux.Persist.UUID "ROOT"
+    uuidE = Flux.Persist.UUID "STARTER-EXPR"
+    uuidD = Flux.Persist.UUID "STARTER-DECL"
 
 --------------------------------------------------------------------------------
 -- Model
@@ -123,14 +162,18 @@ interpretAction =
       s <- get
       case (stateAST s, stateCursor s) of
         (ast, cursor) -> do
-          ast' <- transformNode (cursorUUID cursor) (const (const (pure e))) ast
+          ast' <-
+            transformExpression
+              (cursorUUID cursor)
+              (const (const (pure e)))
+              ast
           modify (\s' -> s' {stateAST = ast'})
     InsertChar c -> do
       s <- get
       case stateCursor s of
         cursor -> do
           ast <-
-            transformNode
+            transformExpression
               (cursorUUID cursor)
               (const (pure . insertCharInto c))
               (stateAST s)
@@ -146,11 +189,11 @@ interpretKeyDown k = do
           interpretBackspace cursor (stateAST s)
         _ -> pure ()
 
-interpretBackspace :: Cursor -> Expression Ignore Identifier Label -> StateT State IO ()
+interpretBackspace :: Cursor -> Node -> StateT State IO ()
 interpretBackspace cursor ast = do
   (tweakedAST, parentOfDoomedChild) <-
     runStateT
-      (transformNode
+      (transformExpression
          (cursorUUID cursor)
          (\mparent e -> do
             case e of
@@ -171,7 +214,7 @@ interpretBackspace cursor ast = do
     maybe
       (pure tweakedAST)
       (\uuid ->
-         transformNode
+         transformExpression
            uuid
            (const
               (\case
@@ -206,11 +249,11 @@ interpretKeyPress k = do
   where
     isSpace = (== 32)
 
-interpretSpaceCompletion :: Cursor -> Expression Ignore Identifier Label -> StateT State IO ()
+interpretSpaceCompletion :: Cursor -> Node -> StateT State IO ()
 interpretSpaceCompletion cursor ast = do
   (ast', parentEditAllowed) <-
     runStateT
-      (transformNode
+      (transformExpression
          (cursorUUID cursor)
          (\_ f -> do
             case f of
@@ -233,10 +276,10 @@ interpretSpaceCompletion cursor ast = do
       then do
         let mparent = findNodeParent (cursorUUID cursor) ast
         case mparent of
-          Just parent ->
-            case parent of
-              ApplicationExpression {} ->
-                transformNode
+          Just parentNode ->
+            case parentNode of
+              ExpressionNode parent@ApplicationExpression {} ->
+                transformExpression
                   (labelUUID (expressionLabel parent))
                   (\_ ap -> do
                      w <- liftIO newExpression
@@ -277,34 +320,110 @@ insertCharInto char =
 
 findNodeParent
   :: UUID
-  -> Expression Ignore Identifier Label
-  -> Maybe (Expression Ignore Identifier Label)
-findNodeParent uuid = go Nothing
+  -> Node
+  -> Maybe Node
+findNodeParent uuid = goNode Nothing
   where
+    goNode mparent e =
+      if nodeUUID e == uuid
+        then mparent
+        else case e of
+               ExpressionNode e -> go mparent e
+               DeclNode d -> goDecl mparent d
+               _ -> Nothing
+    goDecl mparent d =
+      if labelUUID (declLabel d) == uuid
+        then mparent
+        else case d of
+               BindGroupDecl _ (BindGroup ex im) ->
+                 foldr
+                   (<|>)
+                   Nothing
+                   (map (foldr (<|>) Nothing) (map (map (goIm mparent)) im))
+    goIm mparent (ImplicitlyTypedBinding _ _ alts) =
+      foldr (<|>) Nothing (map (goAlt mparent) alts)
+    goAlt mparent (Alternative _ _ e) = go mparent e
     go mparent e =
       if labelUUID (expressionLabel e) == uuid
         then mparent
         else case e of
                ApplicationExpression l e1 e2 ->
-                 go (Just e) e1 <|> go (Just e) e2
-               LambdaExpression l (Alternative al ps e') -> go (Just e) e'
+                 go (Just (ExpressionNode e)) e1 <|>
+                 go (Just (ExpressionNode e)) e2
+               LambdaExpression l (Alternative al ps e') ->
+                 go (Just (ExpressionNode e)) e'
                IfExpression l a b c ->
-                 go (Just e) a <|> go (Just e) b <|> go (Just e) c
+                 go (Just (ExpressionNode e)) a <|>
+                 go (Just (ExpressionNode e)) b <|>
+                 go (Just (ExpressionNode e)) c
                CaseExpression l e' alts ->
-                 go (Just e) e' <|> foldr (<|>) Nothing (map (\(x, k) -> go (Just e) k) alts)
+                 go (Just (ExpressionNode e)) e' <|>
+                 foldr
+                   (<|>)
+                   Nothing
+                   (map (\(x, k) -> go (Just (ExpressionNode e)) k) alts)
                _ -> Nothing
 
-transformNode
+transformExpression
   :: Monad m
   => UUID
   -> (Maybe UUID -> Expression Ignore Identifier Label -> m (Expression Ignore Identifier Label))
-  -> Expression Ignore Identifier Label
-  -> m (Expression Ignore Identifier Label)
-transformNode uuid f = go Nothing
+  -> Node
+  -> m Node
+transformExpression uuid f =
+  transformNode
+    uuid
+    (\pid n ->
+       case n of
+         ExpressionNode e -> fmap ExpressionNode (f pid e)
+         _ -> pure n)
+
+transformNode
+  :: forall m. Monad m
+  => UUID
+  -> (Maybe UUID -> Node -> m Node)
+  -> Node
+  -> m Node
+transformNode uuid f = goNode Nothing
   where
+    goNode :: Maybe Label -> Node -> m Node
+    goNode mparent e =
+      if nodeUUID e == uuid
+        then f (fmap labelUUID mparent) e
+        else case e of
+               ExpressionNode e' -> fmap ExpressionNode (go mparent e')
+               DeclNode d -> fmap DeclNode (goDecl mparent d)
+    goDecl mparent d =
+      if labelUUID (declLabel d) == uuid
+        then do
+          n <- f (fmap labelUUID mparent) (DeclNode d)
+          case n of
+            DeclNode d' -> pure d'
+            _ -> pure d
+        else case d of
+               BindGroupDecl l (BindGroup ex im) ->
+                 BindGroupDecl l <$>
+                 (BindGroup ex <$>
+                  mapM
+                    (mapM
+                       (\(ImplicitlyTypedBinding l i alts) ->
+                          ImplicitlyTypedBinding l i <$>
+                          mapM (goAlt (Just l)) alts))
+                    im)
+               _ -> pure d
+    goAlt mparent (Alternative l ps e) =
+      Alternative l <$> pure ps <*> go mparent e
+    go
+      :: Maybe Label
+      -> Expression Ignore Identifier Label
+      -> m (Expression Ignore Identifier Label)
     go mparent e =
       if labelUUID (expressionLabel e) == uuid
-        then f (fmap labelUUID mparent) e
+        then do
+          n <- f (fmap labelUUID mparent) (ExpressionNode e)
+          case n of
+            ExpressionNode e' -> pure e'
+            _ -> pure e
         else case e of
                ApplicationExpression l e1 e2 ->
                  ApplicationExpression l <$> go (Just l) e1 <*> go (Just l) e2
@@ -367,7 +486,46 @@ newAltlternative = (,) <$> newPattern <*> newExpression
 -- | The app's view.
 appview :: State -> () -> ReactElementM ViewEventHandler ()
 appview state _ =
-  renderExpression (stateCursor state) (stateAST state)
+  renderNode (stateCursor state) (stateAST state)
+
+renderNode :: Cursor -> Node -> ReactElementM ViewEventHandler ()
+renderNode cursor =
+  \case
+    ExpressionNode n -> renderExpression cursor n
+    DeclNode d -> renderDecl cursor d
+
+renderDecl :: Cursor -> Decl Ignore Identifier Label -> ReactElementM ViewEventHandler ()
+renderDecl cursor =
+  \case
+    BindGroupDecl label (BindGroup _ex implicit) ->
+      renderWrap
+        cursor
+        label
+        "diet-bind-group"
+        (mapM_ (mapM_ (renderImplicitBinding cursor)) implicit)
+
+renderImplicitBinding cursor (ImplicitlyTypedBinding label (Identifier i) a) =
+  renderWrap
+    cursor
+    label
+    "duet-binding duet-implicit-binding"
+    (do Flux.elemText (T.pack i)
+        mapM_ (renderAlternative cursor True) a)
+
+renderAlternative cursor equals (Alternative label pats e) =
+  renderWrap
+    cursor
+    label
+    "duet-alternative"
+    (do mapM (renderPattern cursor) pats
+        if not equals
+          then Flux.span_
+                 ["className" @= "duet-keyword duet-arrow", "key" @= "arrow"]
+                 (Flux.elemText "→")
+          else Flux.span_
+                 ["className" @= "duet-keyword", "key" @= "equals"]
+                 (Flux.elemText "=")
+        renderExpression cursor e)
 
 renderExpression
   :: Cursor
@@ -410,7 +568,7 @@ renderExpression mcursor =
     _ -> pure ()
   where
     renderExpr label className' =
-      renderNode mcursor label ("duet-expression " <> className')
+      renderWrap mcursor label ("duet-expression " <> className')
 
 parens
   :: Expression Ignore Identifier Label
@@ -449,20 +607,20 @@ renderPattern
 renderPattern mcursor =
   \case
     WildcardPattern label string ->
-      renderNode
+      renderWrap
         mcursor
         label
         "duet-pattern duet-pattern-wildcard"
         (Flux.elemText (T.pack string))
     _ -> pure ()
 
-renderNode
+renderWrap
   ::  Cursor
   -> Label
   -> Text
   -> ReactElementM ViewEventHandler ()
   -> ReactElementM ViewEventHandler ()
-renderNode mcursor label className' =
+renderWrap mcursor label className' =
   Flux.span_
     [ "key" @= labelUUID label
     , "className" @=

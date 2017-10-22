@@ -157,24 +157,24 @@ renameEverything decls specials builtins = do
   where declsDataTypes =
           mapMaybe
             (\case
-               DataDecl d -> Just d
+               DataDecl _ d -> Just d
                _ -> Nothing)
         bindings =
           mapMaybe
             (\case
-               BindGroupDecl d -> Just d
+               BindGroupDecl _ d -> Just d
                _ -> Nothing)
             decls
         classes =
           mapMaybe
             (\case
-               ClassDecl d -> Just d
+               ClassDecl _ d -> Just d
                _ -> Nothing)
             decls
         instances =
           mapMaybe
             (\case
-               InstanceDecl d -> Just d
+               InstanceDecl _ d -> Just d
                _ -> Nothing)
             decls
 

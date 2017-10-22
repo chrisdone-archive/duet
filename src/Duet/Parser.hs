@@ -62,10 +62,11 @@ tokensParser = moduleParser <* endOfTokens
 moduleParser :: TokenParser [Decl UnkindedType Identifier Location]
 moduleParser =
   many
-    (varfundeclExplicit <|> fmap DataDecl datadecl <|> fmap ClassDecl classdecl <|>
-     fmap InstanceDecl instancedecl)
+    (varfundeclExplicit <|> fmap (uncurry DataDecl) datadecl <|>
+     fmap (uncurry ClassDecl) classdecl <|>
+     fmap (uncurry InstanceDecl) instancedecl)
 
-classdecl :: TokenParser (Class UnkindedType Identifier Location)
+classdecl :: TokenParser (Location, Class UnkindedType Identifier Location)
 classdecl =
   go <?> "class declaration (e.g. class Show a where show a :: a -> String)"
   where
@@ -77,7 +78,8 @@ classdecl =
         consumeToken
           (\case
              Constructor c -> Just c
-             _ -> Nothing) <?> "new class name e.g. Show"
+             _ -> Nothing) <?>
+        "new class name e.g. Show"
       vars <- many1 kindableTypeVariable
       mwhere <-
         fmap (const True) (equalToken Where) <|> fmap (const False) endOfDecl
@@ -89,21 +91,21 @@ classdecl =
                 (consumeToken
                    (\case
                       Variable i -> Just i
-                      _ -> Nothing)) <?> "class methods e.g. foo :: a -> Int"
-            (many1 (methodParser (locationStartColumn identLoc))) <*
-              endOfDecl
+                      _ -> Nothing)) <?>
+              "class methods e.g. foo :: a -> Int"
+            (many1 (methodParser (locationStartColumn identLoc))) <* endOfDecl
           else (pure [])
       setState u
-      _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
+      _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
       pure
-        (Class
-         { className = Identifier (T.unpack c)
-         , classTypeVariables = vars
-         , classSuperclasses = []
-         , classInstances = []
-         , classMethods = M.fromList methods
-
-         })
+        ( loc
+        , Class
+          { className = Identifier (T.unpack c)
+          , classTypeVariables = vars
+          , classSuperclasses = []
+          , classInstances = []
+          , classMethods = M.fromList methods
+          })
       where
         endOfDecl =
           (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
@@ -121,8 +123,8 @@ classdecl =
                 (unexpected
                    ("method name at column " ++
                     show (locationStartColumn p) ++
-                    ", it should start at column " ++ show startCol ++
-                    " to match the others"))
+                    ", it should start at column " ++
+                    show startCol ++ " to match the others"))
               setState startCol
               _ <- equalToken Colons <?> "‘::’ for method signature"
               scheme <- parseScheme <?> "method type signature e.g. foo :: Int"
@@ -228,7 +230,7 @@ collectTypeVariables =
      UnkindedTypeVariable i -> [TypeVariable i StarKind]
      UnkindedTypeApp f x -> collectTypeVariables f ++ collectTypeVariables x
 
-instancedecl :: TokenParser (Instance UnkindedType Identifier Location)
+instancedecl :: TokenParser (Location, Instance UnkindedType Identifier Location)
 instancedecl =
   go <?> "instance declaration (e.g. instance Show Int where show = ...)"
   where
@@ -236,7 +238,8 @@ instancedecl =
       u <- getState
       loc <- equalToken InstanceToken
       setState (locationStartColumn loc)
-      predicate@(Forall _ (Qualified _ (IsIn (Identifier c) _))) <- parseSchemePredicate
+      predicate@(Forall _ (Qualified _ (IsIn (Identifier c) _))) <-
+        parseSchemePredicate
       mwhere <-
         fmap (const True) (equalToken Where) <|> fmap (const False) endOfDecl
       methods <-
@@ -255,11 +258,12 @@ instancedecl =
       _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
       let dictName = "$dict" ++ c
       pure
-        (Instance
-         { instancePredicate = predicate
-         , instanceDictionary =
-             Dictionary (Identifier dictName) (M.fromList methods)
-         })
+        ( loc
+        , Instance
+          { instancePredicate = predicate
+          , instanceDictionary =
+              Dictionary (Identifier dictName) (M.fromList methods)
+          })
       where
         endOfDecl =
           (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
@@ -306,11 +310,11 @@ toType = go
         ParsedQualified {} -> unexpected "qualification context"
         ParsedTuple {} -> unexpected "tuple"
 
-datadecl :: TokenParser (DataType UnkindedType Identifier)
+datadecl :: TokenParser (Location, DataType UnkindedType Identifier)
 datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
   where
     go = do
-      _ <- equalToken Data
+      loc <- equalToken Data
       (v, _) <-
         consumeToken
           (\case
@@ -321,7 +325,7 @@ datadecl = go <?> "data declaration (e.g. data Maybe a = Just a | Nothing)"
       _ <- equalToken Equals
       cs <- sepBy1 consp (equalToken Bar)
       _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
-      pure (DataType (Identifier (T.unpack v)) vs cs)
+      pure (loc, DataType (Identifier (T.unpack v)) vs cs)
 
 kindParser :: Stream s m (Token, Location) => ParsecT s Int m Kind
 kindParser = infix'
@@ -538,19 +542,19 @@ varfundeclExplicit =
           e <- expParser
           _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
           pure
-            (BindGroupDecl
-               (BindGroup
-                  [ (ExplicitlyTypedBinding
-                       (Identifier (T.unpack v))
-                       scheme
-                       [makeAlt loc e])
-                  ]
-                  [[]]))
+            ( BindGroupDecl loc
+                (BindGroup
+                   [ (ExplicitlyTypedBinding
+                        (Identifier (T.unpack v))
+                        scheme
+                        [makeAlt loc e])
+                   ]
+                   [[]]))
         Equals -> do
           e <- expParser
           _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
           pure
-            (BindGroupDecl
+            (BindGroupDecl loc
                (BindGroup
                   []
                   [ [ ImplicitlyTypedBinding

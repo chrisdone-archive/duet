@@ -30,11 +30,19 @@ instance (NFData l, NFData i, NFData (t i)) => NFData (Decl t i l)
 instance ( ToJSON l, ToJSON i, ToJSON (t i)) => ToJSON (Decl t i l)
 instance (Ord i, ToJSON i,   FromJSON l, FromJSON i, FromJSON (t i)) => FromJSON (Decl t i l)
 data Decl t i l
-  = DataDecl (DataType t i)
-  | BindGroupDecl (BindGroup t i l)
-  | ClassDecl (Class t i l)
-  | InstanceDecl (Instance t i l)
+  = DataDecl l (DataType t i)
+  | BindGroupDecl l (BindGroup t i l)
+  | ClassDecl l (Class t i l)
+  | InstanceDecl l (Instance t i l)
   deriving (Show, Generic)
+
+declLabel :: Decl t i l -> l
+declLabel =
+  \case
+    DataDecl l _ -> l
+    BindGroupDecl l _ -> l
+    ClassDecl l _ -> l
+    InstanceDecl l _ -> l
 
 -- | Data type.
 instance (NFData i, NFData (t i)) => NFData (DataType t i )
