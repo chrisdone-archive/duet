@@ -509,7 +509,14 @@ renderImplicitBinding cursor (ImplicitlyTypedBinding label (Identifier i) a) =
     cursor
     label
     "duet-binding duet-implicit-binding"
-    (do Flux.elemText (T.pack i)
+    (do renderWrap
+          cursor
+          label
+          ("duet-binding-name" <>
+           if i == "_"
+             then " duet-pattern-wildcard"
+             else "")
+          (Flux.elemText (T.pack i))
         mapM_ (renderAlternative cursor True) a)
 
 renderAlternative cursor equals (Alternative label pats e) =
