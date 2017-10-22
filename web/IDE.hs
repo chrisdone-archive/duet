@@ -3,6 +3,7 @@
 
 module Main where
 
+import           Control.Applicative
 import           Control.Concurrent
 import           Control.DeepSeq
 import           Control.Monad.IO.Class
@@ -104,7 +105,7 @@ interpretAction =
       s <- get
       case (stateAST s, stateCursor s) of
         (Just ast, Just cursor) -> do
-          ast' <- transformNode (cursorNode cursor) (const (pure e)) ast
+          ast' <- transformNode (cursorNode cursor) (const (const (pure e))) ast
           modify (\s' -> s' {stateAST = Just ast'})
         _ ->
           modify
@@ -127,7 +128,7 @@ interpretAction =
                 maybe
                   (pure Nothing)
                   (fmap Just .
-                   transformNode (cursorNode cursor) (pure . insertCharInto c))
+                   transformNode (cursorNode cursor) (const (pure . insertCharInto c)))
                   (stateAST s)
               put s {stateAST = ast}
 
@@ -152,7 +153,7 @@ interpretBackspace cursor ast = do
   ast' <-
     transformNode
       (cursorNode cursor)
-      (\e -> do
+      (\_ e -> do
          case e of
            VariableExpression l (Identifier string) -> do
              pure
@@ -189,7 +190,7 @@ interpretSpaceCompletion cursor ast = do
   ast' <-
     transformNode
       (cursorNode cursor)
-      (\f -> do
+      (\_ f -> do
          case f of
            VariableExpression _ (Identifier "case") -> do
              c <- liftIO newCaseExpression
@@ -231,28 +232,47 @@ insertCharInto char =
       ConstantExpression l (Identifier (s ++ [char]))
     e -> e
 
+findNodeParent
+  :: UUID
+  -> Expression Ignore Identifier Label
+  -> Maybe UUID
+findNodeParent uuid = go Nothing
+  where
+    go mparent e =
+      if labelUUID (expressionLabel e) == uuid
+        then fmap labelUUID mparent
+        else case e of
+               ApplicationExpression l e1 e2 ->
+                 go (Just l) e1 <|> go (Just l) e2
+               LambdaExpression l (Alternative al ps e') -> go (Just l) e'
+               IfExpression l a b c ->
+                 go (Just l) a <|> go (Just l) b <|> go (Just l) c
+               CaseExpression l e' alts ->
+                 go (Just l) e' <|> foldr (<|>) Nothing (map (\(x, k) -> go (Just l) k) alts)
+               _ -> Nothing
+
 transformNode
   :: Monad m
   => UUID
-  -> (Expression Ignore Identifier Label -> m (Expression Ignore Identifier Label))
+  -> (Maybe UUID -> Expression Ignore Identifier Label -> m (Expression Ignore Identifier Label))
   -> Expression Ignore Identifier Label
   -> m (Expression Ignore Identifier Label)
-transformNode uuid f e =
-  if labelUUID (expressionLabel e) == uuid
-    then f e
-    else case e of
-           ApplicationExpression l e1 e2 ->
-             ApplicationExpression l <$> (go e1) <*> (go e2)
-           LambdaExpression l (Alternative al ps e') ->
-             LambdaExpression l <$> (Alternative al ps <$> go e')
-           IfExpression l a b c ->
-             IfExpression l <$> (go a) <*> (go b) <*> (go c)
-           CaseExpression l e' alts ->
-             CaseExpression l <$> (go e') <*>
-             mapM (\(x, k) -> (x, ) <$> go k) alts
-           _ -> pure e
+transformNode uuid f = go Nothing
   where
-    go = transformNode uuid f
+    go mparent e =
+      if labelUUID (expressionLabel e) == uuid
+        then f (fmap labelUUID mparent) e
+        else case e of
+               ApplicationExpression l e1 e2 ->
+                 ApplicationExpression l <$> go (Just l) e1 <*> go (Just l) e2
+               LambdaExpression l (Alternative al ps e') ->
+                 LambdaExpression l <$> (Alternative al ps <$> go (Just l) e')
+               IfExpression l a b c ->
+                 IfExpression l <$> go (Just l) a <*> go (Just l) b <*> go (Just l) c
+               CaseExpression l e' alts ->
+                 CaseExpression l <$> go (Just l) e' <*>
+                 mapM (\(x, k) -> (x, ) <$> go (Just l) k) alts
+               _ -> pure e
 
 codeAsLetter :: Int -> Maybe Char
 codeAsLetter i =
