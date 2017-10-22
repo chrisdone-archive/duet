@@ -197,7 +197,10 @@ interpretBackspace cursor ast = do
               (\case
                  ApplicationExpression l f x
                    | labelUUID (expressionLabel x) == cursorNode cursor -> do
-                     focusNode (expressionLabel f)
+                     case f of
+                       ApplicationExpression _ _ arg ->
+                         focusNode (expressionLabel arg)
+                       _ -> focusNode (expressionLabel f)
                      pure f
                  CaseExpression _ e _
                    | labelUUID (expressionLabel e) == cursorNode cursor -> do
@@ -205,7 +208,7 @@ interpretBackspace cursor ast = do
                      focusNode (expressionLabel w)
                      pure w
                  e -> pure e))
-           tweakedAST)
+           ast)
       parentOfDoomedChild
   modify (\s -> s {stateAST = Just astWithDeletion})
 
@@ -333,7 +336,8 @@ transformNode uuid f = go Nothing
                LambdaExpression l (Alternative al ps e') ->
                  LambdaExpression l <$> (Alternative al ps <$> go (Just l) e')
                IfExpression l a b c ->
-                 IfExpression l <$> go (Just l) a <*> go (Just l) b <*> go (Just l) c
+                 IfExpression l <$> go (Just l) a <*> go (Just l) b <*>
+                 go (Just l) c
                CaseExpression l e' alts ->
                  CaseExpression l <$> go (Just l) e' <*>
                  mapM (\(x, k) -> (x, ) <$> go (Just l) k) alts
