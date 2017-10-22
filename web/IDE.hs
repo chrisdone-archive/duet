@@ -2,7 +2,6 @@
 
 module Main where
 
-import           Control.Arrow
 import           Control.Concurrent
 import           Control.DeepSeq
 import           Control.Monad.IO.Class
@@ -13,15 +12,11 @@ import           Data.Text (Text)
 import qualified Data.Text as T
 import           Duet.Types
 import           GHC.Generics
-import           GHCJS.Foreign.Callback
-import           GHCJS.Marshal (FromJSVal(..), ToJSVal(..), toJSVal_aeson)
-import           GHCJS.Types (JSVal, JSString)
 import           React.Flux ((@=))
-import           React.Flux (ReactStore, ViewEventHandler, SomeStoreAction, ReactView)
+import           React.Flux (ReactStore, ViewEventHandler, SomeStoreAction)
 import qualified React.Flux as Flux
 import qualified React.Flux.Events as Flux.Events
 import           React.Flux.Internal (ReactElementM)
-import qualified React.Flux.Lifecycle as Flux.Lifecycle
 import           React.Flux.Persist (UUID)
 import qualified React.Flux.Persist as Flux.Persist
 
@@ -106,11 +101,11 @@ interpretAction =
       case (stateAST s, stateCursor s) of
         (Just ast, Just cursor) -> do
           ast' <- transformNode (cursorNode cursor) (const (pure e)) ast
-          modify (\s -> s {stateAST = Just ast'})
+          modify (\s' -> s' {stateAST = Just ast'})
         _ ->
           modify
-            (\s ->
-               s
+            (\s' ->
+               s'
                { stateCursor =
                    Just (Cursor {cursorNode = labelUUID (expressionLabel e)})
                , stateAST = Just e
@@ -128,9 +123,7 @@ interpretAction =
                 maybe
                   (pure Nothing)
                   (fmap Just .
-                   transformNode
-                     (cursorNode cursor)
-                     (pure . insertCharInto c))
+                   transformNode (cursorNode cursor) (pure . insertCharInto c))
                   (stateAST s)
               put s {stateAST = ast}
 
@@ -147,28 +140,45 @@ interpretKeyPress k = do
               if isSpace k
                 then case stateAST s of
                        Nothing -> pure ()
-                       Just ast -> do
-                         w <- liftIO newWildcard
-                         ast' <-
-                           transformNode
-                             (cursorNode cursor)
-                             (\f -> do liftIO (newApplicationExpression f w))
-                             ast
-                         put
-                           s
-                           { stateAST = Just ast'
-                           , stateCursor =
-                               Just
-                                 (Cursor
-                                  {cursorNode = labelUUID (expressionLabel w)})
-                           }
+                       Just ast -> interpretSpaceCompletion cursor ast
                 else pure ()
         Just c -> interpretAction (InsertChar c)
   where
     isSpace = (== 32)
 
+interpretSpaceCompletion :: Cursor -> Expression Ignore Identifier Label -> StateT State IO ()
+interpretSpaceCompletion cursor ast = do
+  ast' <-
+    transformNode
+      (cursorNode cursor)
+      (\f -> do
+         case f of
+           VariableExpression _ (Identifier "case") -> do
+             c <- liftIO newCaseExpression
+             case c of
+               CaseExpression _ e _ -> focusNode (expressionLabel e)
+               _ -> pure ()
+             pure c
+           _ -> do
+             w <- liftIO newExpression
+             focusNode (expressionLabel w)
+             liftIO (newApplicationExpression f w))
+      ast
+  modify (\s -> s {stateAST = Just ast'})
+
 --------------------------------------------------------------------------------
 -- Interpreter utilities
+
+focusNode
+  :: Monad m
+  => Label -> StateT State m ()
+focusNode l =
+  modify
+    (\s ->
+       s
+       { stateCursor =
+           Just (Cursor {cursorNode = labelUUID l})
+       })
 
 insertCharInto :: Char
                -> Expression Ignore Identifier Label
@@ -184,7 +194,8 @@ insertCharInto char =
     e -> e
 
 transformNode
-  :: Monad m => UUID
+  :: Monad m
+  => UUID
   -> (Expression Ignore Identifier Label -> m (Expression Ignore Identifier Label))
   -> Expression Ignore Identifier Label
   -> m (Expression Ignore Identifier Label)
@@ -194,12 +205,12 @@ transformNode uuid f e =
     else case e of
            ApplicationExpression l e1 e2 ->
              ApplicationExpression l <$> (go e1) <*> (go e2)
-           LambdaExpression l (Alternative al ps e) ->
-             LambdaExpression l <$> (Alternative al ps <$> go e)
+           LambdaExpression l (Alternative al ps e') ->
+             LambdaExpression l <$> (Alternative al ps <$> go e')
            IfExpression l a b c ->
              IfExpression l <$> (go a) <*> (go b) <*> (go c)
-           CaseExpression l e alts ->
-             CaseExpression l <$> (go e) <*>
+           CaseExpression l e' alts ->
+             CaseExpression l <$> (go e') <*>
              mapM (\(x, k) -> (x, ) <$> go k) alts
            _ -> pure e
   where
@@ -216,10 +227,15 @@ codeAsLetter i =
 --------------------------------------------------------------------------------
 -- AST constructors
 
-newWildcard :: IO (Expression Ignore Identifier Label)
-newWildcard = do
+newExpression :: IO (Expression Ignore Identifier Label)
+newExpression = do
   uuid <- Flux.Persist.generateUUID
   pure (ConstantExpression (Label {labelUUID = uuid}) (Identifier "_"))
+
+newPattern :: IO (Pattern Ignore Identifier Label)
+newPattern = do
+  uuid <- Flux.Persist.generateUUID
+  pure (WildcardPattern (Label {labelUUID = uuid}) "_")
 
 newVariableExpression :: String -> IO (Expression Ignore Identifier Label)
 newVariableExpression name = do
@@ -233,6 +249,15 @@ newApplicationExpression
 newApplicationExpression x y = do
   uuid <- Flux.Persist.generateUUID
   pure (ApplicationExpression (Label {labelUUID = uuid}) x y)
+
+newCaseExpression :: IO (Expression Ignore Identifier Label)
+newCaseExpression = do
+  uuid <- Flux.Persist.generateUUID
+  CaseExpression (Label {labelUUID = uuid}) <$> newExpression <*>
+    fmap pure newAltlternative
+
+newAltlternative :: IO (Pattern Ignore Identifier Label, Expression Ignore Identifier Label)
+newAltlternative = (,) <$> newPattern <*> newExpression
 
 --------------------------------------------------------------------------------
 -- View

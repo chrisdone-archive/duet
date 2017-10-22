@@ -111,7 +111,7 @@ executable duet-ide
   main-is:
     IDE.hs
   ghc-options:
-    -threaded
+    -threaded -Wall
   build-depends:
     duet,
     base
