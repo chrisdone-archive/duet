@@ -554,7 +554,6 @@ renderExpression mcursor =
         (do case f of
               ApplicationExpression {} -> renderExpression mcursor f
               _ -> parens f (renderExpression mcursor f)
-            Flux.elemText " "
             parens x (renderExpression mcursor x))
     ConstantExpression label (Identifier ident) ->
       renderExpr label "duet-constant" (Flux.elemText (T.pack ident))
@@ -591,7 +590,7 @@ parens e m =
     then m
     else do
       Flux.span_
-        ["className" @= "duet-parens", "key" @= "open-paren"]
+        ["className" @= "duet-parens duet-open-parens", "key" @= "open-paren"]
         (Flux.elemText "(")
       m
       Flux.span_
