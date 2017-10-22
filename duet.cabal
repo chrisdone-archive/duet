@@ -67,10 +67,7 @@ executable duet
   other-modules: Shared
 
 executable duet-web
-  if impl(ghcjs)
-    buildable: True
-  else
-    buildable: False
+  buildable: False
   other-modules: Shared
   default-language:
     Haskell2010

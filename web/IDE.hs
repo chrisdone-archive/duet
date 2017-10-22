@@ -98,7 +98,7 @@ interpretAction :: Action -> StateT State IO ()
 interpretAction =
   \case
     KeyPress k -> interpretKeyPress k
-    KeyDown _ -> pure ()
+    KeyDown k -> interpretKeyDown k
     ReplaceState s -> put s
     PutExpression e -> do
       s <- get
@@ -130,6 +130,40 @@ interpretAction =
                    transformNode (cursorNode cursor) (pure . insertCharInto c))
                   (stateAST s)
               put s {stateAST = ast}
+
+interpretKeyDown :: Int -> StateT State IO ()
+interpretKeyDown k = do
+  s <- get
+  case stateMode s of
+    ExpressionMode ->
+      case stateCursor s of
+        Nothing -> pure ()
+        Just cursor ->
+          if isBackspace k
+            then case stateAST s of
+                   Nothing -> pure ()
+                   Just ast -> interpretBackspace cursor ast
+            else pure ()
+  where
+    isBackspace = (== 8)
+
+interpretBackspace :: Cursor -> Expression Ignore Identifier Label -> StateT State IO ()
+interpretBackspace cursor ast = do
+  ast' <-
+    transformNode
+      (cursorNode cursor)
+      (\e -> do
+         case e of
+           VariableExpression l (Identifier string) -> do
+             pure
+               (if length string > 1
+                  then VariableExpression
+                         l
+                         (Identifier (take (length string - 1) string))
+                  else ConstantExpression l (Identifier "_"))
+           _ -> pure e)
+      ast
+  modify (\s -> s {stateAST = Just ast'})
 
 interpretKeyPress :: Int -> StateT State IO ()
 interpretKeyPress k = do
