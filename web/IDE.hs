@@ -185,8 +185,13 @@ interpretKeyDown k = do
   case stateCursor s of
     cursor ->
       case k of
-        BackspaceKey ->
-          interpretBackspace cursor (stateAST s)
+        BackspaceKey -> interpretBackspace cursor (stateAST s)
+        TabKey -> do
+          let mparent = findNodeParent (cursorUUID cursor) (stateAST s)
+          case mparent of
+            Nothing -> pure ()
+            Just (ExpressionNode (CaseExpression l e ((alt, e'):alts))) ->
+              focusNode (expressionLabel e')
         _ -> pure ()
 
 interpretBackspace :: Cursor -> Node -> StateT State IO ()
