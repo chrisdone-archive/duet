@@ -30,18 +30,13 @@ data Ignore a = Ignore
   deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 data State = State
-  { stateMode :: Mode
-  , stateCursor :: Cursor
+  { stateCursor :: Cursor
   , stateAST :: Expression Ignore Identifier Label
   } deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 data Cursor = Cursor
   { cursorUUID :: UUID
   } deriving (Generic, NFData, Show, FromJSON, ToJSON)
-
-data Mode =
-  ExpressionMode
-  deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 data Action
   = ReplaceState !State
@@ -96,8 +91,7 @@ store :: ReactStore State
 store = do
   Flux.mkStore
     State
-    { stateMode = ExpressionMode
-    , stateCursor = Cursor {cursorUUID = uuid}
+    { stateCursor = Cursor {cursorUUID = uuid}
     , stateAST = ConstantExpression (Label {labelUUID = uuid}) (Identifier "_")
     }
   where
@@ -133,28 +127,24 @@ interpretAction =
           modify (\s' -> s' {stateAST = ast'})
     InsertChar c -> do
       s <- get
-      case stateMode s of
-        ExpressionMode ->
-          case stateCursor s of
-            cursor -> do
-              ast <-
-                transformNode
-                  (cursorUUID cursor)
-                  (const (pure . insertCharInto c))
-                  (stateAST s)
-              put s {stateAST = ast}
+      case stateCursor s of
+        cursor -> do
+          ast <-
+            transformNode
+              (cursorUUID cursor)
+              (const (pure . insertCharInto c))
+              (stateAST s)
+          put s {stateAST = ast}
 
 interpretKeyDown :: Keydown -> StateT State IO ()
 interpretKeyDown k = do
   s <- get
-  case stateMode s of
-    ExpressionMode ->
-      case stateCursor s of
-        cursor ->
-          case k of
-            BackspaceKey ->
-              interpretBackspace cursor (stateAST s)
-            _ -> pure ()
+  case stateCursor s of
+    cursor ->
+      case k of
+        BackspaceKey ->
+          interpretBackspace cursor (stateAST s)
+        _ -> pure ()
 
 interpretBackspace :: Cursor -> Expression Ignore Identifier Label -> StateT State IO ()
 interpretBackspace cursor ast = do
@@ -200,21 +190,19 @@ interpretBackspace cursor ast = do
                  e -> pure e))
            ast)
       parentOfDoomedChild
-  modify (\s -> s {stateAST =  astWithDeletion})
+  modify (\s -> s {stateAST = astWithDeletion})
 
 interpretKeyPress :: Int -> StateT State IO ()
 interpretKeyPress k = do
   s <- get
-  case stateMode s of
-    ExpressionMode ->
-      case codeAsLetter k of
-        Nothing ->
-          case stateCursor s of
-            cursor ->
-              if isSpace k
-                then interpretSpaceCompletion cursor (stateAST s)
-                else pure ()
-        Just c -> interpretAction (InsertChar c)
+  case codeAsLetter k of
+    Nothing ->
+      case stateCursor s of
+        cursor ->
+          if isSpace k
+            then interpretSpaceCompletion cursor (stateAST s)
+            else pure ()
+    Just c -> interpretAction (InsertChar c)
   where
     isSpace = (== 32)
 
