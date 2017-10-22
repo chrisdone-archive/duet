@@ -44,7 +44,7 @@ data Mode =
 
 data Action
   = ReplaceState !State
-  | KeyDown !Int
+  | KeyDown !Keydown
   | KeyPress !Int
   | InsertChar !Char
   | PutExpression !(Expression Ignore Identifier Label)
@@ -54,6 +54,15 @@ data Label = Label
   { labelUUID :: UUID
   } deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
+data Keydown
+  = BackspaceKey
+  | TabKey
+  | DownKey
+  | UpKey
+  | LeftKey
+  | RightKey
+  deriving (Generic, NFData, Show, FromJSON, ToJSON)
+
 --------------------------------------------------------------------------------
 -- Main entry point
 
@@ -61,7 +70,16 @@ main :: IO ()
 main = do
   mstate <- Flux.Persist.getAppStateVal
   maybe (return ()) (Flux.alterStore store . ReplaceState) mstate
-  Flux.Events.onBodyKeydown (Flux.alterStore store . KeyDown)
+  Flux.Events.onBodyKeydown
+    (\key ->
+       case key of
+         8 -> Flux.alterStore store (KeyDown BackspaceKey)
+         9 -> Flux.alterStore store (KeyDown TabKey)
+         37 -> Flux.alterStore store (KeyDown LeftKey)
+         39 -> Flux.alterStore store (KeyDown RightKey)
+         38 -> Flux.alterStore store (KeyDown UpKey)
+         40 -> Flux.alterStore store (KeyDown DownKey)
+         _ -> print key)
   Flux.Events.onBodyKeypress (Flux.alterStore store . KeyPress)
   Flux.reactRender "app" (Flux.defineControllerView "State" store appview) ()
 
@@ -132,7 +150,7 @@ interpretAction =
                   (stateAST s)
               put s {stateAST = ast}
 
-interpretKeyDown :: Int -> StateT State IO ()
+interpretKeyDown :: Keydown -> StateT State IO ()
 interpretKeyDown k = do
   s <- get
   case stateMode s of
@@ -140,13 +158,12 @@ interpretKeyDown k = do
       case stateCursor s of
         Nothing -> pure ()
         Just cursor ->
-          if isBackspace k
-            then case stateAST s of
-                   Nothing -> pure ()
-                   Just ast -> interpretBackspace cursor ast
-            else pure ()
-  where
-    isBackspace = (== 8)
+          case k of
+            BackspaceKey ->
+              case stateAST s of
+                Nothing -> pure ()
+                Just ast -> interpretBackspace cursor ast
+            _ -> pure ()
 
 interpretBackspace :: Cursor -> Expression Ignore Identifier Label -> StateT State IO ()
 interpretBackspace cursor ast = do
@@ -162,9 +179,7 @@ interpretBackspace cursor ast = do
                          (VariableExpression
                             l
                             (Identifier (take (length string - 1) string)))
-                  else do
-                    put mparent
-                    pure (ConstantExpression l (Identifier "_"))
+                  else pure (ConstantExpression l (Identifier "_"))
               ConstantExpression l (Identifier "_") -> do
                 put mparent
                 pure e
@@ -183,6 +198,11 @@ interpretBackspace cursor ast = do
                    | labelUUID (expressionLabel x) == cursorNode cursor -> do
                      focusNode (expressionLabel f)
                      pure f
+                 CaseExpression _ e _
+                   | labelUUID (expressionLabel e) == cursorNode cursor -> do
+                     w <- liftIO newExpression
+                     focusNode (expressionLabel w)
+                     pure w
                  e -> pure e))
            tweakedAST)
       parentOfDoomedChild

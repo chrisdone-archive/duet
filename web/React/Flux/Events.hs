@@ -35,7 +35,7 @@ onDrag el revert cont = do
   js_draggable el revert callback
 
 foreign import javascript unsafe
-    "jQuery(document.body).keydown(function(e){if(e.target==document.body)$1(e.which);});"
+    "jQuery(document.body).keydown(function(e){if(e.target==document.body) { if (e.which==8||e.which==9||e.which==37||e.which==38||e.which==39||e.which==40) e.preventDefault(); $1(e.which); }});"
     js_Body_Keydown :: Callback (JSVal -> IO ()) -> IO ()
 
 -- | Do something when there's a keydown in the body (not in an input element or whatnot).
