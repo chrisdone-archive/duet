@@ -31,12 +31,12 @@ data Ignore a = Ignore
 
 data State = State
   { stateMode :: Mode
-  , stateCursor :: Maybe Cursor
-  , stateAST :: Maybe (Expression Ignore Identifier Label)
+  , stateCursor :: Cursor
+  , stateAST :: Expression Ignore Identifier Label
   } deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 data Cursor = Cursor
-  { cursorNode :: UUID
+  { cursorUUID :: UUID
   } deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 data Mode =
@@ -93,10 +93,15 @@ dispatch a = Flux.SomeStoreAction store a
 
 -- | The app's model.
 store :: ReactStore State
-store =
+store = do
   Flux.mkStore
     State
-    {stateMode = ExpressionMode, stateCursor = Nothing, stateAST = Nothing}
+    { stateMode = ExpressionMode
+    , stateCursor = Cursor {cursorUUID = uuid}
+    , stateAST = ConstantExpression (Label {labelUUID = uuid}) (Identifier "_")
+    }
+  where
+    uuid = Flux.Persist.UUID "ROOT"
 
 --------------------------------------------------------------------------------
 -- Model
@@ -123,31 +128,19 @@ interpretAction =
     PutExpression e -> do
       s <- get
       case (stateAST s, stateCursor s) of
-        (Just ast, Just cursor) -> do
-          ast' <- transformNode (cursorNode cursor) (const (const (pure e))) ast
-          modify (\s' -> s' {stateAST = Just ast'})
-        _ ->
-          modify
-            (\s' ->
-               s'
-               { stateCursor =
-                   Just (Cursor {cursorNode = labelUUID (expressionLabel e)})
-               , stateAST = Just e
-               })
+        (ast, cursor) -> do
+          ast' <- transformNode (cursorUUID cursor) (const (const (pure e))) ast
+          modify (\s' -> s' {stateAST = ast'})
     InsertChar c -> do
       s <- get
       case stateMode s of
         ExpressionMode ->
           case stateCursor s of
-            Nothing -> do
-              e <- liftIO (newVariableExpression [c])
-              interpretAction (PutExpression e)
-            Just cursor -> do
+            cursor -> do
               ast <-
-                maybe
-                  (pure Nothing)
-                  (fmap Just .
-                   transformNode (cursorNode cursor) (const (pure . insertCharInto c)))
+                transformNode
+                  (cursorUUID cursor)
+                  (const (pure . insertCharInto c))
                   (stateAST s)
               put s {stateAST = ast}
 
@@ -157,13 +150,10 @@ interpretKeyDown k = do
   case stateMode s of
     ExpressionMode ->
       case stateCursor s of
-        Nothing -> pure ()
-        Just cursor ->
+        cursor ->
           case k of
             BackspaceKey ->
-              case stateAST s of
-                Nothing -> pure ()
-                Just ast -> interpretBackspace cursor ast
+              interpretBackspace cursor (stateAST s)
             _ -> pure ()
 
 interpretBackspace :: Cursor -> Expression Ignore Identifier Label -> StateT State IO ()
@@ -171,7 +161,7 @@ interpretBackspace cursor ast = do
   (tweakedAST, parentOfDoomedChild) <-
     runStateT
       (transformNode
-         (cursorNode cursor)
+         (cursorUUID cursor)
          (\mparent e -> do
             case e of
               VariableExpression l (Identifier string) -> do
@@ -196,21 +186,21 @@ interpretBackspace cursor ast = do
            (const
               (\case
                  ApplicationExpression l f x
-                   | labelUUID (expressionLabel x) == cursorNode cursor -> do
+                   | labelUUID (expressionLabel x) == cursorUUID cursor -> do
                      case f of
                        ApplicationExpression _ _ arg ->
                          focusNode (expressionLabel arg)
                        _ -> focusNode (expressionLabel f)
                      pure f
                  CaseExpression _ e _
-                   | labelUUID (expressionLabel e) == cursorNode cursor -> do
+                   | labelUUID (expressionLabel e) == cursorUUID cursor -> do
                      w <- liftIO newExpression
                      focusNode (expressionLabel w)
                      pure w
                  e -> pure e))
            ast)
       parentOfDoomedChild
-  modify (\s -> s {stateAST = Just astWithDeletion})
+  modify (\s -> s {stateAST =  astWithDeletion})
 
 interpretKeyPress :: Int -> StateT State IO ()
 interpretKeyPress k = do
@@ -220,12 +210,9 @@ interpretKeyPress k = do
       case codeAsLetter k of
         Nothing ->
           case stateCursor s of
-            Nothing -> pure ()
-            Just cursor ->
+            cursor ->
               if isSpace k
-                then case stateAST s of
-                       Nothing -> pure ()
-                       Just ast -> interpretSpaceCompletion cursor ast
+                then interpretSpaceCompletion cursor (stateAST s)
                 else pure ()
         Just c -> interpretAction (InsertChar c)
   where
@@ -236,7 +223,7 @@ interpretSpaceCompletion cursor ast = do
   (ast', parentEditAllowed) <-
     runStateT
       (transformNode
-         (cursorNode cursor)
+         (cursorUUID cursor)
          (\_ f -> do
             case f of
               VariableExpression _ (Identifier "case") -> do
@@ -256,7 +243,7 @@ interpretSpaceCompletion cursor ast = do
   ast'' <-
     if parentEditAllowed
       then do
-        let mparent = findNodeParent (cursorNode cursor) ast
+        let mparent = findNodeParent (cursorUUID cursor) ast
         case mparent of
           Just parent ->
             case parent of
@@ -271,7 +258,7 @@ interpretSpaceCompletion cursor ast = do
               _ -> pure ast'
           Nothing -> pure ast'
       else pure ast'
-  modify (\s -> s {stateAST = Just ast''})
+  modify (\s -> s {stateAST =  ast''})
 
 --------------------------------------------------------------------------------
 -- Interpreter utilities
@@ -284,7 +271,7 @@ focusNode l =
     (\s ->
        s
        { stateCursor =
-           Just (Cursor {cursorNode = labelUUID l})
+            (Cursor {cursorUUID = labelUUID l})
        })
 
 insertCharInto :: Char
@@ -392,12 +379,10 @@ newAltlternative = (,) <$> newPattern <*> newExpression
 -- | The app's view.
 appview :: State -> () -> ReactElementM ViewEventHandler ()
 appview state _ =
-  case stateAST state of
-    Nothing -> pure ()
-    Just ast -> renderExpression (stateCursor state) ast
+  renderExpression (stateCursor state) (stateAST state)
 
 renderExpression
-  :: Maybe Cursor
+  :: Cursor
   -> Expression Ignore Identifier Label
   -> ReactElementM ViewEventHandler ()
 renderExpression mcursor =
@@ -470,17 +455,21 @@ atomic e =
     ConstructorExpression {} -> True
 
 renderPattern
-  :: Maybe Cursor
+  :: Cursor
   -> Pattern Ignore Identifier Label
   -> ReactElementM ViewEventHandler ()
 renderPattern mcursor =
   \case
     WildcardPattern label string ->
-       renderNode mcursor label "duet-pattern duet-pattern-wildcard" (Flux.elemText (T.pack string))
+      renderNode
+        mcursor
+        label
+        "duet-pattern duet-pattern-wildcard"
+        (Flux.elemText (T.pack string))
     _ -> pure ()
 
 renderNode
-  :: Maybe Cursor
+  ::  Cursor
   -> Label
   -> Text
   -> ReactElementM ViewEventHandler ()
@@ -490,7 +479,7 @@ renderNode mcursor label className' =
     [ "key" @= labelUUID label
     , "className" @=
       (className' <> " " <>
-       (if Just (labelUUID label) == fmap cursorNode mcursor
+       (if (labelUUID label) == cursorUUID mcursor
           then "duet-selected"
           else "duet-unselected"))
     ]
