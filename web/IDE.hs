@@ -1,4 +1,5 @@
-{-# LANGUAGE BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase, TupleSections #-}
+{-# LANGUAGE BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase, TupleSections, ExtendedDefaultRules, FlexibleContexts #-}
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 
 module Main where
 
@@ -43,6 +44,7 @@ data Mode =
 data Action
   = ReplaceState !State
   | KeyDown !Int
+  | KeyPress !Int
   | InsertChar !Char
   | PutExpression !(Expression Ignore Identifier Label)
   deriving (Generic, NFData, Show, FromJSON, ToJSON)
@@ -59,6 +61,7 @@ main = do
   mstate <- Flux.Persist.getAppStateVal
   maybe (return ()) (Flux.alterStore store . ReplaceState) mstate
   Flux.Events.onBodyKeydown (Flux.alterStore store . KeyDown)
+  Flux.Events.onBodyKeypress (Flux.alterStore store . KeyPress)
   Flux.reactRender "app" (Flux.defineControllerView "State" store appview) ()
 
 --------------------------------------------------------------------------------
@@ -94,7 +97,8 @@ instance Flux.StoreData State where
 interpretAction :: Action -> StateT State IO ()
 interpretAction =
   \case
-    KeyDown k -> interpretKeyPress k
+    KeyPress k -> interpretKeyPress k
+    KeyDown _ -> pure ()
     ReplaceState s -> put s
     PutExpression e -> do
       s <- get
@@ -276,35 +280,93 @@ renderExpression
 renderExpression mcursor =
   \case
     VariableExpression label (Identifier ident) ->
-      Flux.span_
-        [ "key" @= labelUUID label
-        , "className" @=
-          ("duet-variable " <>
-           (if Just (labelUUID label) == fmap cursorNode mcursor
-              then "duet-selected" :: Text
-              else "duet-unselected"))
-        ]
-        (Flux.elemText (T.pack ident))
+      renderExpr label "duet-variable" (Flux.elemText (T.pack ident))
     ApplicationExpression label f x ->
-      Flux.span_
-        [ "key" @= labelUUID label
-        , "className" @=
-          ("duet-application " <>
-           (if Just (labelUUID label) == fmap cursorNode mcursor
-              then "duet-selected" :: Text
-              else "duet-unselected"))
-        ]
-        (do renderExpression mcursor f
+      renderExpr
+        label
+        "duet-application"
+        (do parens f (renderExpression mcursor f)
             Flux.elemText " "
-            renderExpression mcursor x)
+            parens x (renderExpression mcursor x))
     ConstantExpression label (Identifier ident) ->
-      Flux.span_
-        [ "key" @= labelUUID label
-        , "className" @=
-          ("duet-constant " <>
-           (if Just (labelUUID label) == fmap cursorNode mcursor
-              then "duet-selected" :: Text
-              else "duet-unselected"))
-        ]
-        (Flux.elemText (T.pack ident))
+      renderExpr label "duet-constant" (Flux.elemText (T.pack ident))
+    CaseExpression label e alts ->
+      renderExpr
+        label
+        "duet-case"
+        (do Flux.span_
+              ["className" @= "duet-keyword", "key" @= "case"]
+              (Flux.elemText "case")
+            renderExpression mcursor e
+            Flux.span_
+              ["className" @= "duet-keyword", "key" @= "of"]
+              (Flux.elemText "of")
+            mapM_
+              (\(pat, expr) -> do
+                 renderPattern mcursor pat
+                 Flux.span_
+                   ["className" @= "duet-keyword duet-arrow", "key" @= "arrow"]
+                   (Flux.elemText "→")
+                 renderExpression mcursor expr)
+              alts)
     _ -> pure ()
+  where
+
+    renderExpr label className' =
+      renderNode mcursor label ("duet-expression " <> className')
+
+parens
+  :: Expression Ignore Identifier Label
+  -> ReactElementM ViewEventHandler ()
+  -> ReactElementM ViewEventHandler ()
+parens e m =
+  if atomic e
+    then m
+    else do
+      Flux.span_
+        ["className" @= "duet-parens", "key" @= "open-paren"]
+        (Flux.elemText "(")
+      m
+      Flux.span_
+        ["className" @= "duet-parens", "key" @= "close-paren"]
+        (Flux.elemText ")")
+
+atomic :: Expression t i l -> Bool
+atomic e =
+  case e of
+    VariableExpression {} -> True
+    ConstantExpression {} -> True
+    CaseExpression {} -> False
+    ApplicationExpression {} -> False
+    IfExpression {} -> False
+    LambdaExpression {} -> False
+    LetExpression {} -> False
+    InfixExpression {} -> False
+    LiteralExpression {} -> True
+    ConstructorExpression {} -> True
+
+renderPattern
+  :: Maybe Cursor
+  -> Pattern Ignore Identifier Label
+  -> ReactElementM ViewEventHandler ()
+renderPattern mcursor =
+  \case
+    WildcardPattern label string ->
+       renderNode mcursor label "duet-pattern duet-pattern-wildcard" (Flux.elemText (T.pack string))
+    _ -> pure ()
+
+renderNode
+  :: Maybe Cursor
+  -> Label
+  -> Text
+  -> ReactElementM ViewEventHandler ()
+  -> ReactElementM ViewEventHandler ()
+renderNode mcursor label className' =
+  Flux.span_
+    [ "key" @= labelUUID label
+    , "className" @=
+      (className' <> " " <>
+       (if Just (labelUUID label) == fmap cursorNode mcursor
+          then "duet-selected"
+          else "duet-unselected"))
+    ]

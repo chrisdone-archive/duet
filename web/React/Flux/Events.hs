@@ -49,3 +49,19 @@ onBodyKeydown cont = do
            Just x -> cont x
            Nothing -> return ())
   js_Body_Keydown callback
+
+foreign import javascript unsafe
+    "jQuery(document.body).keypress(function(e){if(e.target==document.body)$1(e.which);});"
+    js_Body_Keypress :: Callback (JSVal -> IO ()) -> IO ()
+
+-- | Do something when there's a keypress in the body (not in an input element or whatnot).
+onBodyKeypress :: (Int -> IO ()) ->  IO ()
+onBodyKeypress cont = do
+  callback <-
+    asyncCallback1
+      (\jsval -> do
+         i <- fromJSVal jsval
+         case i of
+           Just x -> cont x
+           Nothing -> return ())
+  js_Body_Keypress callback
