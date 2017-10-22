@@ -7,7 +7,7 @@ import           Control.Applicative
 import           Control.Concurrent
 import           Control.DeepSeq
 import           Control.Monad.IO.Class
-import           Control.Monad.State (execStateT, StateT, get, put, modify)
+import           Control.Monad.State (execStateT, StateT, get, put, modify, runStateT)
 import           Data.Aeson
 import           Data.Monoid
 import           Data.Text (Text)
@@ -150,21 +150,43 @@ interpretKeyDown k = do
 
 interpretBackspace :: Cursor -> Expression Ignore Identifier Label -> StateT State IO ()
 interpretBackspace cursor ast = do
-  ast' <-
-    transformNode
-      (cursorNode cursor)
-      (\_ e -> do
-         case e of
-           VariableExpression l (Identifier string) -> do
-             pure
-               (if length string > 1
-                  then VariableExpression
-                         l
-                         (Identifier (take (length string - 1) string))
-                  else ConstantExpression l (Identifier "_"))
-           _ -> pure e)
-      ast
-  modify (\s -> s {stateAST = Just ast'})
+  (tweakedAST, parentOfDoomedChild) <-
+    runStateT
+      (transformNode
+         (cursorNode cursor)
+         (\mparent e -> do
+            case e of
+              VariableExpression l (Identifier string) -> do
+                if length string > 1
+                  then pure
+                         (VariableExpression
+                            l
+                            (Identifier (take (length string - 1) string)))
+                  else do
+                    put mparent
+                    pure (ConstantExpression l (Identifier "_"))
+              ConstantExpression l (Identifier "_") -> do
+                put mparent
+                pure e
+              _ -> pure e)
+         ast)
+      Nothing
+  astWithDeletion <-
+    maybe
+      (pure tweakedAST)
+      (\uuid ->
+         transformNode
+           uuid
+           (const
+              (\case
+                 ApplicationExpression l f x
+                   | labelUUID (expressionLabel x) == cursorNode cursor -> do
+                     focusNode (expressionLabel f)
+                     pure f
+                 e -> pure e))
+           tweakedAST)
+      parentOfDoomedChild
+  modify (\s -> s {stateAST = Just astWithDeletion})
 
 interpretKeyPress :: Int -> StateT State IO ()
 interpretKeyPress k = do
