@@ -235,6 +235,11 @@ interpretBackspace cursor ast = do
                      w <- liftIO newExpression
                      focusNode (expressionLabel w)
                      pure w
+                 IfExpression _ e _ _
+                   | labelUUID (expressionLabel e) == cursorUUID cursor -> do
+                     w <- liftIO newExpression
+                     focusNode (expressionLabel w)
+                     pure w
                  e -> pure e))
            ast)
       parentOfDoomedChild
@@ -262,11 +267,19 @@ interpretSpaceCompletion cursor ast = do
          (cursorUUID cursor)
          (\_ f -> do
             case f of
+              VariableExpression _ (Identifier "if") -> do
+                c <- liftIO newIfExpression
+                case c of
+                  IfExpression _ e _ _ -> do
+                    lift (focusNode (expressionLabel e))
+                    put False
+                  _ -> pure ()
+                pure c
               VariableExpression _ (Identifier "case") -> do
                 c <- liftIO newCaseExpression
                 case c of
                   CaseExpression _ e _ -> do
-                    lift(focusNode (expressionLabel e))
+                    lift (focusNode (expressionLabel e))
                     put False
                   _ -> pure ()
                 pure c
@@ -294,7 +307,7 @@ interpretSpaceCompletion cursor ast = do
               _ -> pure ast'
           Nothing -> pure ast'
       else pure ast'
-  modify (\s -> s {stateAST =  ast''})
+  modify (\s -> s {stateAST = ast''})
 
 --------------------------------------------------------------------------------
 -- Interpreter utilities
@@ -476,6 +489,12 @@ newApplicationExpression x y = do
   uuid <- Flux.Persist.generateUUID
   pure (ApplicationExpression (Label {labelUUID = uuid}) x y)
 
+newIfExpression :: IO (Expression Ignore Identifier Label)
+newIfExpression = do
+  uuid <- Flux.Persist.generateUUID
+  IfExpression (Label {labelUUID = uuid}) <$> newExpression <*>
+    newExpression <*> newExpression
+
 newCaseExpression :: IO (Expression Ignore Identifier Label)
 newCaseExpression = do
   uuid <- Flux.Persist.generateUUID
@@ -557,6 +576,22 @@ renderExpression mcursor =
             parens x (renderExpression mcursor x))
     ConstantExpression label (Identifier ident) ->
       renderExpr label "duet-constant" (Flux.elemText (T.pack ident))
+    IfExpression label e f g ->
+      renderExpr
+        label
+        "duet-if"
+        (do Flux.span_
+              ["className" @= "duet-keyword", "key" @= "if"]
+              (Flux.elemText "if")
+            renderExpression mcursor e
+            Flux.span_
+              ["className" @= "duet-keyword", "key" @= "then"]
+              (Flux.elemText "then")
+            renderExpression mcursor f
+            Flux.span_
+              ["className" @= "duet-keyword", "key" @= "else"]
+              (Flux.elemText "else")
+            renderExpression mcursor g)
     CaseExpression label e alts ->
       renderExpr
         label
