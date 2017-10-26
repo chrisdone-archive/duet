@@ -201,21 +201,34 @@ interpretBackspace :: Cursor -> Node -> StateT State IO ()
 interpretBackspace cursor ast = do
   (tweakedAST, parentOfDoomedChild) <-
     runStateT
-      (transformExpression
+      (transformNode
          (cursorUUID cursor)
-         (\mparent e -> do
-            case e of
-              VariableExpression l (Identifier string) -> do
-                if length string > 1
-                  then pure
-                         (VariableExpression
-                            l
-                            (Identifier (take (length string - 1) string)))
-                  else pure (ConstantExpression l (Identifier "_"))
-              ConstantExpression l (Identifier "_") -> do
-                put mparent
-                pure e
-              _ -> pure e)
+         (\mparent n -> do
+            case n of
+              ExpressionNode e ->
+                fmap
+                  ExpressionNode
+                  (case e of
+                     VariableExpression l (Identifier string) -> do
+                       if length string > 1
+                         then pure
+                                (VariableExpression
+                                   l
+                                   (Identifier (take (length string - 1) string)))
+                         else pure (ConstantExpression l (Identifier "_"))
+                     ConstantExpression l (Identifier "_") -> do
+                       put mparent
+                       pure e
+                     _ -> pure e)
+              BindingNode (Identifier i, l) ->
+                pure
+                  (BindingNode
+                     ( Identifier
+                         (if length i > 1
+                            then take (length i - 1) i
+                            else "_")
+                     , l))
+              _ -> pure n)
          ast)
       Nothing
   astWithDeletion <-
