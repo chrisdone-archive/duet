@@ -176,7 +176,7 @@ interpretAction =
       case stateCursor s of
         cursor -> do
           ast <-
-            transformExpression
+            transformNode
               (cursorUUID cursor)
               (const (pure . insertCharInto c))
               (stateAST s)
@@ -544,17 +544,23 @@ focusNode l =
        })
 
 insertCharInto :: Char
-               -> Expression Ignore Identifier Label
-               -> Expression Ignore Identifier Label
+               -> Node
+               -> Node
 insertCharInto char =
   \case
-    VariableExpression l (Identifier s) ->
-      VariableExpression l (Identifier (s ++ [char]))
-    ConstantExpression l (Identifier "_") ->
-      VariableExpression l (Identifier [char])
-    ConstantExpression l (Identifier s) ->
-      ConstantExpression l (Identifier (s ++ [char]))
-    e -> e
+    ExpressionNode n ->
+      ExpressionNode
+        (case n of
+           VariableExpression l (Identifier s) ->
+             VariableExpression l (Identifier (s ++ [char]))
+           ConstantExpression l (Identifier "_") ->
+             VariableExpression l (Identifier [char])
+           ConstantExpression l (Identifier s) ->
+             ConstantExpression l (Identifier (s ++ [char]))
+           e -> e)
+    BindingNode (Identifier "_", l) -> BindingNode (Identifier [char], l)
+    BindingNode (Identifier s, l) -> BindingNode (Identifier (s ++ [char]), l)
+    n -> n
 
 findNodeParent
   :: UUID
@@ -568,7 +574,12 @@ findNodeParent uuid = goNode Nothing
         else case e of
                ExpressionNode e -> go mparent e
                DeclNode d -> goDecl mparent d
+               BindingNode b -> goBinding mparent b
                _ -> Nothing
+    goBinding mparent (_, l) =
+      if labelUUID l == uuid
+        then mparent
+        else Nothing
     goDecl mparent d =
       if labelUUID (declLabel d) == uuid
         then mparent
@@ -631,6 +642,15 @@ transformNode uuid f = goNode Nothing
         else case e of
                ExpressionNode e' -> fmap ExpressionNode (go mparent e')
                DeclNode d -> fmap DeclNode (goDecl mparent d)
+               BindingNode b -> fmap BindingNode (goBinding mparent b)
+    goBinding mparent b@(i, l) =
+      if labelUUID l == uuid
+        then do
+          n <- f (fmap labelUUID mparent) (BindingNode (i, l))
+          case n of
+            BindingNode b -> pure b
+            _ -> pure b
+        else pure b
     goDecl mparent d =
       if labelUUID (declLabel d) == uuid
         then do
@@ -645,7 +665,7 @@ transformNode uuid f = goNode Nothing
                   mapM
                     (mapM
                        (\(ImplicitlyTypedBinding l i alts) ->
-                          ImplicitlyTypedBinding l i <$>
+                          ImplicitlyTypedBinding l <$> goBinding (Just l) i <*>
                           mapM (goAlt (Just l)) alts))
                     im)
                _ -> pure d
