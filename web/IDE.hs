@@ -37,6 +37,7 @@ data State = State
 data Node
   = ExpressionNode !(Expression Ignore Identifier Label)
   | DeclNode !(Decl Ignore Identifier Label)
+  | BindingNode !(Identifier, Label)
   deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 nodeUUID :: Node -> UUID
@@ -47,6 +48,7 @@ nodeLabel =
   \case
     ExpressionNode e -> expressionLabel e
     DeclNode d -> declLabel d
+    BindingNode (_, d) -> d
 
 data Cursor = Cursor
   { cursorUUID :: UUID
@@ -364,6 +366,7 @@ renderNode cursor =
   \case
     ExpressionNode n -> renderExpression cursor n
     DeclNode d -> renderDecl cursor d
+    BindingNode d -> renderBinding cursor d
 
 renderDecl :: Cursor -> Decl Ignore Identifier Label -> ReactElementM ViewEventHandler ()
 renderDecl cursor =
@@ -375,20 +378,23 @@ renderDecl cursor =
         "diet-bind-group"
         (mapM_ (mapM_ (renderImplicitBinding cursor)) implicit)
 
-renderImplicitBinding cursor (ImplicitlyTypedBinding label (Identifier i, label') a) =
+renderImplicitBinding cursor (ImplicitlyTypedBinding label binding a) =
   renderWrap
     cursor
     label
     "duet-binding duet-implicit-binding"
-    (do renderWrap
-          cursor
-          label'
-          ("duet-binding-name" <>
-           if i == "_"
-             then " duet-pattern-wildcard"
-             else "")
-          (Flux.elemText (T.pack i))
+    (do renderBinding cursor binding
         mapM_ (renderAlternative cursor True) a)
+
+renderBinding cursor (Identifier i, label') =
+  renderWrap
+    cursor
+    label'
+    ("duet-binding-name" <>
+     if i == "_"
+       then " duet-pattern-wildcard"
+       else "")
+    (Flux.elemText (T.pack i))
 
 renderAlternative cursor equals (Alternative label pats e) =
   renderWrap
