@@ -474,7 +474,7 @@ getImplicitSubs subs implicit =
   fmap
     ((<> subs) . M.fromList)
     (mapM
-       (\(ImplicitlyTypedBinding _ i _) -> do
+       (\(ImplicitlyTypedBinding _ (i, _) _) -> do
           v <- identifyValue i
           fmap (v, ) (supplyValueName i))
        (concat implicit))
@@ -513,9 +513,9 @@ renameImplicit
        -> [DataType Type Name]
   -> ImplicitlyTypedBinding t i l
   -> m (ImplicitlyTypedBinding Type Name l)
-renameImplicit specials subs types (ImplicitlyTypedBinding l id' alts) =
+renameImplicit specials subs types (ImplicitlyTypedBinding l (id',l') alts) =
   do name <- substituteVar subs id'
-     ImplicitlyTypedBinding l name <$> mapM (renameAlt specials subs types) alts
+     ImplicitlyTypedBinding l (name, l') <$> mapM (renameAlt specials subs types) alts
 
 renameAlt
   :: ( MonadSupply Int m

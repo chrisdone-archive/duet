@@ -511,7 +511,7 @@ varfundecl = go <?> "variable declaration (e.g. x = 1, f = \\x -> x * x)"
       _ <- equalToken Equals <?> "‘=’ for variable declaration e.g. x = 1"
       e <- expParser
       _ <- (pure () <* satisfyToken (==NonIndentedNewline)) <|> endOfTokens
-      pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v)) [makeAlt loc e])
+      pure (ImplicitlyTypedBinding loc (Identifier (T.unpack v), loc) [makeAlt loc e])
 
 varfundeclExplicit :: TokenParser (Decl UnkindedType Identifier Location)
 varfundeclExplicit =
@@ -559,7 +559,7 @@ varfundeclExplicit =
                   []
                   [ [ ImplicitlyTypedBinding
                         loc
-                        (Identifier (T.unpack v0))
+                        (Identifier (T.unpack v0), loc)
                         [makeAlt loc e]
                     ]
                   ]))

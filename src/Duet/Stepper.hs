@@ -297,7 +297,7 @@ lookupName identifier binds =
       listToMaybe
         (mapMaybe
            (\case
-              ImplicitlyTypedBinding _ i [Alternative _ [] e]
+              ImplicitlyTypedBinding _ (i, _) [Alternative _ [] e]
                 | i == identifier -> Just e
               _ -> Nothing)
            (concat is)) <|>
@@ -323,7 +323,7 @@ lookupNameByString identifier binds =
       listToMaybe
         (mapMaybe
            (\case
-              ImplicitlyTypedBinding _ (ValueName _ i) [Alternative _ [] e]
+              ImplicitlyTypedBinding _ (ValueName _ i, _) [Alternative _ [] e]
                 | i == identifier -> Just e
               _ -> Nothing)
            (concat is)) <|>

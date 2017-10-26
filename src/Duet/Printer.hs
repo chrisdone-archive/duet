@@ -114,7 +114,7 @@ printIdentifier printer = printit printer
 printImplicitlyTypedBinding
   :: (Printable i, PrintableType t)
   => Print i l -> ImplicitlyTypedBinding t i l -> String
-printImplicitlyTypedBinding printer (ImplicitlyTypedBinding _ i [alt]) =
+printImplicitlyTypedBinding printer (ImplicitlyTypedBinding _ (i, _) [alt]) =
   printIdentifier printer i ++ " " ++ printAlternative printer alt
 printImplicitlyTypedBinding _ _ = ""
 

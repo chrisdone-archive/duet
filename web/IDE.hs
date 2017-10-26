@@ -105,7 +105,7 @@ store :: ReactStore State
 store = do
   Flux.mkStore
     State
-    { stateCursor = Cursor {cursorUUID = uuidE}
+    { stateCursor = Cursor {cursorUUID = uuidI}
     , stateAST =
         DeclNode
           (BindGroupDecl
@@ -115,7 +115,7 @@ store = do
                   [ [ ImplicitlyTypedBinding
                       { implicitlyTypedBindingLabel =
                           Label (Flux.Persist.UUID "STARTER-BINDING")
-                      , implicitlyTypedBindingId = Identifier "_"
+                      , implicitlyTypedBindingId = (Identifier "_",Label uuidI)
                       , implicitlyTypedBindingAlternatives =
                           [ Alternative
                             { alternativeLabel = Label (Flux.Persist.UUID "STARTER-ALT")
@@ -135,6 +135,7 @@ store = do
   where
     uuidE = Flux.Persist.UUID "STARTER-EXPR"
     uuidD = Flux.Persist.UUID "STARTER-DECL"
+    uuidI = Flux.Persist.UUID "STARTER-BINDING-ID"
 
 --------------------------------------------------------------------------------
 -- Model
@@ -374,14 +375,14 @@ renderDecl cursor =
         "diet-bind-group"
         (mapM_ (mapM_ (renderImplicitBinding cursor)) implicit)
 
-renderImplicitBinding cursor (ImplicitlyTypedBinding label (Identifier i) a) =
+renderImplicitBinding cursor (ImplicitlyTypedBinding label (Identifier i, label') a) =
   renderWrap
     cursor
     label
     "duet-binding duet-implicit-binding"
     (do renderWrap
           cursor
-          label
+          label'
           ("duet-binding-name" <>
            if i == "_"
              then " duet-pattern-wildcard"

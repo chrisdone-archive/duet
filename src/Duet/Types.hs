@@ -268,7 +268,7 @@ instance (ToJSON (t i),  ToJSON i, ToJSON l) => ToJSON (ImplicitlyTypedBinding t
 instance (FromJSON (t i),  FromJSON i, FromJSON l) => FromJSON (ImplicitlyTypedBinding t i l)
 data ImplicitlyTypedBinding (t :: * -> *) i l = ImplicitlyTypedBinding
   { implicitlyTypedBindingLabel :: l
-  , implicitlyTypedBindingId :: !i
+  , implicitlyTypedBindingId :: !(i, l)
   , implicitlyTypedBindingAlternatives :: ![Alternative t i l]
   } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
 

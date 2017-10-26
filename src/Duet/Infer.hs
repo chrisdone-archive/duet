@@ -322,7 +322,7 @@ inferImplicitlyTypedBindingsTypes
   -> InferT m ([Predicate Type Name], [(TypeSignature Type Name Name)], [ImplicitlyTypedBinding Type Name (TypeSignature Type Name l)])
 inferImplicitlyTypedBindingsTypes ce as bs = do
   ts <- mapM (\_ -> newVariableType StarKind) bs
-  let is = map implicitlyTypedBindingId bs
+  let is = map (fst . implicitlyTypedBindingId) bs
       scs = map toScheme ts
       as' = zipWith (\x y -> TypeSignature x y) is scs ++ as
   pss0 <-
@@ -350,8 +350,11 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
               ( ds ++ rs
               , zipWith (\x y -> TypeSignature x y) is scs'
               , zipWith
-                  (\(ImplicitlyTypedBinding l tid _, binds'') scheme ->
-                     ImplicitlyTypedBinding (TypeSignature l scheme) tid binds'')
+                  (\(ImplicitlyTypedBinding l (tid, l') _, binds'') scheme ->
+                     ImplicitlyTypedBinding
+                       (TypeSignature l scheme)
+                       (tid, TypeSignature l' scheme)
+                       binds'')
                   (zip bs binds')
                   scs')
     else let scs' = map (quantify gs . (Qualified rs)) ts'
@@ -359,8 +362,8 @@ inferImplicitlyTypedBindingsTypes ce as bs = do
               ( ds
               , zipWith (\x y -> TypeSignature x y) is scs'
               , zipWith
-                  (\(ImplicitlyTypedBinding l tid _, binds'') scheme ->
-                     ImplicitlyTypedBinding (TypeSignature l scheme) tid binds'')
+                  (\(ImplicitlyTypedBinding l (tid, l') _, binds'') scheme ->
+                     ImplicitlyTypedBinding (TypeSignature l scheme) (tid,TypeSignature l' scheme) binds'')
                   (zip bs binds')
                   scs')
   where
