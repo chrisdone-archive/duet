@@ -128,4 +128,5 @@ executable duet-ide
       dependent-sum,
       data-default,
       basic-lens,
-      deepseq
+      deepseq,
+      syb

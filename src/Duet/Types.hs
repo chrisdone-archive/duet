@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE RankNTypes #-}
@@ -16,12 +17,12 @@ import           Control.DeepSeq
 import           Control.Monad.Catch
 import           Control.Monad.State
 import           Data.Aeson hiding (Result(..))
+import           Data.Data (Data, Typeable)
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Semigroup
 import           Data.String
 import           Data.Text (Text)
-import           Data.Typeable
 import           GHC.Generics
 import           Text.Parsec (ParseError)
 
@@ -34,7 +35,7 @@ data Decl t i l
   | BindGroupDecl l (BindGroup t i l)
   | ClassDecl l (Class t i l)
   | InstanceDecl l (Instance t i l)
-  deriving (Show, Generic)
+  deriving (Show, Generic, Data, Typeable)
 
 declLabel :: Decl t i l -> l
 declLabel =
@@ -52,7 +53,7 @@ data DataType t i = DataType
   { dataTypeName :: i
   , dataTypeVariables :: [TypeVariable i]
   , dataTypeConstructors :: [DataTypeConstructor t i]
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Data, Typeable)
 
 dataTypeConstructor :: DataType Type Name -> Type Name
 dataTypeConstructor (DataType name vs _) =
@@ -73,7 +74,7 @@ instance (FromJSON i, FromJSON (t i)) => FromJSON (DataTypeConstructor t i)
 data DataTypeConstructor t i = DataTypeConstructor
   { dataTypeConstructorName :: i
   , dataTypeConstructorFields :: [t i]
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Data, Typeable)
 
 -- | Type for a data typed parsed from user input.
 instance (NFData i) => NFData (UnkindedType i)
@@ -83,7 +84,7 @@ data UnkindedType i
   = UnkindedTypeConstructor i
   | UnkindedTypeVariable i
   | UnkindedTypeApp (UnkindedType i) (UnkindedType i)
-  deriving (Show, Generic)
+  deriving (Show, Generic, Data, Typeable)
 
 -- | Special built-in types you need for type-checking patterns and
 -- literals.
@@ -97,7 +98,7 @@ data SpecialTypes i = SpecialTypes
   , specialTypesFunction   :: TypeConstructor i
   , specialTypesInteger    :: TypeConstructor i
   , specialTypesRational   :: TypeConstructor i
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Data, Typeable)
 
 -- | Special built-in signatures.
 instance (NFData i) => NFData (SpecialSigs i)
@@ -110,7 +111,7 @@ data SpecialSigs i = SpecialSigs
   , specialSigsTimes :: i
   , specialSigsSubtract :: i
   , specialSigsDivide :: i
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Data, Typeable)
 
 -- | Type inference monad.
 newtype InferT m a = InferT
@@ -132,7 +133,7 @@ data Name
   | ClassName !Int String
   | MethodName !Int String
   | PrimopName Primop
-  deriving (Show, Generic, Eq, Ord)
+  deriving (Show, Generic, Data, Typeable, Eq, Ord)
 instance NFData Name
 instance ToJSON Name
 instance FromJSON Name
@@ -150,7 +151,7 @@ data Primop
   | PrimopRationalSubtract
   | PrimopRationalTimes
   | PrimopStringAppend
-  deriving (Show, Generic, Eq, Ord, Enum, Bounded)
+  deriving (Show, Generic, Data, Typeable, Eq, Ord, Enum, Bounded)
 
 -- | State of inferring.
 instance NFData (InferState)
@@ -160,7 +161,7 @@ data InferState = InferState
   { inferStateSubstitutions :: ![Substitution Name]
   , inferStateCounter :: !Int
   , inferStateSpecialTypes :: !(SpecialTypes Name)
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Data, Typeable)
 
 data ParseException
   = TokenizerError ParseError
@@ -194,7 +195,7 @@ data RenamerException
   | MustBeStarKind (Type Name) Kind
   | BuiltinNotDefined !String
   | RenamerNameMismatch !Name
-  deriving (Show, Generic, Typeable)
+  deriving (Show, Generic, Data, Typeable, Typeable)
 instance Exception RenamerException
 
 instance (ToJSON v, ToJSON k) => ToJSON (Map k v) where
@@ -213,7 +214,7 @@ data ReadException
   | NoSuchClassForInstance
   | OverlappingInstance
   | UndefinedSuperclass
-  deriving (Show, Generic, Typeable)
+  deriving (Show, Generic, Data, Typeable, Typeable)
 instance Exception ReadException
 
 instance NFData (ResolveException)
@@ -221,7 +222,7 @@ instance ToJSON (ResolveException)
 instance FromJSON (ResolveException)
 data ResolveException =
   NoInstanceFor (Predicate Type Name)
-  deriving (Show, Generic, Typeable)
+  deriving (Show, Generic, Data, Typeable, Typeable)
 instance Exception ResolveException
 
 -- | A type error.
@@ -243,7 +244,7 @@ data InferException
   | MissingMethod
   | MissingTypeVar (TypeVariable Name) [(TypeVariable Name, Type Name)]
 
-  deriving (Show, Generic, Typeable)
+  deriving (Show, Generic, Data, Typeable, Typeable)
 instance Exception InferException
 
 -- | Specify the type of @a@.
@@ -253,7 +254,7 @@ instance (FromJSON (t i), FromJSON i, FromJSON a) => FromJSON (TypeSignature t i
 data TypeSignature (t :: * -> *) i a = TypeSignature
   { typeSignatureA :: a
   , typeSignatureScheme :: Scheme t i t
-  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
 
 instance (NFData (t i),  NFData i, NFData l) => NFData (BindGroup t i l)
 instance (ToJSON (t i),  ToJSON i, ToJSON l) => ToJSON (BindGroup t i l)
@@ -261,7 +262,7 @@ instance (FromJSON (t i),  FromJSON i, FromJSON l) => FromJSON (BindGroup t i l)
 data BindGroup (t :: * -> *) i l = BindGroup
   { bindGroupExplicitlyTypedBindings :: ![ExplicitlyTypedBinding t i l]
   , bindGroupImplicitlyTypedBindings :: ![[ImplicitlyTypedBinding t i l]]
-  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
 
 instance (NFData (t i),  NFData i, NFData l) => NFData (ImplicitlyTypedBinding t i l)
 instance (ToJSON (t i),  ToJSON i, ToJSON l) => ToJSON (ImplicitlyTypedBinding t i l)
@@ -270,7 +271,7 @@ data ImplicitlyTypedBinding (t :: * -> *) i l = ImplicitlyTypedBinding
   { implicitlyTypedBindingLabel :: l
   , implicitlyTypedBindingId :: !(i, l)
   , implicitlyTypedBindingAlternatives :: ![Alternative t i l]
-  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
 
 -- | The simplest case is for explicitly typed bindings, each of which
 -- is described by the name of the function that is being defined, the
@@ -287,7 +288,7 @@ data ExplicitlyTypedBinding t i l = ExplicitlyTypedBinding
   { explicitlyTypedBindingId :: !i
   , explicitlyTypedBindingScheme :: !(Scheme t i t)
   , explicitlyTypedBindingAlternatives :: ![(Alternative t i l)]
-  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
 
 -- | Suppose, for example, that we are about to qualify a type with a
 -- list of predicates ps and that vs lists all known variables, both
@@ -303,7 +304,7 @@ instance (FromJSON i) => FromJSON (Ambiguity i)
 data Ambiguity i = Ambiguity
   { ambiguityTypeVariable :: !(TypeVariable i)
   , ambiguityPredicates :: ![Predicate Type i]
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Data, Typeable)
 
 -- | An Alt specifies the left and right hand sides of a function
 -- definition. With a more complete syntax for Expr, values of type
@@ -316,7 +317,7 @@ data Alternative t i l = Alternative
   { alternativeLabel :: l
   , alternativePatterns :: ![Pattern t i l]
   , alternativeExpression :: !(Expression t i l)
-  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
 
 -- | Substitutions-finite functions, mapping type variables to
 -- types-play a major role in type inference.
@@ -326,7 +327,7 @@ instance (FromJSON i) => FromJSON (Substitution i)
 data Substitution i = Substitution
   { substitutionTypeVariable :: !(TypeVariable i)
   , substitutionType :: !(Type i)
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Data, Typeable)
 
 -- | A type variable.
 instance (NFData i) => NFData (TypeVariable i)
@@ -335,12 +336,12 @@ instance (FromJSON i) => FromJSON (TypeVariable i)
 data TypeVariable i = TypeVariable
   { typeVariableIdentifier :: !i
   , typeVariableKind :: !Kind
-  } deriving (Ord, Eq, Show, Generic)
+  } deriving (Ord, Eq, Show, Generic, Data, Typeable)
 
 -- | An identifier used for variables.
 newtype Identifier = Identifier
   { identifierString :: String
-  } deriving (Eq, IsString, Ord, Show , Generic)
+  } deriving (Eq, IsString, Ord, Show , Generic, Data, Typeable)
 instance NFData Identifier
 instance ToJSON Identifier
 instance FromJSON Identifier
@@ -354,7 +355,7 @@ instance (FromJSON (t i), FromJSON typ, FromJSON i) => FromJSON (Qualified t i t
 data Qualified t i typ = Qualified
   { qualifiedPredicates :: ![Predicate t i]
   , qualifiedType :: !typ
-  } deriving (Eq, Show , Generic)
+  } deriving (Eq, Show , Generic, Data, Typeable)
 
 -- | One of potentially many predicates.
 instance (NFData (t i), NFData i) => NFData (Predicate t i)
@@ -362,7 +363,7 @@ instance (ToJSON (t i), ToJSON i) => ToJSON (Predicate t i)
 instance (FromJSON (t i), FromJSON i) => FromJSON (Predicate t i)
 data Predicate t i =
   IsIn i [t i]
-  deriving (Eq, Show , Generic)
+  deriving (Eq, Show , Generic, Data, Typeable)
 
 -- | A simple Haskell type.
 instance (NFData i) => NFData (Type i)
@@ -372,7 +373,7 @@ data Type i
   = VariableType (TypeVariable i)
   | ConstructorType (TypeConstructor i)
   | ApplicationType (Type i) (Type i)
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Show, Generic, Data, Typeable)
 
 -- | Kind of a type.
 instance NFData (Kind)
@@ -381,7 +382,7 @@ instance FromJSON (Kind)
 data Kind
   = StarKind
   | FunctionKind Kind Kind
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Eq, Ord, Show, Generic, Data, Typeable)
 
 instance NFData (Location)
 instance ToJSON (Location)
@@ -391,7 +392,7 @@ data Location = Location
   , locationStartColumn :: !Int
   , locationEndLine :: !Int
   , locationEndColumn :: !Int
-  } deriving (Show, Generic, Eq)
+  } deriving (Show, Generic, Data, Typeable, Eq)
 
 -- | A Haskell expression.
 instance (NFData (t i),  NFData l,NFData i) => NFData (Expression t  i l)
@@ -408,7 +409,7 @@ data Expression (t :: * -> *) i l
   | LambdaExpression l (Alternative t i l)
   | IfExpression l (Expression t i l) (Expression t i l) (Expression t i l)
   | CaseExpression l (Expression t i l) [(Pattern t i l, (Expression t i l))]
-  deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
+  deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
 
 expressionLabel :: Expression t i l -> l
 expressionLabel =
@@ -435,7 +436,7 @@ data Pattern (t :: * -> *) i l
   | LiteralPattern l Literal
   | ConstructorPattern l i [Pattern t i l]
 --  | LazyPattern Pattern
-  deriving (Show, Generic , Eq , Functor, Traversable, Foldable)
+  deriving (Show, Generic, Data, Typeable , Eq , Functor, Traversable, Foldable)
 
 patternLabel :: Pattern ty t t1 -> t1
 patternLabel (VariablePattern loc _) = loc
@@ -452,7 +453,7 @@ data Literal
   | CharacterLiteral Char
   | RationalLiteral Rational
   | StringLiteral String
-  deriving (Show, Generic, Eq)
+  deriving (Show, Generic, Data, Typeable, Eq)
 
 -- | A class.
 instance (NFData (t i), NFData l,NFData i) => NFData (Class t  i l)
@@ -464,7 +465,7 @@ data Class (t :: * -> *) i l = Class
   , classInstances :: ![Instance t i l]
   , className :: i
   , classMethods :: Map i (Scheme t i t)
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Data, Typeable)
 
 -- | Class instance.
 instance (NFData (t i),  NFData l,NFData i) => NFData (Instance t i l)
@@ -473,7 +474,7 @@ instance (Ord i, ToJSON i,    FromJSON (t i),  FromJSON l,FromJSON i) => FromJSO
 data Instance (t :: * -> *) i l = Instance
   { instancePredicate :: !(Scheme t i (Predicate t))
   , instanceDictionary :: !(Dictionary t i l)
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Data, Typeable)
 
 instanceClassName :: Instance t1 i t -> i
 instanceClassName (Instance (Forall _ (Qualified _ (IsIn x _))) _) = x
@@ -485,7 +486,7 @@ instance (Ord i, ToJSON i,    FromJSON (t i),  FromJSON l,FromJSON i) => FromJSO
 data Dictionary (t :: * -> *) i l = Dictionary
   { dictionaryName :: i
   , dictionaryMethods :: Map i (Alternative t i l)
-  } deriving (Show, Generic, Functor, Traversable, Foldable, Eq)
+  } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
 
 -- | A type constructor.
 instance (NFData i) => NFData (TypeConstructor i)
@@ -494,7 +495,7 @@ instance (FromJSON i) => FromJSON (TypeConstructor i)
 data TypeConstructor i = TypeConstructor
   { typeConstructorIdentifier :: !i
   , typeConstructorKind :: !Kind
-  } deriving (Eq, Show, Generic)
+  } deriving (Eq, Show, Generic, Data, Typeable)
 
 -- | A type scheme.
 instance (NFData (typ i), NFData (t i), NFData i) => NFData (Scheme t i typ)
@@ -502,7 +503,7 @@ instance (ToJSON (typ i), ToJSON (t i), ToJSON i) => ToJSON (Scheme t i typ)
 instance (FromJSON (typ i), FromJSON (t i), FromJSON i) => FromJSON (Scheme t i typ)
 data Scheme t i typ =
   Forall [TypeVariable i] (Qualified t i (typ i))
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Show, Generic, Data, Typeable)
 
 instance (NFData a) => NFData (Result a)
 instance (ToJSON a) => ToJSON (Result a)
@@ -510,7 +511,7 @@ instance (FromJSON a) => FromJSON (Result a)
 data Result a
   = OK a
   | Fail
-  deriving (Show, Generic, Functor)
+  deriving (Show, Generic, Data, Typeable, Functor)
 
 instance Semigroup a => Semigroup (Result a) where
   Fail <> _ = Fail
@@ -578,7 +579,7 @@ data Context t i l = Context
   , contextScope :: Map Identifier i
   , contextTypeClasses :: Map i (Class t i (TypeSignature t i l))
   , contextDataTypes :: [DataType t i]
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Data, Typeable)
 
 -- | Builtin context.
 instance (NFData l,NFData (t i), NFData i) => NFData (Builtins t i l)
@@ -589,7 +590,7 @@ data Builtins t i l = Builtins
   , builtinsSpecialTypes :: SpecialTypes i
   , builtinsSignatures :: [TypeSignature t i i]
   , builtinsTypeClasses :: Map i (Class t i l)
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Data, Typeable)
 
 data Token
   = If

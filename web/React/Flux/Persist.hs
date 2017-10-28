@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase, TupleSections, ExtendedDefaultRules, FlexibleContexts, ScopedTypeVariables, DeriveDataTypeable #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -12,7 +13,9 @@ import Control.DeepSeq
 import Control.Exception
 import Data.Aeson
 import Data.Aeson.Types
+import Data.Data
 import Data.JSString
+import Data.Typeable
 import GHC.Generics
 import GHCJS.Foreign.Callback
 import GHCJS.Marshal (FromJSVal(..), ToJSVal(..), toJSVal_aeson)
@@ -50,7 +53,7 @@ foreign import javascript unsafe "window['generateUUID']()"
     js_generateUUID :: IO JSString
 
 newtype UUID = UUID String
-  deriving (Ord, Eq, Show, NFData, FromJSON, ToJSON, Generic)
+  deriving (Ord, Eq, Show, NFData, FromJSON, ToJSON, Generic, Data, Typeable)
 
 generateUUID :: IO UUID
 generateUUID = UUID . unpack <$> js_generateUUID

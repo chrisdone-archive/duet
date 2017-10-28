@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase, TupleSections, ExtendedDefaultRules, FlexibleContexts, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase, TupleSections, ExtendedDefaultRules, FlexibleContexts, ScopedTypeVariables, DeriveDataTypeable #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 
 module Main where
@@ -10,9 +10,13 @@ import           Control.Monad.IO.Class
 import           Control.Monad.State (execStateT, StateT, get, put, modify, runStateT)
 import           Control.Monad.Trans
 import           Data.Aeson
+import           Data.Data
+import           Data.Generics (listify, everything, mkQ, extQ)
+import           Data.Maybe
 import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
+import           Data.Typeable
 import           Duet.Types
 import           GHC.Generics
 import           React.Flux ((@=))
@@ -27,7 +31,7 @@ import qualified React.Flux.Persist as Flux.Persist
 -- Types
 
 data Ignore a = Ignore
-  deriving (Generic, NFData, Show, FromJSON, ToJSON)
+  deriving (Generic, NFData, Show, FromJSON, ToJSON, Data, Typeable)
 
 data State = State
   { stateCursor :: !Cursor
@@ -38,7 +42,7 @@ data Node
   = ExpressionNode !(Expression Ignore Identifier Label)
   | DeclNode !(Decl Ignore Identifier Label)
   | BindingNode !(Identifier, Label)
-  deriving (Generic, NFData, Show, FromJSON, ToJSON)
+  deriving (Generic, NFData, Show, FromJSON, ToJSON, Data, Typeable)
 
 nodeUUID :: Node -> UUID
 nodeUUID = labelUUID . nodeLabel
@@ -56,7 +60,7 @@ data Cursor = Cursor
 
 data Action
   = ReplaceState !State
-  | KeyDown !Keydown
+  | KeyDown !Bool !Keydown
   | KeyPress !Int
   | InsertChar !Char
   | PutExpression !(Expression Ignore Identifier Label)
@@ -64,7 +68,7 @@ data Action
 
 data Label = Label
   { labelUUID :: UUID
-  } deriving (Generic, NFData, Show, FromJSON, ToJSON)
+  } deriving (Generic, NFData, Show, FromJSON, ToJSON, Data, Typeable)
 
 data Keydown
   = BackspaceKey
@@ -83,14 +87,14 @@ main = do
   mstate <- Flux.Persist.getAppStateVal
   maybe (return ()) (Flux.alterStore store . ReplaceState) mstate
   Flux.Events.onBodyKeydown
-    (\key ->
+    (\shift key ->
        case key of
-         8 -> Flux.alterStore store (KeyDown BackspaceKey)
-         9 -> Flux.alterStore store (KeyDown TabKey)
-         37 -> Flux.alterStore store (KeyDown LeftKey)
-         39 -> Flux.alterStore store (KeyDown RightKey)
-         38 -> Flux.alterStore store (KeyDown UpKey)
-         40 -> Flux.alterStore store (KeyDown DownKey)
+         8 -> Flux.alterStore store (KeyDown shift BackspaceKey)
+         9 -> Flux.alterStore store (KeyDown shift TabKey)
+         37 -> Flux.alterStore store (KeyDown shift LeftKey)
+         39 -> Flux.alterStore store (KeyDown shift RightKey)
+         38 -> Flux.alterStore store (KeyDown shift UpKey)
+         40 -> Flux.alterStore store (KeyDown shift DownKey)
          _ -> print key)
   Flux.Events.onBodyKeypress (Flux.alterStore store . KeyPress)
   Flux.reactRender "app" (Flux.defineControllerView "State" store appview) ()
@@ -159,7 +163,7 @@ interpretAction :: Action -> StateT State IO ()
 interpretAction =
   \case
     KeyPress k -> interpretKeyPress k
-    KeyDown k -> interpretKeyDown k
+    KeyDown shift k -> interpretKeyDown shift k
     ReplaceState s -> put s
     PutExpression e -> do
       s <- get
@@ -182,20 +186,40 @@ interpretAction =
               (stateAST s)
           put s {stateAST = ast}
 
-interpretKeyDown :: Keydown -> StateT State IO ()
-interpretKeyDown k = do
+interpretKeyDown :: Bool -> Keydown -> StateT State IO ()
+interpretKeyDown shift k = do
   s <- get
   case stateCursor s of
     cursor ->
       case k of
         BackspaceKey -> interpretBackspace cursor (stateAST s)
         TabKey -> do
-          let mparent = findNodeParent (cursorUUID cursor) (stateAST s)
-          case mparent of
-            Nothing -> pure ()
-            Just (ExpressionNode (CaseExpression l e ((alt, e'):alts))) ->
-              focusNode (expressionLabel e')
+          let getContinuing =
+                if shift
+                  then reverse . takeWhile ((/= me) . labelUUID)
+                  else dropWhile ((== me) . labelUUID) .
+                       dropWhile ((/= me) . labelUUID)
+          maybe
+            (return ())
+            focusNode
+            (listToMaybe (getContinuing (nodeHoles me (stateAST s))))
+          where me = cursorUUID (stateCursor s)
+        LeftKey ->
+          navigate
+            s
+            (reverse . takeWhile ((/= cursorUUID (stateCursor s)) . labelUUID))
+        RightKey ->
+          navigate
+            s
+            (dropWhile ((== me) . labelUUID) . dropWhile ((/= me) . labelUUID))
+          where me = cursorUUID (stateCursor s)
         _ -> pure ()
+  where
+    navigate s skip =
+      maybe
+        (return ())
+        focusNode
+        (listToMaybe (skip (orderedNodes (stateAST s))))
 
 interpretBackspace :: Cursor -> Node -> StateT State IO ()
 interpretBackspace cursor ast = do
@@ -544,6 +568,49 @@ renderWrap mcursor label className' =
 
 --------------------------------------------------------------------------------
 -- Interpreter utilities
+
+orderedNodes :: Node -> [Label]
+orderedNodes =
+  everything
+    (++)
+    (extQ
+       (extQ
+          (mkQ
+             []
+             (\(ImplicitlyTypedBinding l1 (_, l2) _ :: ImplicitlyTypedBinding Ignore Identifier Label) ->
+                [l1, l2]))
+          (\(e :: Expression Ignore Identifier Label) -> [expressionLabel e]))
+       (\(p :: Pattern Ignore Identifier Label) ->
+          [patternLabel p]))
+
+nodeHoles :: UUID -> Node -> [Label]
+nodeHoles base =
+  everything
+    (++)
+    (extQ
+       (extQ
+          (mkQ
+             []
+             (\(i :: ImplicitlyTypedBinding Ignore Identifier Label) ->
+                case i of
+                  ImplicitlyTypedBinding _ (Identifier "_", label) _ -> [label]
+                  ImplicitlyTypedBinding _ (_, l) _
+                    | labelUUID l == base -> [l]
+                  ImplicitlyTypedBinding l _ _
+                    | labelUUID l == base -> [l]
+                  _ -> []))
+          (\(e :: Expression Ignore Identifier Label) ->
+             case e of
+               ConstantExpression {} -> [expressionLabel e]
+               _
+                 | labelUUID (expressionLabel e) == base -> [expressionLabel e]
+                 | otherwise -> []))
+       (\(p :: Pattern Ignore Identifier Label) ->
+          case p of
+            WildcardPattern l "_" -> [l]
+            _
+              | labelUUID (patternLabel p) == base -> [patternLabel p]
+              | otherwise -> []))
 
 focusNode
   :: Monad m
