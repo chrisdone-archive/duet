@@ -221,6 +221,24 @@ interpretKeyDown shift k = do
         focusNode
         (listToMaybe (skip (orderedNodes (stateAST s))))
 
+interpretBackslash :: Cursor -> Node -> StateT State IO ()
+interpretBackslash cursor ast = do
+  ast' <-
+    transformNode
+      (cursorUUID cursor)
+      (\mparent n ->
+         case n of
+           ExpressionNode (ConstantExpression l (Identifier "_")) -> do
+             l <- liftIO newLambda
+             case l of
+               LambdaExpression _ (Alternative _ [p] _) ->
+                 focusNode (patternLabel p)
+               _ -> pure ()
+             pure (ExpressionNode l)
+           n -> pure n)
+      ast
+  modify (\s -> s {stateAST = ast'})
+
 interpretBackspace :: Cursor -> Node -> StateT State IO ()
 interpretBackspace cursor ast = do
   (tweakedAST, parentOfDoomedChild) <-
@@ -290,11 +308,13 @@ interpretKeyPress k = do
   s <- get
   case codeAsLetter k of
     Nothing ->
-      case stateCursor s of
-        cursor ->
-          if isSpace k
-            then interpretSpaceCompletion cursor (stateAST s)
-            else pure ()
+      case k of
+        92 -> interpretBackslash (stateCursor s) (stateAST s)
+        _ -> case stateCursor s of
+               cursor ->
+                 if isSpace k
+                   then interpretSpaceCompletion cursor (stateAST s)
+                   else pure ()
     Just c -> interpretAction (InsertChar c)
   where
     isSpace = (== 32)
@@ -385,10 +405,18 @@ newCaseExpression :: IO (Expression Ignore Identifier Label)
 newCaseExpression = do
   uuid <- Flux.Persist.generateUUID
   CaseExpression (Label {labelUUID = uuid}) <$> newExpression <*>
-    fmap pure newAltlternative
+    fmap pure newAlternative
 
-newAltlternative :: IO (Pattern Ignore Identifier Label, Expression Ignore Identifier Label)
-newAltlternative = (,) <$> newPattern <*> newExpression
+newLambda :: IO (Expression Ignore Identifier Label)
+newLambda = do
+  uuid <- Flux.Persist.generateUUID
+  uuid2 <- Flux.Persist.generateUUID
+  LambdaExpression (Label {labelUUID = uuid}) <$>
+    (do (p, e) <- newAlternative
+        pure (Alternative (Label {labelUUID = uuid2}) [p] e))
+
+newAlternative :: IO (Pattern Ignore Identifier Label, Expression Ignore Identifier Label)
+newAlternative = (,) <$> newPattern <*> newExpression
 
 --------------------------------------------------------------------------------
 -- View
@@ -501,6 +529,18 @@ renderExpression mcursor =
                    (Flux.elemText "→")
                  renderExpression mcursor expr)
               alts)
+    LambdaExpression label (Alternative l ps e) ->
+      renderExpr
+        label
+        "duet-lambda"
+        (do Flux.span_
+              ["className" @= "duet-keyword", "key" @= "backslash"]
+              (Flux.elemText "\\")
+            mapM_ (renderPattern mcursor) ps
+            Flux.span_
+              ["className" @= "duet-keyword duet-arrow", "key" @= "arrow"]
+              (Flux.elemText "→")
+            renderExpression mcursor e)
     _ -> pure ()
   where
     renderExpr label className' =
@@ -580,8 +620,7 @@ orderedNodes =
              (\(ImplicitlyTypedBinding l1 (_, l2) _ :: ImplicitlyTypedBinding Ignore Identifier Label) ->
                 [l1, l2]))
           (\(e :: Expression Ignore Identifier Label) -> [expressionLabel e]))
-       (\(p :: Pattern Ignore Identifier Label) ->
-          [patternLabel p]))
+       (\(p :: Pattern Ignore Identifier Label) -> [patternLabel p]))
 
 nodeHoles :: UUID -> Node -> [Label]
 nodeHoles base =
