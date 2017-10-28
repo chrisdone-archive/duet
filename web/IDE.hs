@@ -42,6 +42,7 @@ data Node
   = ExpressionNode !(Expression Ignore Identifier Label)
   | DeclNode !(Decl Ignore Identifier Label)
   | BindingNode !(Identifier, Label)
+  | PatternNode !(Pattern Ignore Identifier Label)
   deriving (Generic, NFData, Show, FromJSON, ToJSON, Data, Typeable)
 
 nodeUUID :: Node -> UUID
@@ -53,6 +54,7 @@ nodeLabel =
     ExpressionNode e -> expressionLabel e
     DeclNode d -> declLabel d
     BindingNode (_, d) -> d
+    PatternNode p -> patternLabel p
 
 data Cursor = Cursor
   { cursorUUID :: UUID
@@ -262,6 +264,18 @@ interpretBackspace cursor ast = do
                        put mparent
                        pure e
                      _ -> pure e)
+              PatternNode e ->
+                fmap
+                  PatternNode
+                  (case e of
+                     VariablePattern l (Identifier string) -> do
+                       if length string > 1
+                         then pure
+                                (VariablePattern
+                                   l
+                                   (Identifier (take (length string - 1) string)))
+                         else pure (WildcardPattern l "_")
+                     _ -> pure e)
               BindingNode (Identifier i, l) ->
                 pure
                   (BindingNode
@@ -432,6 +446,7 @@ renderNode cursor =
     ExpressionNode n -> renderExpression cursor n
     DeclNode d -> renderDecl cursor d
     BindingNode d -> renderBinding cursor d
+    PatternNode p -> renderPattern cursor p
 
 renderDecl :: Cursor -> Decl Ignore Identifier Label -> ReactElementM ViewEventHandler ()
 renderDecl cursor =
@@ -588,6 +603,12 @@ renderPattern mcursor =
         label
         "duet-pattern duet-pattern-wildcard"
         (Flux.elemText (T.pack string))
+    VariablePattern label (Identifier string) ->
+      renderWrap
+        mcursor
+        label
+        "duet-pattern duet-pattern-variable"
+        (Flux.elemText (T.pack string))
     _ -> pure ()
 
 renderWrap
@@ -679,6 +700,13 @@ insertCharInto char =
            e -> e)
     BindingNode (Identifier "_", l) -> BindingNode (Identifier [char], l)
     BindingNode (Identifier s, l) -> BindingNode (Identifier (s ++ [char]), l)
+    PatternNode p ->
+      PatternNode
+        (case p of
+           WildcardPattern l "_" -> VariablePattern l (Identifier [char])
+           VariablePattern l (Identifier s) ->
+             VariablePattern l (Identifier (s ++ [char]))
+           p -> p)
     n -> n
 
 findNodeParent
@@ -694,7 +722,12 @@ findNodeParent uuid = goNode Nothing
                ExpressionNode e -> go mparent e
                DeclNode d -> goDecl mparent d
                BindingNode b -> goBinding mparent b
+               PatternNode p -> goPat mparent p
                _ -> Nothing
+    goPat mparent p =
+      if labelUUID (patternLabel p) == uuid
+        then mparent
+        else Nothing
     goBinding mparent (_, l) =
       if labelUUID l == uuid
         then mparent
@@ -761,6 +794,7 @@ transformNode uuid f = goNode Nothing
         else case e of
                ExpressionNode e' -> fmap ExpressionNode (go mparent e')
                DeclNode d -> fmap DeclNode (goDecl mparent d)
+               PatternNode d -> fmap PatternNode (goPat mparent d)
                BindingNode b -> fmap BindingNode (goBinding mparent b)
     goBinding mparent b@(i, l) =
       if labelUUID l == uuid
@@ -768,6 +802,14 @@ transformNode uuid f = goNode Nothing
           n <- f (fmap labelUUID mparent) (BindingNode (i, l))
           case n of
             BindingNode b -> pure b
+            _ -> pure b
+        else pure b
+    goPat mparent b =
+      if labelUUID (patternLabel b) == uuid
+        then do
+          n <- f (fmap labelUUID mparent) (PatternNode b)
+          case n of
+            PatternNode b -> pure b
             _ -> pure b
         else pure b
     goDecl mparent d =
@@ -789,7 +831,7 @@ transformNode uuid f = goNode Nothing
                     im)
                _ -> pure d
     goAlt mparent (Alternative l ps e) =
-      Alternative l <$> pure ps <*> go mparent e
+      Alternative l <$> mapM (goPat mparent) ps <*> go mparent e
     go
       :: Maybe Label
       -> Expression Ignore Identifier Label
@@ -805,7 +847,8 @@ transformNode uuid f = goNode Nothing
                ApplicationExpression l e1 e2 ->
                  ApplicationExpression l <$> go (Just l) e1 <*> go (Just l) e2
                LambdaExpression l (Alternative al ps e') ->
-                 LambdaExpression l <$> (Alternative al ps <$> go (Just l) e')
+                 LambdaExpression l <$>
+                 (Alternative al <$> mapM (goPat (Just l)) ps <*> go (Just l) e')
                IfExpression l a b c ->
                  IfExpression l <$> go (Just l) a <*> go (Just l) b <*>
                  go (Just l) c
