@@ -320,7 +320,7 @@ interpretBackspace cursor ast = do
 interpretKeyPress :: Int -> StateT State IO ()
 interpretKeyPress k = do
   s <- get
-  case codeAsLetter k of
+  case codeAsLetter k <|> codeAsDigit k of
     Nothing ->
       case k of
         92 -> interpretBackslash (stateCursor s) (stateAST s)
@@ -683,9 +683,7 @@ focusNode l =
             (Cursor {cursorUUID = labelUUID l})
        })
 
-insertCharInto :: Char
-               -> Node
-               -> Node
+insertCharInto :: Char -> Node -> Node
 insertCharInto char =
   \case
     ExpressionNode n ->
@@ -860,6 +858,14 @@ transformNode uuid f = goNode Nothing
 codeAsLetter :: Int -> Maybe Char
 codeAsLetter i =
   if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+    then Just c
+    else Nothing
+  where
+    c = toEnum i
+
+codeAsDigit :: Int -> Maybe Char
+codeAsDigit i =
+  if (c >= '0' && c <= '9')
     then Just c
     else Nothing
   where
