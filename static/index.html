@@ -15,6 +15,7 @@ body { font-family: arial, sans-serif; }
 .duet-keyword { font-family: georgia, serif; }
 
 .duet-keyword { color: #3baeda; font-style: italic }
+
 .duet-arrow { font-style: normal; color: #4b89dc }
 .duet-variable { color: #967bdc }
 .duet-binding-name { color: #967bdc }
@@ -23,13 +24,21 @@ body { font-family: arial, sans-serif; }
 .duet-pattern-wildcard { color: #999999; opacity: 0.7 }
 .duet-parens { color: #ccc; }
 
-.duet-selected { background: #eeeeee; border-radius: 0.3em; padding: 0.2em }
+.duet-selected { background: #eeeeee; border-radius: 0.3em; }
 .duet-pattern + .duet-keyword {
-    margin-left: 0.3em;
+margin-left: 0.3em;
 }
 
 .duet-keyword + .duet-pattern {
-    margin-left: 0.3em;
+margin-left: 0.3em;
+}
+
+.duet-lambda.duet-keyword {
+font-style: normal;
+}
+
+.duet-lambda + .duet-pattern {
+margin-left: 0.1em;
 }
 
 .duet-binding-name + .duet-alternative {
@@ -37,15 +46,15 @@ margin-left: 0.3em;
 }
 
 .duet-expression + .duet-keyword, .duet-expression + .duet-open-parens {
-    margin-left: 0.3em;
+margin-left: 0.3em;
 }
 
 .duet-keyword + .duet-expression {
-    margin-left: 0.3em;
+margin-left: 0.3em;
 }
 
 .duet-expression + .duet-expression {
-   margin-left: 0.3em;
+margin-left: 0.3em;
 }
     </style>
     <script>

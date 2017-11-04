@@ -152,9 +152,9 @@ instance Flux.StoreData State where
   type StoreAction State = Action
   transform action state = do
     putStrLn ("Action: " ++ show action)
-    putStrLn ("State before: " ++ show state)
+    -- putStrLn ("State before: " ++ show state)
     state' <- execStateT (interpretAction action) state
-    putStrLn ("State after: " ++ show state')
+    -- putStrLn ("State after: " ++ show state')
     _ <- forkIO (Flux.Persist.setAppStateVal state')
     pure state'
 
@@ -275,6 +275,9 @@ interpretBackspace cursor ast = do
                                    l
                                    (Identifier (take (length string - 1) string)))
                          else pure (WildcardPattern l "_")
+                     WildcardPattern l "_" -> do
+                       put mparent
+                       pure e
                      _ -> pure e)
               BindingNode (Identifier i, l) ->
                 pure
@@ -309,6 +312,11 @@ interpretBackspace cursor ast = do
                      pure w
                  IfExpression _ e _ _
                    | labelUUID (expressionLabel e) == cursorUUID cursor -> do
+                     w <- liftIO newExpression
+                     focusNode (expressionLabel w)
+                     pure w
+                 LambdaExpression _ (Alternative _ [p] _)
+                   | labelUUID (patternLabel p) == cursorUUID cursor -> do
                      w <- liftIO newExpression
                      focusNode (expressionLabel w)
                      pure w
@@ -549,7 +557,7 @@ renderExpression mcursor =
         label
         "duet-lambda"
         (do Flux.span_
-              ["className" @= "duet-keyword", "key" @= "backslash"]
+              ["className" @= "duet-lambda duet-keyword", "key" @= "backslash"]
               (Flux.elemText "\\")
             mapM_ (renderPattern mcursor) ps
             Flux.span_
@@ -852,7 +860,7 @@ transformNode uuid f = goNode Nothing
                  go (Just l) c
                CaseExpression l e' alts ->
                  CaseExpression l <$> go (Just l) e' <*>
-                 mapM (\(x, k) -> (x, ) <$> go (Just l) k) alts
+                 mapM (\(x, k) -> (, ) <$> goPat (Just l) x <*> go (Just l) k) alts
                _ -> pure e
 
 codeAsLetter :: Int -> Maybe Char
