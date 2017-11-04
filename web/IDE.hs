@@ -6,6 +6,7 @@ module Main where
 import           Control.Applicative
 import           Control.Concurrent
 import           Control.DeepSeq
+import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.State (execStateT, StateT, get, put, modify, runStateT)
 import           Control.Monad.Trans
@@ -471,8 +472,7 @@ renderImplicitBinding cursor (ImplicitlyTypedBinding label binding a) =
     cursor
     label
     "duet-binding duet-implicit-binding"
-    (do renderBinding cursor binding
-        mapM_ (renderAlternative cursor True) a)
+    (mapM_ (renderAlternative cursor True (Just binding)) a)
 
 renderBinding cursor (Identifier i, label') =
   renderWrap
@@ -484,12 +484,13 @@ renderBinding cursor (Identifier i, label') =
        else "")
     (Flux.elemText (T.pack i))
 
-renderAlternative cursor equals (Alternative label pats e) =
+renderAlternative cursor equals mbinding (Alternative label pats e) =
   renderWrap
     cursor
     label
     "duet-alternative"
-    (do mapM (renderPattern cursor) pats
+    (do maybe (return ()) (renderBinding cursor) mbinding
+        mapM (renderPattern cursor) pats
         if not equals
           then Flux.span_
                  ["className" @= "duet-keyword duet-arrow", "key" @= "arrow"]
@@ -497,7 +498,8 @@ renderAlternative cursor equals (Alternative label pats e) =
           else Flux.span_
                  ["className" @= "duet-keyword", "key" @= "equals"]
                  (Flux.elemText "=")
-        renderExpression cursor e)
+        Flux.br_ ["key" @= "alt-break"]
+        Flux.span_ ["className" @= "duet-rhs"] (renderExpression cursor e))
 
 renderExpression
   :: Cursor
@@ -544,14 +546,25 @@ renderExpression mcursor =
             Flux.span_
               ["className" @= "duet-keyword", "key" @= "of"]
               (Flux.elemText "of")
-            mapM_
-              (\(pat, expr) -> do
-                 renderPattern mcursor pat
-                 Flux.span_
-                   ["className" @= "duet-keyword duet-arrow", "key" @= "arrow"]
-                   (Flux.elemText "→")
-                 renderExpression mcursor expr)
-              alts)
+            Flux.br_ ["key" @= "of-rhs-break"]
+            Flux.span_
+              ["className" @= "duet-rhs"]
+              (mapM_
+                 (\(i, (pat, expr)) -> do
+                    unless
+                      (i == 1)
+                      (Flux.br_ ["key" @= ("pat-break-" ++ show i)])
+                    renderPattern mcursor pat
+                    Flux.span_
+                      [ "className" @= "duet-keyword duet-arrow"
+                      , "key" @= "arrow"
+                      ]
+                      (Flux.elemText "→")
+                    Flux.br_ ["key" @= ("arrow-break-" ++ show i)]
+                    Flux.span_
+                      ["className" @= "duet-rhs"]
+                      (renderExpression mcursor expr))
+                 (zip [1 ..] alts)))
     LambdaExpression label (Alternative l ps e) ->
       renderExpr
         label
@@ -563,7 +576,8 @@ renderExpression mcursor =
             Flux.span_
               ["className" @= "duet-keyword duet-arrow", "key" @= "arrow"]
               (Flux.elemText "→")
-            renderExpression mcursor e)
+            Flux.br_ []
+            Flux.span_ ["className" @= "duet-rhs"] (renderExpression mcursor e))
     _ -> pure ()
   where
     renderExpr label className' =
@@ -629,7 +643,7 @@ renderWrap mcursor label className' =
   Flux.span_
     [ "key" @= labelUUID label
     , "className" @=
-      (className' <> " " <>
+      ("duet-node " <> className' <> " " <>
        (if (labelUUID label) == cursorUUID mcursor
           then "duet-selected"
           else "duet-unselected"))

@@ -12,13 +12,15 @@
     <style>
 
 body { font-family: arial, sans-serif; }
+.duet-node { display: inline-block }
+
 .duet-keyword { font-family: georgia, serif; }
 
 .duet-keyword { color: #3baeda; font-style: italic }
 
 .duet-arrow { font-style: normal; color: #4b89dc }
 .duet-variable { color: #967bdc }
-.duet-binding-name { color: #967bdc }
+.duet-binding-name { color: #967bdc; margin-right: 0.2em; }
 .duet-pattern-variable { color: #967bdc }
 .duet-constant { color: #999999; opacity: 0.7 }
 .duet-pattern-wildcard { color: #999999; opacity: 0.7 }
@@ -35,6 +37,11 @@ margin-left: 0.3em;
 
 .duet-lambda.duet-keyword {
 font-style: normal;
+}
+
+.duet-rhs {
+padding-left: 1em;
+display: inline-block
 }
 
 .duet-lambda + .duet-pattern {
