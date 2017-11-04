@@ -11,6 +11,7 @@ import           Control.Monad.IO.Class
 import           Control.Monad.State (execStateT, StateT, get, put, modify, runStateT)
 import           Control.Monad.Trans
 import           Data.Aeson
+import           Data.Char
 import           Data.Data
 import           Data.Generics (listify, everything, mkQ, extQ)
 import           Data.Maybe
@@ -80,6 +81,7 @@ data Keydown
   | UpKey
   | LeftKey
   | RightKey
+  | ReturnKey
   deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 --------------------------------------------------------------------------------
@@ -98,6 +100,7 @@ main = do
          39 -> Flux.alterStore store (KeyDown shift RightKey)
          38 -> Flux.alterStore store (KeyDown shift UpKey)
          40 -> Flux.alterStore store (KeyDown shift DownKey)
+         13 -> Flux.alterStore store (KeyDown shift ReturnKey)
          _ -> print key)
   Flux.Events.onBodyKeypress (Flux.alterStore store . KeyPress)
   Flux.reactRender "app" (Flux.defineControllerView "State" store appview) ()
@@ -216,6 +219,7 @@ interpretKeyDown shift k = do
             s
             (dropWhile ((== me) . labelUUID) . dropWhile ((/= me) . labelUUID))
           where me = cursorUUID (stateCursor s)
+        ReturnKey -> interpretReturn (cursorUUID cursor) (stateAST s)
         _ -> pure ()
   where
     navigate s skip =
@@ -223,6 +227,33 @@ interpretKeyDown shift k = do
         (return ())
         focusNode
         (listToMaybe (skip (orderedNodes (stateAST s))))
+
+interpretReturn :: UUID -> Node -> StateT State IO ()
+interpretReturn uuid ast = do
+  let me = findExpression uuid ast
+  case me of
+    Just e ->
+      case e of
+        CaseExpression l ce alts -> do
+          ast' <-
+            transformExpression
+              uuid
+              (\_ _ -> do
+                 alt@(p,ex) <- liftIO newAlternative
+                 focusNode (patternLabel p)
+                 pure (CaseExpression l ce (alts ++ [alt])))
+              ast
+          modify (\s -> s {stateAST = ast'})
+        _ -> goUp
+    Nothing -> goUp
+  where
+    goUp = do
+      let mparent = findNodeParent uuid ast
+      maybe (pure ()) (flip interpretReturn ast . labelUUID . nodeLabel) mparent
+
+findExpression :: UUID -> Node -> Maybe (Expression Ignore Identifier Label)
+findExpression uuid =
+  listToMaybe . listify ((== uuid) . labelUUID . expressionLabel)
 
 interpretBackslash :: Cursor -> Node -> StateT State IO ()
 interpretBackslash cursor ast = do
@@ -261,6 +292,18 @@ interpretBackspace cursor ast = do
                                    l
                                    (Identifier (take (length string - 1) string)))
                          else pure (ConstantExpression l (Identifier "_"))
+                     LiteralExpression l lit ->
+                       case lit of
+                         IntegerLiteral i ->
+                           let string = show i
+                           in if length string > 1
+                                then pure
+                                       (LiteralExpression
+                                          l
+                                          (IntegerLiteral (read (init string))))
+                                else pure
+                                       (ConstantExpression l (Identifier "_"))
+                         l -> pure e
                      ConstantExpression l (Identifier "_") -> do
                        put mparent
                        pure e
@@ -333,6 +376,10 @@ interpretKeyPress k = do
     Nothing ->
       case k of
         92 -> interpretBackslash (stateCursor s) (stateAST s)
+        42 -> interpretOperator '*'(stateCursor s)(stateAST s)
+        43 -> interpretOperator '+'(stateCursor s)(stateAST s)
+        45 -> interpretOperator '-'(stateCursor s)(stateAST s)
+        47 -> interpretOperator '/'(stateCursor s)(stateAST s)
         _ -> case stateCursor s of
                cursor ->
                  if isSpace k
@@ -341,6 +388,18 @@ interpretKeyPress k = do
     Just c -> interpretAction (InsertChar c)
   where
     isSpace = (== 32)
+
+interpretOperator :: Char -> Cursor -> Node -> StateT State IO ()
+interpretOperator c cursor ast = do
+  ast' <-
+    transformExpression
+      (cursorUUID cursor)
+      (\mp e -> do
+         w <- liftIO newExpression
+         focusNode (expressionLabel w)
+         liftIO (newInfixExpression c e w))
+      ast
+  modify (\s -> s {stateAST = ast'})
 
 interpretSpaceCompletion :: Cursor -> Node -> StateT State IO ()
 interpretSpaceCompletion cursor ast = do
@@ -409,6 +468,21 @@ newVariableExpression :: String -> IO (Expression Ignore Identifier Label)
 newVariableExpression name = do
   uuid <- Flux.Persist.generateUUID
   pure (VariableExpression (Label {labelUUID = uuid}) (Identifier name))
+
+newInfixExpression
+  :: Char
+  -> Expression Ignore Identifier Label
+  -> Expression Ignore Identifier Label
+  -> IO (Expression Ignore Identifier Label)
+newInfixExpression op x y = do
+  uuid <- Flux.Persist.generateUUID
+  uuid' <- Flux.Persist.generateUUID
+  pure
+    (InfixExpression
+       (Label {labelUUID = uuid})
+       x
+       (pure op, VariableExpression (Label uuid') (Identifier (pure op)))
+       y)
 
 newApplicationExpression
   :: Expression Ignore Identifier Label
@@ -509,6 +583,7 @@ renderExpression mcursor =
   \case
     VariableExpression label (Identifier ident) ->
       renderExpr label "duet-variable" (Flux.elemText (T.pack ident))
+    LiteralExpression label lit -> renderLiteral mcursor label lit
     ApplicationExpression label f x ->
       renderExpr
         label
@@ -517,6 +592,15 @@ renderExpression mcursor =
               ApplicationExpression {} -> renderExpression mcursor f
               _ -> parens f (renderExpression mcursor f)
             parens x (renderExpression mcursor x))
+    InfixExpression label f (_, op) x ->
+      renderExpr
+        label
+        "duet-infix"
+        (do renderExpression mcursor f
+            Flux.span_
+              ["className" @= "duet-op", "key" @= "op"]
+              (renderExpression mcursor op)
+            renderExpression mcursor x)
     ConstantExpression label (Identifier ident) ->
       renderExpr label "duet-constant" (Flux.elemText (T.pack ident))
     IfExpression label e f g ->
@@ -557,12 +641,12 @@ renderExpression mcursor =
                     renderPattern mcursor pat
                     Flux.span_
                       [ "className" @= "duet-keyword duet-arrow"
-                      , "key" @= "arrow"
+                      , "key" @= ("arrow" ++ show i)
                       ]
                       (Flux.elemText "→")
                     Flux.br_ ["key" @= ("arrow-break-" ++ show i)]
                     Flux.span_
-                      ["className" @= "duet-rhs"]
+                      ["className" @= "duet-rhs", "key" @= ("rhs-" ++ show i)]
                       (renderExpression mcursor expr))
                  (zip [1 ..] alts)))
     LambdaExpression label (Alternative l ps e) ->
@@ -582,6 +666,14 @@ renderExpression mcursor =
   where
     renderExpr label className' =
       renderWrap mcursor label ("duet-expression " <> className')
+
+renderLiteral mcursor label lit =
+  case lit of
+    IntegerLiteral i ->
+      renderExpr label "duet-integer" (Flux.elemText (T.pack (show i)))
+    _ -> pure ()
+  where renderExpr label className' =
+              renderWrap mcursor label ("duet-expression " <> className')
 
 parens
   :: Expression Ignore Identifier Label
@@ -631,6 +723,7 @@ renderPattern mcursor =
         label
         "duet-pattern duet-pattern-variable"
         (Flux.elemText (T.pack string))
+    LiteralPattern label lit -> renderLiteral mcursor  label lit
     _ -> pure ()
 
 renderWrap
@@ -713,21 +806,27 @@ insertCharInto char =
         (case n of
            VariableExpression l (Identifier s) ->
              VariableExpression l (Identifier (s ++ [char]))
-           ConstantExpression l (Identifier "_") ->
-             VariableExpression l (Identifier [char])
-           ConstantExpression l (Identifier s) ->
-             ConstantExpression l (Identifier (s ++ [char]))
+           ConstantExpression l (Identifier "_")
+             | letter -> VariableExpression l (Identifier [char])
+             | digit -> LiteralExpression l (IntegerLiteral (read [char]))
            e -> e)
-    BindingNode (Identifier "_", l) -> BindingNode (Identifier [char], l)
+    BindingNode (Identifier "_", l)
+      | letter -> BindingNode (Identifier [char], l)
     BindingNode (Identifier s, l) -> BindingNode (Identifier (s ++ [char]), l)
     PatternNode p ->
       PatternNode
         (case p of
-           WildcardPattern l "_" -> VariablePattern l (Identifier [char])
+           WildcardPattern l "_"
+             | letter -> VariablePattern l (Identifier [char])
+           WildcardPattern l "_"
+             | digit -> LiteralPattern l (IntegerLiteral (read [char]))
            VariablePattern l (Identifier s) ->
              VariablePattern l (Identifier (s ++ [char]))
            p -> p)
     n -> n
+  where
+    letter = isLetter char
+    digit = isDigit char
 
 findNodeParent
   :: UUID
@@ -866,6 +965,10 @@ transformNode uuid f = goNode Nothing
         else case e of
                ApplicationExpression l e1 e2 ->
                  ApplicationExpression l <$> go (Just l) e1 <*> go (Just l) e2
+               InfixExpression l e1 (s, op) e2 ->
+                 InfixExpression l <$> go (Just l) e1 <*>
+                 ((s, ) <$> go (Just l) op) <*>
+                 go (Just l) e2
                LambdaExpression l (Alternative al ps e') ->
                  LambdaExpression l <$>
                  (Alternative al <$> mapM (goPat (Just l)) ps <*> go (Just l) e')
@@ -874,7 +977,9 @@ transformNode uuid f = goNode Nothing
                  go (Just l) c
                CaseExpression l e' alts ->
                  CaseExpression l <$> go (Just l) e' <*>
-                 mapM (\(x, k) -> (, ) <$> goPat (Just l) x <*> go (Just l) k) alts
+                 mapM
+                   (\(x, k) -> (,) <$> goPat (Just l) x <*> go (Just l) k)
+                   alts
                _ -> pure e
 
 codeAsLetter :: Int -> Maybe Char
