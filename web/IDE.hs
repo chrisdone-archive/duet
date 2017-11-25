@@ -45,6 +45,7 @@ data Node
   | DeclNode !(Decl Ignore Identifier Label)
   | BindingNode !(Identifier, Label)
   | PatternNode !(Pattern Ignore Identifier Label)
+  | AltNode !(CaseAlt Ignore Identifier Label)
   deriving (Generic, NFData, Show, FromJSON, ToJSON, Data, Typeable)
 
 nodeUUID :: Node -> UUID
@@ -259,7 +260,7 @@ interpretReturn uuid ast = do
             transformExpression
               uuid
               (\_ _ -> do
-                 alt@(CaseAlt p ex) <- liftIO newAlternative
+                 alt@(CaseAlt l' p ex) <- liftIO newAlternative
                  focusNode (patternLabel p)
                  pure (CaseExpression l ce (alts ++ [alt])))
               ast
@@ -545,13 +546,14 @@ newCaseExpression = do
 newLambda :: IO (Expression Ignore Identifier Label)
 newLambda = do
   uuid <- Flux.Persist.generateUUID
-  uuid2 <- Flux.Persist.generateUUID
   LambdaExpression (Label {labelUUID = uuid}) <$>
-    (do (CaseAlt p e) <- newAlternative
-        pure (Alternative (Label {labelUUID = uuid2}) [p] e))
+    (do (CaseAlt l p e) <- newAlternative
+        pure (Alternative l [p] e))
 
 newAlternative :: IO (CaseAlt Ignore Identifier Label)
-newAlternative = CaseAlt <$> newPattern <*> newExpression
+newAlternative = do
+  uuid <- Flux.Persist.generateUUID
+  CaseAlt (Label {labelUUID = uuid}) <$> newPattern <*> newExpression
 
 newParens :: IO (Expression Ignore Identifier Label)
 newParens = do
@@ -690,20 +692,25 @@ renderExpression mcursor =
             Flux.span_
               ["className" @= "duet-rhs"]
               (mapM_
-                 (\(i, (CaseAlt pat expr)) -> do
+                 (\(i, (CaseAlt l pat expr)) -> do
                     unless
                       (i == 1)
                       (Flux.br_ ["key" @= ("pat-break-" ++ show i)])
-                    renderPattern mcursor pat
-                    Flux.span_
-                      [ "className" @= "duet-keyword duet-arrow"
-                      , "key" @= ("arrow" ++ show i)
-                      ]
-                      (Flux.elemText "→")
-                    Flux.br_ ["key" @= ("arrow-break-" ++ show i)]
-                    Flux.span_
-                      ["className" @= "duet-rhs", "key" @= ("rhs-" ++ show i)]
-                      (renderExpression mcursor expr))
+                    renderExpr
+                      l
+                      "duet-case-alt"
+                      (do renderPattern mcursor pat
+                          Flux.span_
+                            [ "className" @= "duet-keyword duet-arrow"
+                            , "key" @= ("arrow" ++ show i)
+                            ]
+                            (Flux.elemText "→")
+                          Flux.br_ ["key" @= ("arrow-break-" ++ show i)]
+                          Flux.span_
+                            [ "className" @= "duet-rhs"
+                            , "key" @= ("rhs-" ++ show i)
+                            ]
+                            (renderExpression mcursor expr)))
                  (zip [1 ..] alts)))
     LambdaExpression label (Alternative l ps e) ->
       renderExpr
@@ -942,7 +949,7 @@ findNodeParent uuid = goNode Nothing
                  foldr
                    (<|>)
                    Nothing
-                   (map (\(CaseAlt x k) -> go (Just (ExpressionNode e)) k) alts)
+                   (map (\(CaseAlt _ x k) -> go (Just (ExpressionNode e)) k) alts)
                _ -> Nothing
 
 transformExpression
@@ -1041,7 +1048,7 @@ transformNode uuid f = goNode Nothing
                CaseExpression l e' alts ->
                  CaseExpression l <$> go (Just l) e' <*>
                  mapM
-                   (\(CaseAlt x k) -> CaseAlt <$> goPat (Just l) x <*> go (Just l) k)
+                   (\(CaseAlt l x k) -> CaseAlt l <$> goPat (Just l) x <*> go (Just l) k)
                    alts
                _ -> pure e
 

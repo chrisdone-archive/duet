@@ -859,17 +859,19 @@ inferExpressionType ce as (IfExpression l e e1 e2) = do
 inferExpressionType ce as (CaseExpression l e branches) = do
   (ps0, t, e') <- inferExpressionType ce as e
   v <- newVariableType StarKind
-  let tiBr (CaseAlt pat f) = do
+  let tiBr (CaseAlt l' pat f) = do
         (pat', ps, as', t') <- inferPattern as pat
         unify t t'
         (qs, t'', f') <- inferExpressionType ce (as' ++ as) f
         unify v t''
-        return (ps ++ qs, (CaseAlt pat' f'))
+        return
+          (ps ++ qs, (CaseAlt (fmap (const l') (expressionLabel f')) pat' f'))
   branchs <- mapM tiBr branches
   let pss = map fst branchs
       branches' = map snd branchs
   let scheme = (Forall [] (Qualified (ps0 ++ concat pss) v))
-  return (ps0 ++ concat pss, v, CaseExpression (TypeSignature l scheme) e' branches')
+  return
+    (ps0 ++ concat pss, v, CaseExpression (TypeSignature l scheme) e' branches')
 
 inferAltTypeForLambda
   :: (MonadThrow m, Show l)

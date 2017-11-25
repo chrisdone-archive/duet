@@ -607,7 +607,7 @@ altParser e' startCol =
       _ <- equalToken RightArrow
       e <- expParser
       setState u
-      pure (CaseAlt p e)) <?>
+      pure (CaseAlt (Location 0 0 0 0) p e)) <?>
   ("case alternative" ++
    (case e' of
       Just eeee ->

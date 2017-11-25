@@ -607,11 +607,11 @@ renameExpression specials subs types = go
         CaseExpression l e pat_exps ->
           CaseExpression l <$> go e <*>
           mapM
-            (\(CaseAlt pat ex) -> do
+            (\(CaseAlt l1 pat ex) -> do
                (pat', subs') <- runWriterT (renamePattern subs pat)
                e' <-
                  renameExpression specials (M.fromList subs' <> subs) types ex
-               pure (CaseAlt pat' e'))
+               pure (CaseAlt l1 pat' e'))
             pat_exps
 
 --------------------------------------------------------------------------------

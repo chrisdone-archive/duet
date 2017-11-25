@@ -276,7 +276,7 @@ substitute i arg = go
         InfixExpression l x (s, f) y -> InfixExpression l (go x) (s, go f) (go y)
         LetExpression {} -> error "let expressions unsupported."
         CaseExpression l e cases ->
-          CaseExpression l (go e) (map (\(CaseAlt pat e') -> CaseAlt pat (go e')) cases)
+          CaseExpression l (go e) (map (\(CaseAlt l pat e') -> CaseAlt l pat (go e')) cases)
         IfExpression l a b c -> IfExpression l (go a) (go b) (go c)
         x@LiteralExpression {} -> x
         LambdaExpression l (Alternative l' args body) ->

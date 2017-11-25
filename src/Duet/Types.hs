@@ -418,7 +418,8 @@ instance (NFData (t i),  NFData l,NFData i) => NFData (CaseAlt t  i l)
 instance (ToJSON (t i),  ToJSON l,ToJSON i) => ToJSON (CaseAlt t  i l)
 instance (FromJSON (t i),  FromJSON l,FromJSON i) => FromJSON (CaseAlt t  i l)
 data CaseAlt t i l = CaseAlt
-  { caseAltPattern :: Pattern t i l
+  { caseAltLabel :: l
+  , caseAltPattern :: Pattern t i l
   , caseAltExpression :: Expression t i l
   } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
 

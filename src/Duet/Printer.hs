@@ -209,7 +209,7 @@ printAlt
   :: (PrintableType t, Printable i)
   => Print i l -> (CaseAlt t i l) -> [Char]
 printAlt printer =
-  \(CaseAlt p e') ->
+  \(CaseAlt _ p e') ->
     let inner = printExpression printer e'
     in if any (== '\n') inner
          then printPat printer p ++ " ->\n" ++ indented inner
