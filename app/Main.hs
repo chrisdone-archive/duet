@@ -81,7 +81,7 @@ createContext
   -> Text
   -> m ([BindGroup Type Name (TypeSignature Type Name Location)], Context Type Name Location)
 createContext file text = do
-  do builtins <- setupEnv mempty
+  do builtins <- setupEnv mempty []
      let specials = builtinsSpecials builtins
      catch
        (do decls <- parseText file text

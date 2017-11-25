@@ -82,6 +82,8 @@ data Keydown
   | LeftKey
   | RightKey
   | ReturnKey
+  | OpenParens
+  | CloseParens
   deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 --------------------------------------------------------------------------------
@@ -100,6 +102,8 @@ main = do
          39 -> Flux.alterStore store (KeyDown shift RightKey)
          38 -> Flux.alterStore store (KeyDown shift UpKey)
          40 -> Flux.alterStore store (KeyDown shift DownKey)
+         57 -> Flux.alterStore store (KeyDown shift OpenParens)
+         48 -> Flux.alterStore store (KeyDown shift CloseParens)
          13 -> Flux.alterStore store (KeyDown shift ReturnKey)
          _ -> print key)
   Flux.Events.onBodyKeypress (Flux.alterStore store . KeyPress)
@@ -220,6 +224,22 @@ interpretKeyDown shift k = do
             (dropWhile ((== me) . labelUUID) . dropWhile ((/= me) . labelUUID))
           where me = cursorUUID (stateCursor s)
         ReturnKey -> interpretReturn (cursorUUID cursor) (stateAST s)
+        OpenParens -> do
+          ast <-
+            transformExpression
+              (cursorUUID cursor)
+              (const
+                 (\e ->
+                    case e of
+                      (ConstantExpression l (Identifier "_")) -> do
+                        l' <- liftIO newParens
+                        case l' of
+                          ParensExpression l e' -> focusNode (expressionLabel e')
+                          _ -> pure ()
+                        pure l'
+                      _ -> pure e))
+              (stateAST s)
+          modify (\s -> s {stateAST = ast})
         _ -> pure ()
   where
     navigate s skip =
@@ -342,6 +362,11 @@ interpretBackspace cursor ast = do
            uuid
            (const
               (\case
+                 ParensExpression _ x
+                   | labelUUID (expressionLabel x) == cursorUUID cursor -> do
+                     w <- liftIO newExpression
+                     focusNode (expressionLabel w)
+                     pure w
                  ApplicationExpression l f x
                    | labelUUID (expressionLabel x) == cursorUUID cursor -> do
                      case f of
@@ -376,15 +401,16 @@ interpretKeyPress k = do
     Nothing ->
       case k of
         92 -> interpretBackslash (stateCursor s) (stateAST s)
-        42 -> interpretOperator '*'(stateCursor s)(stateAST s)
-        43 -> interpretOperator '+'(stateCursor s)(stateAST s)
-        45 -> interpretOperator '-'(stateCursor s)(stateAST s)
-        47 -> interpretOperator '/'(stateCursor s)(stateAST s)
-        _ -> case stateCursor s of
-               cursor ->
-                 if isSpace k
-                   then interpretSpaceCompletion cursor (stateAST s)
-                   else pure ()
+        42 -> interpretOperator '*' (stateCursor s) (stateAST s)
+        43 -> interpretOperator '+' (stateCursor s) (stateAST s)
+        45 -> interpretOperator '-' (stateCursor s) (stateAST s)
+        47 -> interpretOperator '/' (stateCursor s) (stateAST s)
+        _ ->
+          case stateCursor s of
+            cursor ->
+              if isSpace k
+                then interpretSpaceCompletion cursor (stateAST s)
+                else pure ()
     Just c -> interpretAction (InsertChar c)
   where
     isSpace = (== 32)
@@ -515,6 +541,11 @@ newLambda = do
 newAlternative :: IO (Pattern Ignore Identifier Label, Expression Ignore Identifier Label)
 newAlternative = (,) <$> newPattern <*> newExpression
 
+newParens :: IO (Expression Ignore Identifier Label)
+newParens = do
+  uuid <- Flux.Persist.generateUUID
+  ParensExpression (Label {labelUUID = uuid}) <$> newExpression
+
 --------------------------------------------------------------------------------
 -- View
 
@@ -584,6 +615,19 @@ renderExpression mcursor =
     VariableExpression label (Identifier ident) ->
       renderExpr label "duet-variable" (Flux.elemText (T.pack ident))
     LiteralExpression label lit -> renderLiteral mcursor label lit
+    ParensExpression label e ->
+      renderExpr
+        label
+        "duet-parens"
+        (do Flux.span_
+              [ "className" @= "duet-parens duet-open-parens"
+              , "key" @= "open-paren"
+              ]
+              (Flux.elemText "(")
+            renderExpression mcursor e
+            Flux.span_
+              ["className" @= "duet-parens", "key" @= "close-paren"]
+              (Flux.elemText ")"))
     ApplicationExpression label f x ->
       renderExpr
         label
@@ -704,6 +748,7 @@ atomic e =
     InfixExpression {} -> False
     LiteralExpression {} -> True
     ConstructorExpression {} -> True
+    ParensExpression {} -> True
 
 renderPattern
   :: Cursor
@@ -870,6 +915,8 @@ findNodeParent uuid = goNode Nothing
                ApplicationExpression l e1 e2 ->
                  go (Just (ExpressionNode e)) e1 <|>
                  go (Just (ExpressionNode e)) e2
+               ParensExpression l e1 ->
+                 go (Just (ExpressionNode e)) e1
                LambdaExpression l (Alternative al ps e') ->
                  go (Just (ExpressionNode e)) e'
                IfExpression l a b c ->
@@ -965,6 +1012,8 @@ transformNode uuid f = goNode Nothing
         else case e of
                ApplicationExpression l e1 e2 ->
                  ApplicationExpression l <$> go (Just l) e1 <*> go (Just l) e2
+               ParensExpression l e1 ->
+                 ParensExpression l <$> go (Just l) e1
                InfixExpression l e1 (s, op) e2 ->
                  InfixExpression l <$> go (Just l) e1 <*>
                  ((s, ) <$> go (Just l) op) <*>

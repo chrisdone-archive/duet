@@ -1,3 +1,5 @@
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -409,6 +411,7 @@ data Expression (t :: * -> *) i l
   | LambdaExpression l (Alternative t i l)
   | IfExpression l (Expression t i l) (Expression t i l) (Expression t i l)
   | CaseExpression l (Expression t i l) [(Pattern t i l, (Expression t i l))]
+  | ParensExpression l (Expression t i l)
   deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
 
 expressionLabel :: Expression t i l -> l
@@ -424,6 +427,7 @@ expressionLabel =
      CaseExpression l _ _ -> l
      VariableExpression l _ -> l
      ConstructorExpression l _ -> l
+     ParensExpression l _ -> l
 
 -- | A pattern match.
 instance (NFData l,NFData i) => NFData (Pattern t  i l)
