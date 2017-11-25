@@ -584,13 +584,15 @@ case' = do
   setState u
   pure (CaseExpression loc e alts)
 
-altsParser :: Stream s m (Token, Location) => ParsecT s Int m [(Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)]
+altsParser
+  :: Stream s m (Token, Location)
+  => ParsecT s Int m [(CaseAlt UnkindedType Identifier Location)]
 altsParser = many (altParser Nothing 1)
 
 altParser
   :: Maybe (Expression UnkindedType Identifier Location)
   -> Int
-  -> TokenParser (Pattern UnkindedType Identifier Location, Expression UnkindedType Identifier Location)
+  -> TokenParser (CaseAlt UnkindedType Identifier Location)
 altParser e' startCol =
   (do u <- getState
       p <- altPat
@@ -605,15 +607,13 @@ altParser e' startCol =
       _ <- equalToken RightArrow
       e <- expParser
       setState u
-      pure (p, e)) <?>
+      pure (CaseAlt p e)) <?>
   ("case alternative" ++
    (case e' of
-      Just e' ->
-        " e.g.\n\n\
-                             \case " ++
-        printExpression defaultPrint e' ++
-        " of\n\
-                             \  Just bar -> bar"
+      Just eeee ->
+        " e.g.\n\ncase " ++
+        printExpression defaultPrint eeee ++
+        " of\n  Just bar -> bar"
       Nothing -> ""))
 
 altPat :: TokenParser (Pattern UnkindedType Identifier Location)

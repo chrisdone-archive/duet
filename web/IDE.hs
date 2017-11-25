@@ -259,7 +259,7 @@ interpretReturn uuid ast = do
             transformExpression
               uuid
               (\_ _ -> do
-                 alt@(p,ex) <- liftIO newAlternative
+                 alt@(CaseAlt p ex) <- liftIO newAlternative
                  focusNode (patternLabel p)
                  pure (CaseExpression l ce (alts ++ [alt])))
               ast
@@ -547,11 +547,11 @@ newLambda = do
   uuid <- Flux.Persist.generateUUID
   uuid2 <- Flux.Persist.generateUUID
   LambdaExpression (Label {labelUUID = uuid}) <$>
-    (do (p, e) <- newAlternative
+    (do (CaseAlt p e) <- newAlternative
         pure (Alternative (Label {labelUUID = uuid2}) [p] e))
 
-newAlternative :: IO (Pattern Ignore Identifier Label, Expression Ignore Identifier Label)
-newAlternative = (,) <$> newPattern <*> newExpression
+newAlternative :: IO (CaseAlt Ignore Identifier Label)
+newAlternative = CaseAlt <$> newPattern <*> newExpression
 
 newParens :: IO (Expression Ignore Identifier Label)
 newParens = do
@@ -690,7 +690,7 @@ renderExpression mcursor =
             Flux.span_
               ["className" @= "duet-rhs"]
               (mapM_
-                 (\(i, (pat, expr)) -> do
+                 (\(i, (CaseAlt pat expr)) -> do
                     unless
                       (i == 1)
                       (Flux.br_ ["key" @= ("pat-break-" ++ show i)])
@@ -863,6 +863,8 @@ insertCharInto char =
         (case n of
            VariableExpression l (Identifier s) ->
              VariableExpression l (Identifier (s ++ [char]))
+           LiteralExpression l (IntegerLiteral i)
+             | digit -> LiteralExpression l (IntegerLiteral (read (show i ++ [char])))
            ConstantExpression l (Identifier "_")
              | letter -> VariableExpression l (Identifier [char])
              | digit -> LiteralExpression l (IntegerLiteral (read [char]))
@@ -940,7 +942,7 @@ findNodeParent uuid = goNode Nothing
                  foldr
                    (<|>)
                    Nothing
-                   (map (\(x, k) -> go (Just (ExpressionNode e)) k) alts)
+                   (map (\(CaseAlt x k) -> go (Just (ExpressionNode e)) k) alts)
                _ -> Nothing
 
 transformExpression
@@ -1039,7 +1041,7 @@ transformNode uuid f = goNode Nothing
                CaseExpression l e' alts ->
                  CaseExpression l <$> go (Just l) e' <*>
                  mapM
-                   (\(x, k) -> (,) <$> goPat (Just l) x <*> go (Just l) k)
+                   (\(CaseAlt x k) -> CaseAlt <$> goPat (Just l) x <*> go (Just l) k)
                    alts
                _ -> pure e
 

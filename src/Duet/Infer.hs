@@ -179,7 +179,7 @@ instanceMethodScheme
   -> Scheme Type Name Type
   -> Scheme Type Name (Predicate Type)
   -> m (Scheme Type Name Type)
-instanceMethodScheme specialTypes cls (Forall methodVars0 (Qualified methodPreds methodType0)) instScheme@(Forall instanceVars0 (Qualified preds (IsIn _ headTypes))) = do
+instanceMethodScheme _specialTypes cls (Forall methodVars0 (Qualified methodPreds methodType0)) _instScheme@(Forall instanceVars0 (Qualified preds (IsIn _ headTypes))) = do
   methodQual <- instantiateQual (Qualified (methodPreds ++ preds) methodType0)
   pure (Forall methodVars methodQual)
   where
@@ -726,8 +726,7 @@ bySuper ce p@(IsIn i ts) = p : concat (map (bySuper ce) supers)
       zipWith Substitution (maybe [] classTypeVariables (M.lookup i ce)) ts
 
 byInst
-  :: Show l
-  => Map Name (Class Type Name l)
+  :: Map Name (Class Type Name l)
   -> Predicate Type Name
   -> Maybe ([Predicate Type Name], Dictionary Type Name l)
 byInst ce p@(IsIn i _) =
@@ -797,6 +796,9 @@ inferExpressionType
   -> [(TypeSignature Type Name Name)]
   -> (Expression Type Name l)
   -> InferT m ([Predicate Type Name], Type Name, Expression Type Name (TypeSignature Type Name l))
+inferExpressionType ce as (ParensExpression l e) = do
+  (ps, t, e') <- inferExpressionType ce as e
+  pure (ps, t, ParensExpression (fmap (const l) (expressionLabel e')) e')
 inferExpressionType _ as (VariableExpression l i) = do
   sc <- lookupName i as
   qualified@(Qualified ps t) <- freshInst sc
@@ -857,12 +859,12 @@ inferExpressionType ce as (IfExpression l e e1 e2) = do
 inferExpressionType ce as (CaseExpression l e branches) = do
   (ps0, t, e') <- inferExpressionType ce as e
   v <- newVariableType StarKind
-  let tiBr (pat, f) = do
+  let tiBr (CaseAlt pat f) = do
         (pat', ps, as', t') <- inferPattern as pat
         unify t t'
         (qs, t'', f') <- inferExpressionType ce (as' ++ as) f
         unify v t''
-        return (ps ++ qs, (pat', f'))
+        return (ps ++ qs, (CaseAlt pat' f'))
   branchs <- mapM tiBr branches
   let pss = map fst branchs
       branches' = map snd branchs

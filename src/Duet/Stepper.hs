@@ -15,7 +15,6 @@ module Duet.Stepper
   ) where
 
 import           Control.Applicative
-import           Control.Arrow
 import           Control.Monad.Catch
 import           Control.Monad.State
 import           Control.Monad.Supply
@@ -172,7 +171,10 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
         LetExpression {} -> return x
         LambdaExpression {} -> return x
         CaseExpression l e0 alts ->
-          let matches = map (first (match e0)) alts
+          let matches =
+                map
+                  (\ca -> (match e0 (caseAltPattern ca), caseAltExpression ca))
+                  alts
           in case listToMaybe
                     (mapMaybe
                        (\(r, e) -> do
@@ -274,7 +276,7 @@ substitute i arg = go
         InfixExpression l x (s, f) y -> InfixExpression l (go x) (s, go f) (go y)
         LetExpression {} -> error "let expressions unsupported."
         CaseExpression l e cases ->
-          CaseExpression l (go e) (map (\(pat, e') -> (pat, go e')) cases)
+          CaseExpression l (go e) (map (\(CaseAlt pat e') -> CaseAlt pat (go e')) cases)
         IfExpression l a b c -> IfExpression l (go a) (go b) (go c)
         x@LiteralExpression {} -> x
         LambdaExpression l (Alternative l' args body) ->

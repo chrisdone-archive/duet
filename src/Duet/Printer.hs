@@ -206,10 +206,10 @@ printExpression printer e =
                     else k
 
 printAlt
-  :: (PrintableType t, PrintableType t1, Printable i)
-  => Print i l -> (Pattern t1 i l, Expression t i l) -> [Char]
+  :: (PrintableType t, Printable i)
+  => Print i l -> (CaseAlt t i l) -> [Char]
 printAlt printer =
-  \(p, e') ->
+  \(CaseAlt p e') ->
     let inner = printExpression printer e'
     in if any (== '\n') inner
          then printPat printer p ++ " ->\n" ++ indented inner

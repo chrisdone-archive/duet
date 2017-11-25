@@ -410,9 +410,17 @@ data Expression (t :: * -> *) i l
   | LetExpression l (BindGroup t i l) (Expression t i l)
   | LambdaExpression l (Alternative t i l)
   | IfExpression l (Expression t i l) (Expression t i l) (Expression t i l)
-  | CaseExpression l (Expression t i l) [(Pattern t i l, (Expression t i l))]
+  | CaseExpression l (Expression t i l) [CaseAlt t i l]
   | ParensExpression l (Expression t i l)
   deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
+
+instance (NFData (t i),  NFData l,NFData i) => NFData (CaseAlt t  i l)
+instance (ToJSON (t i),  ToJSON l,ToJSON i) => ToJSON (CaseAlt t  i l)
+instance (FromJSON (t i),  FromJSON l,FromJSON i) => FromJSON (CaseAlt t  i l)
+data CaseAlt t i l = CaseAlt
+  { caseAltPattern :: Pattern t i l
+  , caseAltExpression :: Expression t i l
+  } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
 
 expressionLabel :: Expression t i l -> l
 expressionLabel =
