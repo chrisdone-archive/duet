@@ -625,7 +625,9 @@ renderAlternative cursor equals mbinding (Alternative label pats e) =
                  ["className" @= "duet-keyword", "key" @= "equals"]
                  (Flux.elemText "=")
         Flux.br_ ["key" @= "alt-break"]
-        Flux.span_ ["className" @= "duet-rhs"] (renderExpression cursor e))
+        Flux.span_
+          ["className" @= "duet-rhs", "key" @= "alt-expr"]
+          (renderExpression cursor e))
 
 renderExpression
   :: Cursor
@@ -697,7 +699,7 @@ renderExpression mcursor =
               (Flux.elemText "of")
             Flux.br_ ["key" @= "of-rhs-break"]
             Flux.span_
-              ["className" @= "duet-rhs"]
+              ["className" @= "duet-rhs", "key" @="rhs"]
               (mapM_
                  (\(i, (CaseAlt l pat expr)) -> do
                     unless
@@ -730,8 +732,10 @@ renderExpression mcursor =
             Flux.span_
               ["className" @= "duet-keyword duet-arrow", "key" @= "arrow"]
               (Flux.elemText "→")
-            Flux.br_ []
-            Flux.span_ ["className" @= "duet-rhs"] (renderExpression mcursor e))
+            Flux.br_ ["key" @= "lambda-br"]
+            Flux.span_
+              ["className" @= "duet-rhs", "key" @= "lambda-rhs"]
+              (renderExpression mcursor e))
     _ -> pure ()
   where
     renderExpr label className' =
