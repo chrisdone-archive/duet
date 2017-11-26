@@ -329,12 +329,12 @@ interpretBackspace cursor ast = do
                      ConstantExpression l (Identifier "_") -> do
                        let mp = findNodeParent (cursorUUID cursor) ast
                        case mp of
-                         Just (ExpressionNode {}) -> put mparent
                          Just n@(AltNode {}) ->
                            maybe
                              (pure ())
                              (put . Just . nodeUUID)
                              (findNodeParent (nodeUUID n) ast)
+                         _ -> put mparent
                        pure e
                      _ -> pure e)
               PatternNode e ->
@@ -357,18 +357,17 @@ interpretBackspace cursor ast = do
                                        (LiteralPattern
                                           l
                                           (IntegerLiteral (read (init string))))
-                                else pure
-                                       (WildcardPattern l "_")
+                                else pure (WildcardPattern l "_")
                          l -> pure e
                      WildcardPattern l "_" -> do
                        let mp = findNodeParent (cursorUUID cursor) ast
                        case mp of
-                         Just (ExpressionNode {}) -> put mparent
                          Just n@(AltNode {}) ->
                            maybe
                              (pure ())
                              (put . Just . nodeUUID)
                              (findNodeParent (nodeUUID n) ast)
+                         _ -> put mparent
                        pure e
                      _ -> pure e)
               BindingNode (Identifier i, l) ->
@@ -684,14 +683,31 @@ renderExpression mcursor =
             Flux.span_
               ["className" @= "duet-parens", "key" @= "close-paren"]
               (Flux.elemText ")"))
-    ApplicationExpression label f x ->
+    app@(ApplicationExpression label _ _) ->
       renderExpr
         label
         "duet-application"
-        (do case f of
+        (do let (f, xs) = fargs app
+            case f of
               ApplicationExpression {} -> renderExpression mcursor f
-              _ -> parens f (renderExpression mcursor f)
-            parens x (renderExpression mcursor x))
+              _ -> parens "func" f (renderExpression mcursor f)
+            if any lineBreaks xs
+              then indented
+                     "app"
+                     (mapM_
+                        (\(i, x) -> do
+                           unless
+                             (i == 1)
+                             (Flux.br_ ["key" @= ("app-break-" ++ show i)])
+                           parens
+                             ("app-" ++ show i)
+                             x
+                             (renderExpression mcursor x))
+                        (zip [1 ..] xs))
+              else mapM_
+                     (\(i, x) ->
+                        parens ("app-" ++ show i) x (renderExpression mcursor x))
+                     (zip [1 ..] xs))
     InfixExpression label f (_, op) x ->
       renderExpr
         label
@@ -710,15 +726,17 @@ renderExpression mcursor =
         (do Flux.span_
               ["className" @= "duet-keyword", "key" @= "if"]
               (Flux.elemText "if")
-            renderExpression mcursor e
+            renderExpressionIndented "if" mcursor e
+            Flux.br_ ["key" @= "then-break"]
             Flux.span_
               ["className" @= "duet-keyword", "key" @= "then"]
               (Flux.elemText "then")
-            renderExpression mcursor f
+            renderExpressionIndented "then" mcursor f
+            Flux.br_ ["key" @= "else-break"]
             Flux.span_
               ["className" @= "duet-keyword", "key" @= "else"]
               (Flux.elemText "else")
-            renderExpression mcursor g)
+            renderExpressionIndented "else" mcursor g)
     CaseExpression label e alts ->
       renderExpr
         label
@@ -726,13 +744,17 @@ renderExpression mcursor =
         (do Flux.span_
               ["className" @= "duet-keyword", "key" @= "case"]
               (Flux.elemText "case")
-            renderExpression mcursor e
+            if lineBreaks e
+              then do
+                renderExpressionIndented "case-expr" mcursor e
+                Flux.br_ ["key" @= "else-break"]
+              else renderExpression mcursor e
             Flux.span_
               ["className" @= "duet-keyword", "key" @= "of"]
               (Flux.elemText "of")
             Flux.br_ ["key" @= "of-rhs-break"]
             Flux.span_
-              ["className" @= "duet-rhs", "key" @="rhs"]
+              ["className" @= "duet-rhs", "key" @= "rhs"]
               (mapM_
                  (\(i, (CaseAlt l pat expr)) -> do
                     unless
@@ -774,6 +796,26 @@ renderExpression mcursor =
     renderExpr label className' =
       renderWrap mcursor label ("duet-expression " <> className')
 
+-- | Flatten an application f x y into (f,[x,y]).
+fargs :: Expression t i l -> (Expression t i l, [(Expression t i l)])
+fargs e = go e []
+  where
+    go (ApplicationExpression _ f x) args = go f (x : args)
+    go f args = (f, args)
+
+renderExpressionIndented prefix mcursor e =
+  if lineBreaks e
+    then indented prefix (renderExpression mcursor e)
+    else renderExpression mcursor e
+
+indented prefix m = do
+  Flux.span_
+    ["key" @= (prefix ++ "-indented-wrap")]
+    (do Flux.br_ ["key" @= (prefix ++ "-indented-break")]
+        Flux.div_
+          ["key" @= (prefix ++ "-indented-padding"), "className" @= "duet-indented"]
+          m)
+
 renderLiteral mcursor label lit =
   case lit of
     IntegerLiteral i ->
@@ -782,20 +824,33 @@ renderLiteral mcursor label lit =
   where renderExpr label className' =
               renderWrap mcursor label ("duet-expression " <> className')
 
+lineBreaks :: Expression x y z -> Bool
+lineBreaks =
+  \case
+    ApplicationExpression _ x y -> lineBreaks x || lineBreaks y
+    InfixExpression l x _ y -> lineBreaks x || lineBreaks y
+    LambdaExpression _ (Alternative _ _ e) -> lineBreaks e
+    IfExpression l x y z -> True
+    CaseExpression {} -> True
+    LambdaExpression {} -> True
+    ParensExpression l e -> lineBreaks e
+    _ -> False
+
 parens
-  :: Expression Ignore Identifier Label
+  :: String
+  -> Expression Ignore Identifier Label
   -> ReactElementM ViewEventHandler ()
   -> ReactElementM ViewEventHandler ()
-parens e m =
+parens prefix e m =
   if atomic e
     then m
     else do
       Flux.span_
-        ["className" @= "duet-parens duet-open-parens", "key" @= "open-paren"]
+        ["className" @= "duet-parens duet-open-parens", "key" @= (prefix ++ "open-paren")]
         (Flux.elemText "(")
       m
       Flux.span_
-        ["className" @= "duet-parens", "key" @= "close-paren"]
+        ["className" @= "duet-parens", "key" @= (prefix ++ "close-paren")]
         (Flux.elemText ")")
 
 atomic :: Expression t i l -> Bool
