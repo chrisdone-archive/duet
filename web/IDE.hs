@@ -348,6 +348,18 @@ interpretBackspace cursor ast = do
                                    l
                                    (Identifier (take (length string - 1) string)))
                          else pure (WildcardPattern l "_")
+                     LiteralPattern l lit ->
+                       case lit of
+                         IntegerLiteral i ->
+                           let string = show i
+                           in if length string > 1
+                                then pure
+                                       (LiteralPattern
+                                          l
+                                          (IntegerLiteral (read (init string))))
+                                else pure
+                                       (WildcardPattern l "_")
+                         l -> pure e
                      WildcardPattern l "_" -> do
                        let mp = findNodeParent (cursorUUID cursor) ast
                        case mp of
@@ -918,6 +930,8 @@ insertCharInto char =
              | letter -> VariablePattern l (Identifier [char])
            WildcardPattern l "_"
              | digit -> LiteralPattern l (IntegerLiteral (read [char]))
+           LiteralPattern l (IntegerLiteral i)
+             | digit -> LiteralPattern l (IntegerLiteral (read (show i ++ [char])))
            VariablePattern l (Identifier s) ->
              VariablePattern l (Identifier (s ++ [char]))
            p -> p)
