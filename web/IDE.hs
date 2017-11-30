@@ -248,7 +248,40 @@ interpretKeyDown shift k = do
       maybe
         (return ())
         focusNode
-        (listToMaybe (skip (orderedNodes (stateAST s))))
+        (listToMaybe (skip (orderedNodes isAtomicNode (stateAST s))))
+
+isAtomicNode :: Node -> Bool
+isAtomicNode =
+  \case
+    ExpressionNode e -> isAtomicExpression e
+    DeclNode {} -> False
+    BindingNode {} -> True
+    PatternNode p -> isAtomicPattern p
+    AltNode {} -> False
+
+isAtomicPattern :: Pattern t i l -> Bool
+isAtomicPattern =
+  \case
+    VariablePattern {} -> True
+    WildcardPattern {} -> True
+    AsPattern {} -> True
+    LiteralPattern {} -> True
+    ConstructorPattern {} -> True
+
+isAtomicExpression :: Expression t i l -> Bool
+isAtomicExpression e =
+  case e of
+    VariableExpression {} -> True
+    ConstantExpression {} -> True
+    CaseExpression {} -> False
+    ApplicationExpression {} -> False
+    IfExpression {} -> False
+    LambdaExpression {} -> False
+    LetExpression {} -> False
+    InfixExpression {} -> False
+    LiteralExpression {} -> True
+    ConstructorExpression {} -> True
+    ParensExpression {} -> False
 
 interpretReturn :: UUID -> Node -> StateT State IO ()
 interpretReturn uuid ast = do
@@ -671,18 +704,7 @@ renderExpression mcursor =
       renderExpr label "duet-variable" (Flux.elemText (T.pack ident))
     LiteralExpression label lit -> renderLiteral mcursor label lit
     ParensExpression label e ->
-      renderExpr
-        label
-        "duet-parens"
-        (do Flux.span_
-              [ "className" @= "duet-parens duet-open-parens"
-              , "key" @= "open-paren"
-              ]
-              (Flux.elemText "(")
-            renderExpression mcursor e
-            Flux.span_
-              ["className" @= "duet-parens", "key" @= "close-paren"]
-              (Flux.elemText ")"))
+      renderExpr label "duet-parens" (renderExpression mcursor e)
     app@(ApplicationExpression label _ _) ->
       renderExpr
         label
@@ -829,7 +851,7 @@ lineBreaks =
   \case
     ApplicationExpression _ x y -> lineBreaks x || lineBreaks y
     InfixExpression l x _ y -> lineBreaks x || lineBreaks y
-    LambdaExpression _ (Alternative _ _ e) -> lineBreaks e
+    LambdaExpression _ (Alternative _ _ e) -> True
     IfExpression l x y z -> True
     CaseExpression {} -> True
     LambdaExpression {} -> True
@@ -846,12 +868,11 @@ parens prefix e m =
     then m
     else do
       Flux.span_
-        ["className" @= "duet-parens duet-open-parens", "key" @= (prefix ++ "open-paren")]
-        (Flux.elemText "(")
-      m
-      Flux.span_
-        ["className" @= "duet-parens", "key" @= (prefix ++ "close-paren")]
-        (Flux.elemText ")")
+        [ "key" @= (prefix ++ "-parens")
+        , "data-key" @= (prefix ++ "-parens")
+        , "className" @= ("duet-node duet-implicit-parens")
+        ]
+        m
 
 atomic :: Expression t i l -> Bool
 atomic e =
@@ -890,7 +911,7 @@ renderPattern mcursor =
     _ -> pure ()
 
 renderWrap
-  ::  Cursor
+  :: Cursor
   -> Label
   -> Text
   -> ReactElementM ViewEventHandler ()
@@ -908,18 +929,20 @@ renderWrap mcursor label className' =
 --------------------------------------------------------------------------------
 -- Interpreter utilities
 
-orderedNodes :: Node -> [Label]
-orderedNodes =
+orderedNodes :: (Node -> Bool) -> Node -> [Label]
+orderedNodes ok =
   everything
     (++)
     (extQ
        (extQ
           (mkQ
              []
-             (\(ImplicitlyTypedBinding l1 (_, l2) _ :: ImplicitlyTypedBinding Ignore Identifier Label) ->
-                [l1, l2]))
-          (\(e :: Expression Ignore Identifier Label) -> [expressionLabel e]))
-       (\(p :: Pattern Ignore Identifier Label) -> [patternLabel p]))
+             (\d@(ImplicitlyTypedBinding l1 bind@(_, l2) _ :: ImplicitlyTypedBinding Ignore Identifier Label) ->
+                [l2 | ok (BindingNode bind)]))
+          (\(e :: Expression Ignore Identifier Label) ->
+             [expressionLabel e | ok (ExpressionNode e)]))
+       (\(p :: Pattern Ignore Identifier Label) ->
+          [patternLabel p | ok (PatternNode p)]))
 
 nodeHoles :: UUID -> Node -> [Label]
 nodeHoles base =

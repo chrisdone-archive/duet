@@ -33,9 +33,43 @@ margin: 0 0.3em;
 .duet-pattern-variable { color: #967bdc }
 .duet-constant { color: #999999; opacity: 0.7 }
 .duet-pattern-wildcard { color: #999999; opacity: 0.7 }
-.duet-parens { color: #ccc; }
+.duet-parens {
+border-left: 1px solid #2e659c;
+border-right: 1px solid #2e659c;
+border-top: 1px solid #fff;
+border-bottom: 1px solid #fff;
+border-radius: 10px;
+padding-left: 5px;
+padding-right: 5px;
+margin-bottom: 5px;
+margin-top: 5px;
+}
+
+.duet-implicit-parens {
+border-left: 1px solid #eee;
+border-right: 1px solid #eee;
+border-top: 1px solid #fff;
+border-bottom: 1px solid #fff;
+border-radius: 10px;
+padding-left: 5px;
+padding-right: 5px;
+margin-bottom: 5px;
+margin-top: 5px;
+}
 
 .duet-selected { background: #eeeeee; border-radius: 0.3em; }
+.duet-selected.duet-parens { background: #eeeeee; border-radius: 10px; }
+
+.duet-selected .duet-implicit-parens, .duet-selected .duet-parens {
+border-top: 1px solid #eeeeee;
+border-bottom: 1px solid #eee;
+}
+
+.duet-selected .duet-implicit-parens {
+border-left: 1px solid #ccc;
+border-right: 1px solid #ccc;
+}
+
 .duet-pattern + .duet-keyword {
 margin-left: 0.3em;
 }
