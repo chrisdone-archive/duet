@@ -508,12 +508,16 @@ interpretKeyPress k = do
 interpretOperator :: Char -> Cursor -> Node -> StateT State IO ()
 interpretOperator c cursor ast = do
   ast' <-
-    transformExpression
+    transformNode
       (cursorUUID cursor)
-      (\mp e -> do
-         w <- liftIO newExpression
-         focusNode (expressionLabel w)
-         liftIO (newInfixExpression c e w))
+      (\mp e -> case e of
+                  ExpressionNode e -> do
+                    w <- liftIO newExpression
+                    focusNode (expressionLabel w)
+                    fmap ExpressionNode (liftIO (newInfixExpression c e w))
+                  n@(OperatorNode{}) -> do liftIO (putStrLn ("Hurrah! " ++ show c))
+                                           pure (insertCharInto c n)
+                  n  -> pure n)
       ast
   modify (\s -> s {stateAST = ast'})
 
@@ -1009,6 +1013,8 @@ insertCharInto char =
            e -> e)
     NameNode (Identifier "_", l)
       | letter -> NameNode (Identifier [char], l)
+    OperatorNode l (Identifier "_")
+     | operator -> OperatorNode l (Identifier [char])
     NameNode (Identifier s, l) -> NameNode (Identifier (s ++ [char]), l)
     PatternNode p ->
       PatternNode
@@ -1026,6 +1032,7 @@ insertCharInto char =
   where
     letter = isLetter char
     digit = isDigit char
+    operator = elem char ("*/+-" :: [Char])
 
 findNodeParent
   :: UUID
