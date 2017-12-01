@@ -43,7 +43,8 @@ data State = State
 data Node
   = ExpressionNode !(Expression Ignore Identifier Label)
   | DeclNode !(Decl Ignore Identifier Label)
-  | BindingNode !(Identifier, Label)
+  | NameNode !(Identifier, Label)
+  | OperatorNode !Label !Identifier
   | PatternNode !(Pattern Ignore Identifier Label)
   | AltNode !(CaseAlt Ignore Identifier Label)
   deriving (Generic, NFData, Show, FromJSON, ToJSON, Data, Typeable)
@@ -56,7 +57,8 @@ nodeLabel =
   \case
     ExpressionNode e -> expressionLabel e
     DeclNode d -> declLabel d
-    BindingNode (_, d) -> d
+    NameNode (_, d) -> d
+    OperatorNode l _ -> l
     PatternNode p -> patternLabel p
     AltNode c -> caseAltLabel c
 
@@ -255,7 +257,8 @@ isAtomicNode =
   \case
     ExpressionNode e -> isAtomicExpression e
     DeclNode {} -> False
-    BindingNode {} -> True
+    NameNode {} -> True
+    OperatorNode {} -> True
     PatternNode p -> isAtomicPattern p
     AltNode {} -> False
 
@@ -403,14 +406,16 @@ interpretBackspace cursor ast = do
                          _ -> put mparent
                        pure e
                      _ -> pure e)
-              BindingNode (Identifier i, l) ->
+              NameNode (Identifier i, l) ->
                 pure
-                  (BindingNode
+                  (NameNode
                      ( Identifier
                          (if length i > 1
                             then take (length i - 1) i
                             else "_")
                      , l))
+              OperatorNode l (Identifier i) ->
+                pure (OperatorNode l (Identifier "_"))
               _ -> pure n)
          ast)
       Nothing
@@ -645,8 +650,14 @@ renderNode cursor =
   \case
     ExpressionNode n -> renderExpression cursor n
     DeclNode d -> renderDecl cursor d
-    BindingNode d -> renderBinding cursor d
+    NameNode d -> renderBinding cursor d
+    OperatorNode l d -> renderOperator cursor l d
     PatternNode p -> renderPattern cursor p
+
+renderOperator mcursor l op =
+  Flux.span_
+    ["className" @= "duet-op", "key" @= "op"]
+    (renderExpression mcursor (VariableExpression l op))
 
 renderDecl :: Cursor -> Decl Ignore Identifier Label -> ReactElementM ViewEventHandler ()
 renderDecl cursor =
@@ -730,14 +741,12 @@ renderExpression mcursor =
                      (\(i, x) ->
                         parens ("app-" ++ show i) x (renderExpression mcursor x))
                      (zip [1 ..] xs))
-    InfixExpression label f (_, op) x ->
+    InfixExpression label f (_, VariableExpression l op) x ->
       renderExpr
         label
         "duet-infix"
         (do renderExpression mcursor f
-            Flux.span_
-              ["className" @= "duet-op", "key" @= "op"]
-              (renderExpression mcursor op)
+            renderOperator mcursor l op
             renderExpression mcursor x)
     ConstantExpression label (Identifier ident) ->
       renderExpr label "duet-constant" (Flux.elemText (T.pack ident))
@@ -938,7 +947,7 @@ orderedNodes ok =
           (mkQ
              []
              (\d@(ImplicitlyTypedBinding l1 bind@(_, l2) _ :: ImplicitlyTypedBinding Ignore Identifier Label) ->
-                [l2 | ok (BindingNode bind)]))
+                [l2 | ok (NameNode bind)]))
           (\(e :: Expression Ignore Identifier Label) ->
              [expressionLabel e | ok (ExpressionNode e)]))
        (\(p :: Pattern Ignore Identifier Label) ->
@@ -998,9 +1007,9 @@ insertCharInto char =
              | letter -> VariableExpression l (Identifier [char])
              | digit -> LiteralExpression l (IntegerLiteral (read [char]))
            e -> e)
-    BindingNode (Identifier "_", l)
-      | letter -> BindingNode (Identifier [char], l)
-    BindingNode (Identifier s, l) -> BindingNode (Identifier (s ++ [char]), l)
+    NameNode (Identifier "_", l)
+      | letter -> NameNode (Identifier [char], l)
+    NameNode (Identifier s, l) -> NameNode (Identifier (s ++ [char]), l)
     PatternNode p ->
       PatternNode
         (case p of
@@ -1030,7 +1039,7 @@ findNodeParent uuid = goNode Nothing
         else case e of
                ExpressionNode e -> go mparent e
                DeclNode d -> goDecl mparent d
-               BindingNode b -> goBinding mparent b
+               NameNode b -> goBinding mparent b
                PatternNode p -> goPat mparent p
                _ -> Nothing
     goPat mparent p =
@@ -1113,13 +1122,21 @@ transformNode uuid f = goNode Nothing
                ExpressionNode e' -> fmap ExpressionNode (go mparent e')
                DeclNode d -> fmap DeclNode (goDecl mparent d)
                PatternNode d -> fmap PatternNode (goPat mparent d)
-               BindingNode b -> fmap BindingNode (goBinding mparent b)
+               NameNode b -> fmap NameNode (goBinding mparent b)
     goBinding mparent b@(i, l) =
       if labelUUID l == uuid
         then do
-          n <- f (fmap labelUUID mparent) (BindingNode (i, l))
+          n <- f (fmap labelUUID mparent) (NameNode (i, l))
           case n of
-            BindingNode b -> pure b
+            NameNode b -> pure b
+            _ -> pure b
+        else pure b
+    goOperator mparent b@(i, l) =
+      if labelUUID l == uuid
+        then do
+          n <- f (fmap labelUUID mparent) (OperatorNode l i)
+          case n of
+            OperatorNode l b -> pure (b,l)
             _ -> pure b
         else pure b
     goPat mparent b =
@@ -1165,9 +1182,12 @@ transformNode uuid f = goNode Nothing
                ApplicationExpression l e1 e2 ->
                  ApplicationExpression l <$> go (Just l) e1 <*> go (Just l) e2
                ParensExpression l e1 -> ParensExpression l <$> go (Just l) e1
-               InfixExpression l e1 (s, op) e2 ->
+               InfixExpression l e1 (s, VariableExpression lop op) e2 ->
                  InfixExpression l <$> go (Just l) e1 <*>
-                 ((s, ) <$> go (Just l) op) <*>
+                 ((s, ) <$>
+                  fmap
+                    (uncurry (flip VariableExpression))
+                    (goOperator (Just l) (op, lop))) <*>
                  go (Just l) e2
                LambdaExpression l (Alternative al ps e') ->
                  LambdaExpression l <$>
