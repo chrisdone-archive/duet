@@ -4,20 +4,9 @@
 
 module React.Flux.Events where
 
-import           Control.Concurrent
-import           Control.DeepSeq
-import           Data.Text (Text)
-import qualified Data.Text as T
-import           GHC.Generics
 import           GHCJS.Foreign.Callback
-import           GHCJS.Marshal (FromJSVal(..), ToJSVal(..), toJSVal_aeson)
-import           GHCJS.Types (JSVal, JSString)
-import           React.Flux ((@=))
-import           React.Flux (ReactStore, ViewEventHandler, SomeStoreAction, ReactView)
-import qualified React.Flux as Flux
-import           React.Flux.Internal (ReactElementM)
-import qualified React.Flux.Lifecycle as Flux.Lifecycle
-import qualified React.Flux.Persist as Flux.Persist
+import           GHCJS.Marshal (FromJSVal(..))
+import           GHCJS.Types (JSVal)
 
 --------------------------------------------------------------------------------
 -- Event handling additions
