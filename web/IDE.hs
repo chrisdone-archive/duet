@@ -19,6 +19,7 @@ import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Typeable
+import           Duet.Printer (printImplicitlyTypedBinding, defaultPrint, PrintableType(..))
 import           Duet.Types
 import           GHC.Generics
 import           React.Flux ((@=))
@@ -34,6 +35,9 @@ import qualified React.Flux.Persist as Flux.Persist
 
 data Ignore a = Ignore
   deriving (Generic, NFData, Show, FromJSON, ToJSON, Data, Typeable)
+
+instance PrintableType Ignore where
+  printType _ _ _ = ""
 
 data State = State
   { stateCursor :: !Cursor
@@ -510,14 +514,16 @@ interpretOperator c cursor ast = do
   ast' <-
     transformNode
       (cursorUUID cursor)
-      (\mp e -> case e of
-                  ExpressionNode e -> do
-                    w <- liftIO newExpression
-                    focusNode (expressionLabel w)
-                    fmap ExpressionNode (liftIO (newInfixExpression c e w))
-                  n@(OperatorNode{}) -> do liftIO (putStrLn ("Hurrah! " ++ show c))
-                                           pure (insertCharInto c n)
-                  n  -> pure n)
+      (\mp e ->
+         case e of
+           ExpressionNode e -> do
+             w <- liftIO newExpression
+             focusNode (expressionLabel w)
+             fmap ExpressionNode (liftIO (newInfixExpression c e w))
+           n@(OperatorNode {}) -> do
+             liftIO (putStrLn ("Hurrah! " ++ show c))
+             pure (insertCharInto c n)
+           n -> pure n)
       ast
   modify (\s -> s {stateAST = ast'})
 
@@ -646,8 +652,17 @@ newParens = do
 
 -- | The app's view.
 appview :: State -> () -> ReactElementM ViewEventHandler ()
-appview state _ =
+appview state _ = do
   renderNode (stateCursor state) (stateAST state)
+  Flux.p_
+    ["key" @= "pretty-printed"]
+    (Flux.text_
+       (Flux.elemText
+          (T.pack
+             (case stateAST state of
+                DeclNode (BindGroupDecl _ (BindGroup _ [[i]])) ->
+                  printImplicitlyTypedBinding defaultPrint i
+                _ -> "Nothing available to print."))))
 
 renderNode :: Cursor -> Node -> ReactElementM ViewEventHandler ()
 renderNode cursor =
