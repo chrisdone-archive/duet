@@ -18,7 +18,6 @@ import           Data.Maybe
 import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
-import           Data.Typeable
 import           Duet.Printer (printImplicitlyTypedBinding, defaultPrint, PrintableType(..))
 import           Duet.Types
 import           GHC.Generics
@@ -239,15 +238,15 @@ interpretKeyDown shift k = do
               (const
                  (\e ->
                     case e of
-                      (ConstantExpression l (Identifier "_")) -> do
+                      (ConstantExpression _ (Identifier "_")) -> do
                         l' <- liftIO newParens
                         case l' of
-                          ParensExpression l e' -> focusNode (expressionLabel e')
+                          ParensExpression _ e' -> focusNode (expressionLabel e')
                           _ -> pure ()
                         pure l'
                       _ -> pure e))
               (stateAST s)
-          modify (\s -> s {stateAST = ast})
+          modify (\s' -> s' {stateAST = ast})
         _ -> pure ()
   where
     navigate s skip =
@@ -301,7 +300,7 @@ interpretReturn uuid ast = do
             transformExpression
               uuid
               (\_ _ -> do
-                 alt@(CaseAlt l' p ex) <- liftIO newAlternative
+                 alt@(CaseAlt _ p _) <- liftIO newAlternative
                  focusNode (patternLabel p)
                  pure (CaseExpression l ce (alts ++ [alt])))
               ast
@@ -322,16 +321,16 @@ interpretBackslash cursor ast = do
   ast' <-
     transformNode
       (cursorUUID cursor)
-      (\mparent n ->
+      (\_ n ->
          case n of
-           ExpressionNode (ConstantExpression l (Identifier "_")) -> do
+           ExpressionNode (ConstantExpression _ (Identifier "_")) -> do
              l <- liftIO newLambda
              case l of
                LambdaExpression _ (Alternative _ [p] _) ->
                  focusNode (patternLabel p)
                _ -> pure ()
              pure (ExpressionNode l)
-           n -> pure n)
+           _ -> pure n)
       ast
   modify (\s -> s {stateAST = ast'})
 
@@ -365,15 +364,15 @@ interpretBackspace cursor ast = do
                                           (IntegerLiteral (read (init string))))
                                 else pure
                                        (ConstantExpression l (Identifier "_"))
-                         l -> pure e
-                     ConstantExpression l (Identifier "_") -> do
+                         _ -> pure e
+                     ConstantExpression _ (Identifier "_") -> do
                        let mp = findNodeParent (cursorUUID cursor) ast
                        case mp of
-                         Just n@(AltNode {}) ->
+                         Just name@(AltNode {}) ->
                            maybe
                              (pure ())
                              (put . Just . nodeUUID)
-                             (findNodeParent (nodeUUID n) ast)
+                             (findNodeParent (nodeUUID name) ast)
                          _ -> put mparent
                        pure e
                      _ -> pure e)
@@ -398,15 +397,15 @@ interpretBackspace cursor ast = do
                                           l
                                           (IntegerLiteral (read (init string))))
                                 else pure (WildcardPattern l "_")
-                         l -> pure e
-                     WildcardPattern l "_" -> do
+                         _ -> pure e
+                     WildcardPattern _ "_" -> do
                        let mp = findNodeParent (cursorUUID cursor) ast
                        case mp of
-                         Just n@(AltNode {}) ->
+                         Just name@(AltNode {}) ->
                            maybe
                              (pure ())
                              (put . Just . nodeUUID)
-                             (findNodeParent (nodeUUID n) ast)
+                             (findNodeParent (nodeUUID name) ast)
                          _ -> put mparent
                        pure e
                      _ -> pure e)
@@ -418,7 +417,7 @@ interpretBackspace cursor ast = do
                             then take (length i - 1) i
                             else "_")
                      , l))
-              OperatorNode l (Identifier i) ->
+              OperatorNode l (Identifier _) ->
                 pure (OperatorNode l (Identifier "_"))
               _ -> pure n)
          ast)
@@ -437,7 +436,7 @@ interpretBackspace cursor ast = do
                        w <- liftIO newExpression
                        focusNode (expressionLabel w)
                        pure w
-                   InfixExpression l x (_, op) y
+                   InfixExpression _ x (_, op) y
                      | labelUUID (expressionLabel y) == cursorUUID cursor -> do
                        focusNode (expressionLabel x)
                        pure x
@@ -448,7 +447,7 @@ interpretBackspace cursor ast = do
                        w <- liftIO newExpression
                        focusNode (expressionLabel w)
                        pure w
-                   ApplicationExpression l f x
+                   ApplicationExpression _ f x
                      | labelUUID (expressionLabel x) == cursorUUID cursor -> do
                        case f of
                          ApplicationExpression _ _ arg ->
@@ -461,13 +460,13 @@ interpretBackspace cursor ast = do
                        focusNode (expressionLabel w)
                        pure w
                    CaseExpression l e alts
-                     | any pred alts -> do
+                     | any predicate alts -> do
                        case alts of
                          [] -> focusNode (expressionLabel e)
                          (CaseAlt _ _ x:_) -> focusNode (expressionLabel x)
                        pure (CaseExpression l e alts')
-                     where alts' = filter (not . pred) alts
-                           pred =
+                     where alts' = filter (not . predicate) alts
+                           predicate =
                              ((||) <$>
                               ((== cursorUUID cursor) .
                                (labelUUID . expressionLabel . caseAltExpression)) <*>
@@ -502,27 +501,25 @@ interpretKeyPress k = do
         _ ->
           case stateCursor s of
             cursor ->
-              if isSpace k
+              if isSpaceCode k
                 then interpretSpaceCompletion cursor (stateAST s)
                 else pure ()
     Just c -> interpretAction (InsertChar c)
   where
-    isSpace = (== 32)
+    isSpaceCode = (== 32)
 
 interpretOperator :: Char -> Cursor -> Node -> StateT State IO ()
 interpretOperator c cursor ast = do
   ast' <-
     transformNode
       (cursorUUID cursor)
-      (\mp e ->
-         case e of
+      (\_ node ->
+         case node of
            ExpressionNode e -> do
              w <- liftIO newExpression
              focusNode (expressionLabel w)
              fmap ExpressionNode (liftIO (newInfixExpression c e w))
-           n@(OperatorNode {}) -> do
-             liftIO (putStrLn ("Hurrah! " ++ show c))
-             pure (insertCharInto c n)
+           n@(OperatorNode {}) -> pure (insertCharInto c n)
            n -> pure n)
       ast
   modify (\s -> s {stateAST = ast'})
@@ -567,10 +564,10 @@ interpretSpaceCompletion cursor ast = do
               ExpressionNode parent@ApplicationExpression {} ->
                 transformExpression
                   (labelUUID (expressionLabel parent))
-                  (\_ ap -> do
+                  (\_ app -> do
                      w <- liftIO newExpression
                      focusNode (expressionLabel w)
-                     liftIO (newApplicationExpression ap w))
+                     liftIO (newApplicationExpression app w))
                   ast
               _ -> pure ast'
           Nothing -> pure ast'
@@ -672,7 +669,9 @@ renderNode cursor =
     NameNode d -> renderBinding cursor d
     OperatorNode l d -> renderOperator cursor l d
     PatternNode p -> renderPattern cursor p
+    AltNode _ -> pure ()
 
+renderOperator :: forall eventHandler handler t. Flux.Term eventHandler [Flux.PropertyOrHandler handler] (ReactElementM ViewEventHandler () -> t) => Cursor -> Label -> Identifier -> t
 renderOperator mcursor l op =
   Flux.span_
     ["className" @= "duet-op", "key" @= "op"]
@@ -687,7 +686,9 @@ renderDecl cursor =
         label
         "diet-bind-group"
         (mapM_ (mapM_ (renderImplicitBinding cursor)) implicit)
+    _ -> pure ()
 
+renderImplicitBinding :: Cursor -> ImplicitlyTypedBinding Ignore Identifier Label -> ReactElementM ViewEventHandler ()
 renderImplicitBinding cursor (ImplicitlyTypedBinding label binding a) =
   renderWrap
     cursor
@@ -695,6 +696,7 @@ renderImplicitBinding cursor (ImplicitlyTypedBinding label binding a) =
     "duet-binding duet-implicit-binding"
     (mapM_ (renderAlternative cursor True (Just binding)) a)
 
+renderBinding :: Cursor -> (Identifier, Label) -> ReactElementM ViewEventHandler ()
 renderBinding cursor (Identifier i, label') =
   renderWrap
     cursor
@@ -705,13 +707,14 @@ renderBinding cursor (Identifier i, label') =
        else "")
     (Flux.elemText (T.pack i))
 
+renderAlternative :: Cursor -> Bool -> Maybe (Identifier, Label) -> Duet.Types.Alternative Ignore Identifier Label -> ReactElementM ViewEventHandler ()
 renderAlternative cursor equals mbinding (Alternative label pats e) =
   renderWrap
     cursor
     label
     "duet-alternative"
     (do maybe (return ()) (renderBinding cursor) mbinding
-        mapM (renderPattern cursor) pats
+        mapM_ (renderPattern cursor) pats
         if not equals
           then Flux.span_
                  ["className" @= "duet-keyword duet-arrow", "key" @= "arrow"]
@@ -826,7 +829,7 @@ renderExpression mcursor =
                             ]
                             (renderExpression mcursor expr)))
                  (zip [1 ..] alts)))
-    LambdaExpression label (Alternative l ps e) ->
+    LambdaExpression label (Alternative _ ps e) ->
       renderExpr
         label
         "duet-lambda"
@@ -853,11 +856,13 @@ fargs e = go e []
     go (ApplicationExpression _ f x) args = go f (x : args)
     go f args = (f, args)
 
+renderExpressionIndented :: [Char] -> Cursor -> Expression Ignore Identifier Label -> ReactElementM ViewEventHandler ()
 renderExpressionIndented prefix mcursor e =
   if lineBreaks e
     then indented prefix (renderExpression mcursor e)
     else renderExpression mcursor e
 
+indented :: forall eventHandler handler t b handler1. Flux.Term eventHandler [Flux.PropertyOrHandler handler] (ReactElementM handler1 b -> t) => [Char] -> ReactElementM handler1 b -> t
 indented prefix m = do
   Flux.span_
     ["key" @= (prefix ++ "-indented-wrap")]
@@ -866,24 +871,24 @@ indented prefix m = do
           ["key" @= (prefix ++ "-indented-padding"), "className" @= "duet-indented"]
           m)
 
+renderLiteral :: Cursor -> Label -> Literal -> ReactElementM ViewEventHandler ()
 renderLiteral mcursor label lit =
   case lit of
     IntegerLiteral i ->
-      renderExpr label "duet-integer" (Flux.elemText (T.pack (show i)))
+      renderExpr  "duet-integer" (Flux.elemText (T.pack (show i)))
     _ -> pure ()
-  where renderExpr label className' =
+  where renderExpr  className' =
               renderWrap mcursor label ("duet-expression " <> className')
 
 lineBreaks :: Expression x y z -> Bool
 lineBreaks =
   \case
     ApplicationExpression _ x y -> lineBreaks x || lineBreaks y
-    InfixExpression l x _ y -> lineBreaks x || lineBreaks y
-    LambdaExpression _ (Alternative _ _ e) -> True
-    IfExpression l x y z -> True
-    CaseExpression {} -> True
+    InfixExpression _ x _ y -> lineBreaks x || lineBreaks y
     LambdaExpression {} -> True
-    ParensExpression l e -> lineBreaks e
+    IfExpression {} -> True
+    CaseExpression {} -> True
+    ParensExpression _ e -> lineBreaks e
     _ -> False
 
 parens
@@ -965,7 +970,7 @@ orderedNodes ok =
        (extQ
           (mkQ
              []
-             (\d@(ImplicitlyTypedBinding l1 bind@(_, l2) _ :: ImplicitlyTypedBinding Ignore Identifier Label) ->
+             (\(ImplicitlyTypedBinding _ bind@(_, l2) _ :: ImplicitlyTypedBinding Ignore Identifier Label) ->
                 [l2 | ok (NameNode bind)]))
           (\(e :: Expression Ignore Identifier Label) ->
              [expressionLabel e | ok (ExpressionNode e)]))
@@ -1042,7 +1047,7 @@ insertCharInto char =
              | digit -> LiteralPattern l (IntegerLiteral (read (show i ++ [char])))
            VariablePattern l (Identifier s) ->
              VariablePattern l (Identifier (s ++ [char]))
-           p -> p)
+           _ -> p)
     n -> n
   where
     letter = isLetter char
@@ -1055,10 +1060,10 @@ findNodeParent
   -> Maybe Node
 findNodeParent uuid = goNode Nothing
   where
-    goNode mparent e =
-      if nodeUUID e == uuid
+    goNode mparent node =
+      if nodeUUID node == uuid
         then mparent
-        else case e of
+        else case node of
                ExpressionNode e -> go mparent e
                DeclNode d -> goDecl mparent d
                NameNode b -> goBinding mparent b
@@ -1076,11 +1081,12 @@ findNodeParent uuid = goNode Nothing
       if labelUUID (declLabel d) == uuid
         then mparent
         else case d of
-               BindGroupDecl _ (BindGroup ex im) ->
+               BindGroupDecl _ (BindGroup _ im) ->
                  foldr
                    (<|>)
                    Nothing
                    (map (foldr (<|>) Nothing) (map (map (goIm mparent)) im))
+               _ -> Nothing
     goIm mparent (ImplicitlyTypedBinding _ _ alts) =
       foldr (<|>) Nothing (map (goAlt mparent) alts)
     goAlt mparent (Alternative _ _ e) = go mparent e
@@ -1092,23 +1098,23 @@ findNodeParent uuid = goNode Nothing
       if labelUUID (expressionLabel e) == uuid
         then mparent
         else case e of
-               ApplicationExpression l e1 e2 ->
+               ApplicationExpression _ e1 e2 ->
                  go (Just (ExpressionNode e)) e1 <|>
                  go (Just (ExpressionNode e)) e2
-               ParensExpression l e1 -> go (Just (ExpressionNode e)) e1
-               LambdaExpression l (Alternative al ps e') ->
+               ParensExpression _ e1 -> go (Just (ExpressionNode e)) e1
+               LambdaExpression _ (Alternative _ _ e') ->
                  go (Just (ExpressionNode e)) e'
-               IfExpression l a b c ->
+               IfExpression _ a b c ->
                  go (Just (ExpressionNode e)) a <|>
                  go (Just (ExpressionNode e)) b <|>
                  go (Just (ExpressionNode e)) c
-               CaseExpression l e' alts ->
+               CaseExpression _ e' alts ->
                  go (Just (ExpressionNode e)) e' <|>
                  foldr
                    (<|>)
                    Nothing
                    (map
-                      (\ca@(CaseAlt _ x k) ->
+                      (\ca@(CaseAlt _ _ k) ->
                          goCaseAlt (Just (ExpressionNode e)) ca <|>
                          go (Just (AltNode ca)) k)
                       alts)
@@ -1145,12 +1151,14 @@ transformNode uuid f = goNode Nothing
                DeclNode d -> fmap DeclNode (goDecl mparent d)
                PatternNode d -> fmap PatternNode (goPat mparent d)
                NameNode b -> fmap NameNode (goBinding mparent b)
+               AltNode {} -> pure e
+               OperatorNode {} -> pure e
     goBinding mparent b@(i, l) =
       if labelUUID l == uuid
         then do
           n <- f (fmap labelUUID mparent) (NameNode (i, l))
           case n of
-            NameNode b -> pure b
+            NameNode name -> pure name
             _ -> pure b
         else pure b
     goOperator mparent b@(i, l) =
@@ -1158,7 +1166,7 @@ transformNode uuid f = goNode Nothing
         then do
           n <- f (fmap labelUUID mparent) (OperatorNode l i)
           case n of
-            OperatorNode l b -> pure (b,l)
+            OperatorNode l' opident -> pure (opident,l')
             _ -> pure b
         else pure b
     goPat mparent b =
@@ -1166,7 +1174,7 @@ transformNode uuid f = goNode Nothing
         then do
           n <- f (fmap labelUUID mparent) (PatternNode b)
           case n of
-            PatternNode b -> pure b
+            PatternNode p -> pure p
             _ -> pure b
         else pure b
     goDecl mparent d =
@@ -1182,9 +1190,9 @@ transformNode uuid f = goNode Nothing
                  (BindGroup ex <$>
                   mapM
                     (mapM
-                       (\(ImplicitlyTypedBinding l i alts) ->
-                          ImplicitlyTypedBinding l <$> goBinding (Just l) i <*>
-                          mapM (goAlt (Just l)) alts))
+                       (\(ImplicitlyTypedBinding l' i alts) ->
+                          ImplicitlyTypedBinding l' <$> goBinding (Just l') i <*>
+                          mapM (goAlt (Just l')) alts))
                     im)
                _ -> pure d
     goAlt mparent (Alternative l ps e) =

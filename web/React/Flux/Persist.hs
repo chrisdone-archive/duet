@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase, TupleSections, ExtendedDefaultRules, FlexibleContexts, ScopedTypeVariables, DeriveDataTypeable #-}
+{-# LANGUAGE CPP, BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase, TupleSections, ExtendedDefaultRules, FlexibleContexts, ScopedTypeVariables, DeriveDataTypeable #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -21,6 +21,7 @@ import GHCJS.Foreign.Callback
 import GHCJS.Marshal (FromJSVal(..), ToJSVal(..), toJSVal_aeson)
 import GHCJS.Types (JSVal, JSString)
 
+#if __GHCJS__
 foreign import javascript unsafe
     "(function(){ if (sessionStorage.getItem($1)) return JSON.parse(sessionStorage.getItem($1)); })()"
     js_sessionStorage_getItemVal :: JSString -> IO JSVal
@@ -28,6 +29,7 @@ foreign import javascript unsafe
 foreign import javascript unsafe
     "sessionStorage.setItem($1,JSON.stringify($2));"
     js_sessionStorage_setItemVal :: JSString -> JSVal -> IO ()
+#endif
 
 -- | Get the app state.
 getAppStateVal :: FromJSON a => IO (Maybe a)
@@ -49,8 +51,10 @@ setAppStateVal app = do
           js_sessionStorage_setItemVal "app-state" val)
   return ()
 
+#if __GHCJS__
 foreign import javascript unsafe "window['generateUUID']()"
     js_generateUUID :: IO JSString
+#endif
 
 newtype UUID = UUID String
   deriving (Ord, Eq, Show, NFData, FromJSON, ToJSON, Generic, Data, Typeable)

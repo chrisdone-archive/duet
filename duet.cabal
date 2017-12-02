@@ -77,18 +77,17 @@ executable duet-web
     Main.hs
   ghc-options:
     -threaded -O2
-  build-depends:
-    duet,
-    base
   if impl(ghcjs)
     build-depends:
+      ghcjs-base,
+      duet,
+      base,
       parsec,
       text,
       exceptions,
       mtl,
       containers,
       aeson,
-      ghcjs-base,
       reflex,
       reflex-dom
 
@@ -109,24 +108,27 @@ executable duet-ide
     IDE.hs
   ghc-options:
     -threaded -Wall
+
+  if impl(ghcjs)
+    build-depends: ghcjs-base,
+      ghcjs-dom
+  if !impl(ghcjs)
+    build-depends: ghcjs-base-stub
+
   build-depends:
     duet,
-    base
-  if impl(ghcjs)
-    build-depends:
-      parsec,
-      text,
-      exceptions,
-      mtl,
-      containers,
-      aeson,
-      ghcjs-base,
-      react-flux,
-      ghcjs-dom,
-      these,
-      bifunctors,
-      dependent-sum,
-      data-default,
-      basic-lens,
-      deepseq,
-      syb
+    base,
+    react-flux,
+    parsec,
+    text,
+    exceptions,
+    mtl,
+    containers,
+    aeson,
+    these,
+    bifunctors,
+    dependent-sum,
+    data-default,
+    basic-lens,
+    deepseq,
+    syb
