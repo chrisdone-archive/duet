@@ -18,6 +18,7 @@ import           Data.Maybe
 import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
+import           Debug.Trace
 import           Duet.Printer (printImplicitlyTypedBinding, defaultPrint, PrintableType(..))
 import           Duet.Types
 import           GHC.Generics
@@ -510,19 +511,37 @@ interpretKeyPress k = do
 
 interpretOperator :: Char -> Cursor -> Node -> StateT State IO ()
 interpretOperator c cursor ast = do
-  ast' <-
-    transformNode
-      (cursorUUID cursor)
-      (\_ node ->
-         case node of
-           ExpressionNode e -> do
+  (ast', mparent) <-
+    runStateT
+      (transformNode
+         (cursorUUID cursor)
+         (\_ node ->
+            case node of
+              ExpressionNode e -> do
+                if elem c ['+', '-']
+                  then do
+                    put (Just (widenExpressionInfixApps e ast))
+                    pure node
+                  else do
+                    w <- liftIO newExpression
+                    lift (focusNode (expressionLabel w))
+                    fmap ExpressionNode (liftIO (newInfixExpression c e w))
+              n@(OperatorNode {}) -> pure (insertCharInto c n)
+              n -> pure n)
+         ast)
+      Nothing
+  case mparent of
+    Nothing -> modify (\s -> s {stateAST = ast'})
+    Just parent -> do
+      ast'' <-
+        transformNode
+          (expressionUUID parent)
+          (\_ _ -> do
              w <- liftIO newExpression
              focusNode (expressionLabel w)
-             fmap ExpressionNode (liftIO (newInfixExpression c e w))
-           n@(OperatorNode {}) -> pure (insertCharInto c n)
-           n -> pure n)
-      ast
-  modify (\s -> s {stateAST = ast'})
+             fmap ExpressionNode (liftIO (newInfixExpression c parent w)))
+          ast
+      modify (\s -> s {stateAST = ast''})
 
 -- | Widen an expression to the top-level infix application, but stop
 -- at function application, or any syntax like if/case/etc.
@@ -546,10 +565,10 @@ widenExpressionInfixApps expression0 ast = go True expression0
     climb expression ascendApplications =
       case findNodeParent (expressionUUID expression) ast of
         Just (ExpressionNode parent) ->
-          case parent of
+          case trace (show ("parent",parent)) parent of
             ApplicationExpression {} -> go ascendApplications parent
             InfixExpression {} -> go ascendApplications parent
-            _ -> parent
+            _ -> expression
         _ -> expression
 
 expressionUUID :: forall (t :: * -> *) i. Expression t i Label -> UUID
@@ -691,6 +710,12 @@ appview state _ = do
                 DeclNode (BindGroupDecl _ (BindGroup _ [[i]])) ->
                   printImplicitlyTypedBinding defaultPrint i
                 _ -> "Nothing available to print."))))
+  Flux.p_
+    ["key" @= "shown"]
+    (Flux.text_
+       (Flux.elemText
+          (T.pack
+             (show (stateAST state)))))
 
 renderNode :: Cursor -> Node -> ReactElementM ViewEventHandler ()
 renderNode cursor =
@@ -1131,6 +1156,10 @@ findNodeParent uuid = goNode Nothing
         else case e of
                ApplicationExpression _ e1 e2 ->
                  go (Just (ExpressionNode e)) e1 <|>
+                 go (Just (ExpressionNode e)) e2
+               InfixExpression _ e1 (_, o) e2 ->
+                 go (Just (ExpressionNode e)) e1 <|>
+                 go (Just (ExpressionNode e)) o <|>
                  go (Just (ExpressionNode e)) e2
                ParensExpression _ e1 -> go (Just (ExpressionNode e)) e1
                LambdaExpression _ (Alternative _ _ e') ->
