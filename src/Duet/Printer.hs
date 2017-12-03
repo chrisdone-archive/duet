@@ -148,6 +148,7 @@ printExpression printer e =
        VariableExpression _ i -> printIdentifier printer i
        ConstantExpression _ i -> printIdentifier printer i
        ConstructorExpression _ i -> printIdentifier printer i
+       ParensExpression _ e -> "(" <> (printExpression printer e) <> ")"
        CaseExpression _ e alts ->
          "case " ++
          indent 5 (printExpressionIfPred printer e) ++
