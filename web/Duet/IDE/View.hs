@@ -21,21 +21,22 @@ import           React.Flux.Internal (ReactElementM)
 appview :: State -> () -> ReactElementM ViewEventHandler ()
 appview state _ = do
   renderNode (stateCursor state) (stateAST state)
-  Flux.p_
-    ["key" @= "pretty-printed"]
-    (Flux.text_
-       (Flux.elemText
-          (T.pack
-             (case stateAST state of
-                DeclNode (BindGroupDecl _ (BindGroup _ [[i]])) ->
-                  printImplicitlyTypedBinding defaultPrint i
-                _ -> "Nothing available to print."))))
-  Flux.p_
-    ["key" @= "shown"]
-    (Flux.text_
-       (Flux.elemText
-          (T.pack
-             (show (stateAST state)))))
+  when
+    False
+    (Flux.p_
+       ["key" @= "pretty-printed"]
+       (Flux.text_
+          (Flux.elemText
+             (T.pack
+                (case stateAST state of
+                   DeclNode (BindGroupDecl _ (BindGroup _ [[i]])) ->
+                     printImplicitlyTypedBinding defaultPrint i
+                   _ -> "Nothing available to print.")))))
+  when
+    False
+    (Flux.p_
+       ["key" @= "shown"]
+       (Flux.text_ (Flux.elemText (T.pack (show (stateAST state))))))
 
 renderNode :: Cursor -> Node -> ReactElementM ViewEventHandler ()
 renderNode cursor =
