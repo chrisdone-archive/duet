@@ -524,6 +524,37 @@ interpretOperator c cursor ast = do
       ast
   modify (\s -> s {stateAST = ast'})
 
+-- | Widen an expression to the top-level infix application, but stop
+-- at function application, or any syntax like if/case/etc.
+--
+-- a * f [x] becomes [a * f x]
+-- f (k * [p]) becomes f ([k * p])
+widenExpressionInfixApps
+  :: Expression Ignore Identifier Label
+  -> Node
+  -> Expression Ignore Identifier Label
+widenExpressionInfixApps expression0 ast = go True expression0
+  where
+    go ascendApplications expression =
+      case expression of
+        ApplicationExpression {}
+          | ascendApplications -> climb expression ascendApplications
+        InfixExpression {} -> climb expression False
+        _
+          | isAtomicExpression expression -> climb expression ascendApplications
+          | otherwise -> expression
+    climb expression ascendApplications =
+      case findNodeParent (expressionUUID expression) ast of
+        Just (ExpressionNode parent) ->
+          case parent of
+            ApplicationExpression {} -> go ascendApplications parent
+            InfixExpression {} -> go ascendApplications parent
+            _ -> parent
+        _ -> expression
+
+expressionUUID :: forall (t :: * -> *) i. Expression t i Label -> UUID
+expressionUUID = labelUUID . expressionLabel
+
 interpretSpaceCompletion :: Cursor -> Node -> StateT State IO ()
 interpretSpaceCompletion cursor ast = do
   (ast', parentEditAllowed) <-
