@@ -10,7 +10,6 @@ import           Control.Monad.Trans
 import           Data.Char
 import           Data.Generics (listify, everything, mkQ, extQ)
 import           Data.Maybe
-import           Debug.Trace
 import           Duet.IDE.Constructors
 import           Duet.IDE.Types
 import           Duet.Types
@@ -362,9 +361,8 @@ interpretOperator c cursor ast = do
                     put (Just (widenExpressionInfixApps e ast))
                     pure node
                   else do
-                    w <- liftIO newExpression
-                    lift (focusNode (expressionLabel w))
-                    fmap ExpressionNode (liftIO (newInfixExpression c e w))
+                    put (Just (widenExpressionApps e ast))
+                    pure node
               n@(OperatorNode {}) -> pure (insertCharInto c n)
               n -> pure n)
          ast)
@@ -381,6 +379,30 @@ interpretOperator c cursor ast = do
              fmap ExpressionNode (liftIO (newInfixExpression c parent w)))
           ast
       modify (\s -> s {stateAST = ast''})
+
+-- | Widen an expression to the top-level function application.
+--
+-- a * f [x] becomes a * [f x]
+-- f (k * [p]) remains f (k * [p])
+widenExpressionApps
+  :: Expression Ignore Identifier Label
+  -> Node
+  -> Expression Ignore Identifier Label
+widenExpressionApps expression0 ast = go expression0
+  where
+    go expression =
+      case expression of
+        ApplicationExpression {} -> climb expression
+        _
+          | isAtomicExpression expression -> climb expression
+          | otherwise -> expression
+    climb expression =
+      case findNodeParent (expressionUUID expression) ast of
+        Just (ExpressionNode parent) ->
+          case parent of
+            ApplicationExpression {} -> go parent
+            _ -> expression
+        _ -> expression
 
 -- | Widen an expression to the top-level infix application, but stop
 -- at function application, or any syntax like if/case/etc.
@@ -404,7 +426,7 @@ widenExpressionInfixApps expression0 ast = go True expression0
     climb expression ascendApplications =
       case findNodeParent (expressionUUID expression) ast of
         Just (ExpressionNode parent) ->
-          case trace (show ("parent",parent)) parent of
+          case parent of
             ApplicationExpression {} -> go ascendApplications parent
             InfixExpression {} -> go ascendApplications parent
             _ -> expression

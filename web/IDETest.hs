@@ -205,6 +205,60 @@ tests =
                             (ConstantExpression
                                (Label {labelUUID = UUID "1"})
                                (Identifier {identifierString = "_"})))))
+               , Test
+                   "Infix completion (after function application of hole)"
+                   (typeChars "x *")
+                   (focus
+                      (UUID "3")
+                      (rhsSelectedState
+                         (InfixExpression
+                            (Label {labelUUID = UUID "4"})
+                            (VariableExpression
+                               (Label {labelUUID = UUID "STARTER-EXPR"})
+                               (Identifier {identifierString = "x"}))
+                            ( "*"
+                            , VariableExpression
+                                (Label {labelUUID = UUID "5"})
+                                (Identifier {identifierString = "*"}))
+                            (ConstantExpression
+                               (Label {labelUUID = UUID "3"})
+                               (Identifier {identifierString = "_"})))))
+               , Test
+                   "Infix preserves precedence"
+                   (typeChars "*+/")
+                   (focus
+                      (UUID "7")
+                      (rhsSelectedState
+                         (InfixExpression
+                            (Label {labelUUID = UUID "5"})
+                            (InfixExpression
+                               (Label {labelUUID = UUID "2"})
+                               (ConstantExpression
+                                  (Label {labelUUID = UUID "STARTER-EXPR"})
+                                  (Identifier {identifierString = "_"}))
+                               ( "*"
+                               , VariableExpression
+                                   (Label {labelUUID = UUID "3"})
+                                   (Identifier {identifierString = "*"}))
+                               (ConstantExpression
+                                  (Label {labelUUID = UUID "1"})
+                                  (Identifier {identifierString = "_"})))
+                            ( "+"
+                            , VariableExpression
+                                (Label {labelUUID = UUID "6"})
+                                (Identifier {identifierString = "+"}))
+                            (InfixExpression
+                               (Label {labelUUID = UUID "8"})
+                               (ConstantExpression
+                                  (Label {labelUUID = UUID "4"})
+                                  (Identifier {identifierString = "_"}))
+                               ( "/"
+                               , VariableExpression
+                                   (Label {labelUUID = UUID "9"})
+                                   (Identifier {identifierString = "/"}))
+                               (ConstantExpression
+                                  (Label {labelUUID = UUID "7"})
+                                  (Identifier {identifierString = "_"}))))))
                ]
            ])
     ]
