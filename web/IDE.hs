@@ -1,7 +1,9 @@
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
+import           Control.Monad
 import           Duet.IDE
 import           Duet.IDE.Types
 import           Duet.IDE.View
@@ -25,9 +27,10 @@ main = do
          39 -> Flux.alterStore store (KeyDown shift RightKey)
          38 -> Flux.alterStore store (KeyDown shift UpKey)
          40 -> Flux.alterStore store (KeyDown shift DownKey)
-         57 -> Flux.alterStore store (KeyDown shift OpenParens)
-         48 -> Flux.alterStore store (KeyDown shift CloseParens)
          13 -> Flux.alterStore store (KeyDown shift ReturnKey)
-         _ -> print key)
-  Flux.Events.onBodyKeypress (Flux.alterStore store . KeyPress)
+         _ -> when False (print ("keydown", key)))
+  Flux.Events.onBodyKeypress
+    (\key -> do
+       when False (print ("keypress", key))
+       Flux.alterStore store (KeyPress key))
   Flux.reactRender "app" (Flux.defineControllerView "State" store appview) ()

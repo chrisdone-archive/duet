@@ -69,6 +69,4 @@ data Keydown
   | LeftKey
   | RightKey
   | ReturnKey
-  | OpenParens
-  | CloseParens
   deriving (Generic, NFData, Show, FromJSON, ToJSON)

@@ -61,6 +61,17 @@ tests =
                "Backspace no-op"
                typeBackspace
                (rhsSelectedState initExpression)
+           , Test
+               "Parens"
+               (typeChars "(")
+               (focus
+                  (UUID "2")
+                  (rhsSelectedState
+                     (ParensExpression
+                        (Label {labelUUID = UUID "1"})
+                        (ConstantExpression
+                           (Label {labelUUID = UUID "2"})
+                           (Identifier {identifierString = "_"})))))
            , Group
                "Variables"
                [ Test

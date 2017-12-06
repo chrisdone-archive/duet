@@ -70,22 +70,6 @@ interpretKeyDown shift k = do
             (dropWhile ((== me) . labelUUID) . dropWhile ((/= me) . labelUUID))
           where me = cursorUUID (stateCursor s)
         ReturnKey -> interpretReturn (cursorUUID cursor) (stateAST s)
-        OpenParens -> do
-          ast <-
-            transformExpression
-              (cursorUUID cursor)
-              (const
-                 (\e ->
-                    case e of
-                      (ConstantExpression _ (Identifier "_")) -> do
-                        l' <- liftIO newParens
-                        case l' of
-                          ParensExpression _ e' -> focusNode (expressionLabel e')
-                          _ -> pure ()
-                        pure l'
-                      _ -> pure e))
-              (stateAST s)
-          modify (\s' -> s' {stateAST = ast})
         _ -> pure ()
   where
     navigate s skip =
@@ -337,6 +321,23 @@ interpretKeyPress k = do
         43 -> interpretOperator '+' (stateCursor s) (stateAST s)
         45 -> interpretOperator '-' (stateCursor s) (stateAST s)
         47 -> interpretOperator '/' (stateCursor s) (stateAST s)
+        40 -> do
+          ast <-
+            transformExpression
+              (cursorUUID (stateCursor s))
+              (const
+                 (\e ->
+                    case e of
+                      (ConstantExpression _ (Identifier "_")) -> do
+                        l' <- liftIO newParens
+                        case l' of
+                          ParensExpression _ e' ->
+                            focusNode (expressionLabel e')
+                          _ -> pure ()
+                        pure l'
+                      _ -> pure e))
+              (stateAST s)
+          modify (\s' -> s' {stateAST = ast})
         _ ->
           case stateCursor s of
             cursor ->
