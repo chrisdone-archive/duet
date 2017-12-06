@@ -56,6 +56,14 @@ foreign import javascript unsafe "window['generateUUID']()"
     js_generateUUID :: IO JSString
 #endif
 
+#if __GHCJS__
+foreign import javascript unsafe "window['resetUUID']()"
+    js_resetUUID :: IO ()
+#endif
+
+resetUUID :: IO ()
+resetUUID = js_resetUUID
+
 newtype UUID = UUID String
   deriving (Ord, Eq, Show, NFData, FromJSON, ToJSON, Generic, Data, Typeable)
 

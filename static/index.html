@@ -109,8 +109,9 @@ margin-left: 0.3em;
     </style>
     <script>
       // code based on: http://stackoverflow.com/questions/105034/create-guid-uuid-in-javascript
-
+ var ids = 0;
  function generateUUID(){
+/*
     var d = new window['Date']()['getTime']();
     if(window['performance'] && typeof window['performance']['now'] === "function"){
         d += window['performance']['now'](); //use high-precision timer if available
@@ -120,8 +121,11 @@ margin-left: 0.3em;
         d = window['Math']['floor'](d/16);
         return (c=='x' ? r : (r&0x3|0x8))['toString'](16);
     });
-    return uuid;
+*/
+    ids++;
+    return ids.toString();
 };
+function resetUUID(){ids=0}
     </script>
     <style>
       .show-dicts {margin-left: 15px;}

@@ -23,36 +23,53 @@ dispatch a = Flux.SomeStoreAction store a
 store :: ReactStore State
 store = do
   Flux.mkStore
-    State
-    { stateCursor = Cursor {cursorUUID = uuidI}
-    , stateAST =
-        DeclNode
-          (BindGroupDecl
-             (Label {labelUUID = uuidD})
-             (BindGroup
-              { bindGroupImplicitlyTypedBindings =
-                  [ [ ImplicitlyTypedBinding
-                      { implicitlyTypedBindingLabel =
-                          Label (Flux.Persist.UUID "STARTER-BINDING")
-                      , implicitlyTypedBindingId = (Identifier "_",Label uuidI)
-                      , implicitlyTypedBindingAlternatives =
-                          [ Alternative
-                            { alternativeLabel = Label (Flux.Persist.UUID "STARTER-ALT")
-                            , alternativePatterns = []
-                            , alternativeExpression =
-                                ConstantExpression
-                                  (Label {labelUUID = uuidE})
-                                  (Identifier "_")
-                            }
-                          ]
-                      }
-                    ]
+    initState
+
+-- | Initial state of the app.
+initState :: State
+initState = makeState initName initExpression
+
+initName :: String
+initName = "_"
+
+initExpression :: forall (t :: * -> *) i. Expression t i Label
+initExpression =
+  (ConstantExpression (Label {labelUUID = starterExprUUID}) (Identifier "_"))
+
+starterExprUUID :: Flux.Persist.UUID
+starterExprUUID = Flux.Persist.UUID "STARTER-EXPR"
+
+makeState :: String -> Expression Ignore Identifier Label -> State
+makeState ident expr =
+  State
+  { stateCursor = Cursor {cursorUUID = uuidI}
+  , stateAST =
+      DeclNode
+        (BindGroupDecl
+           (Label {labelUUID = uuidD})
+           (BindGroup
+            { bindGroupImplicitlyTypedBindings =
+                [ [ ImplicitlyTypedBinding
+                    { implicitlyTypedBindingLabel =
+                        Label (Flux.Persist.UUID "STARTER-BINDING")
+                    , implicitlyTypedBindingId = (Identifier ident, Label uuidI)
+                    , implicitlyTypedBindingAlternatives =
+                        [ Alternative
+                          { alternativeLabel =
+                              Label (Flux.Persist.UUID "STARTER-ALT")
+                          , alternativePatterns = []
+                          , alternativeExpression =
+                              expr
+                          }
+                        ]
+                    }
                   ]
-              , bindGroupExplicitlyTypedBindings = []
-              }))
-    }
+                ]
+            , bindGroupExplicitlyTypedBindings = []
+            }))
+  }
   where
-    uuidE = Flux.Persist.UUID "STARTER-EXPR"
+
     uuidD = Flux.Persist.UUID "STARTER-DECL"
     uuidI = Flux.Persist.UUID "STARTER-BINDING-ID"
 
@@ -62,7 +79,7 @@ store = do
 instance Flux.StoreData State where
   type StoreAction State = Action
   transform action state = do
-    putStrLn ("Action: " ++ show action)
+    -- putStrLn ("Action: " ++ show action)
     -- putStrLn ("State before: " ++ show state)
     state' <- execStateT (interpretAction action) state
     -- putStrLn ("State after: " ++ show state')

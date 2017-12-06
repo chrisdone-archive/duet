@@ -4,13 +4,13 @@
 
 module Duet.IDE.Types where
 
-import           Control.DeepSeq
-import           Data.Aeson
-import           Data.Data
-import           Duet.Printer (PrintableType(..))
-import           Duet.Types
-import           GHC.Generics
-import           React.Flux.Persist (UUID)
+import Control.DeepSeq
+import Data.Aeson
+import Data.Data
+import Duet.Printer (PrintableType(..))
+import Duet.Types
+import GHC.Generics
+import React.Flux.Persist (UUID)
 
 data Ignore a = Ignore
   deriving (Generic, NFData, Show, FromJSON, ToJSON, Data, Typeable)
