@@ -47,6 +47,10 @@ tests =
             (typeChars "foo")
             (makeState "foo" initExpression)
         , Test
+            "Ignore invalid name"
+            (typeChars "123")
+            initState
+        , Test
             "Type valid name, delete characters"
             (typeChars "foo" <> typeBackspace <> typeBackspace)
             (makeState "f" initExpression)

@@ -535,11 +535,12 @@ insertCharInto char =
              | letter -> VariableExpression l (Identifier [char])
              | digit -> LiteralExpression l (IntegerLiteral (read [char]))
            e -> e)
-    NameNode (Identifier "_", l)
+    n@(NameNode (Identifier "_", l))
       | letter -> NameNode (Identifier [char], l)
+      | otherwise -> n
+    NameNode (Identifier s, l) -> NameNode (Identifier (s ++ [char]), l)
     OperatorNode l (Identifier "_")
      | operator -> OperatorNode l (Identifier [char])
-    NameNode (Identifier s, l) -> NameNode (Identifier (s ++ [char]), l)
     PatternNode p ->
       PatternNode
         (case p of
