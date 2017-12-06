@@ -120,7 +120,7 @@ tests =
            , Group
                "Function application"
                [ Test
-                   "Type space to get function application"
+                   "Function completion"
                    (typeChars "f ")
                    (focus
                       (UUID "1")
@@ -134,7 +134,7 @@ tests =
                                (Label {labelUUID = UUID "1"})
                                (Identifier {identifierString = "_"})))))
                , Test
-                   "Type space to get function application (2 args)"
+                   "Function completion (2 args)"
                    (typeChars "f x y")
                    (focus
                       (UUID "5")
@@ -166,6 +166,45 @@ tests =
                             (VariableExpression
                                (Label {labelUUID = UUID "1"})
                                (Identifier {identifierString = "x"})))))
+               ]
+           , Group
+               "Infix"
+               [ Test
+                   "Infix completion (after hole)"
+                   (typeChars "*")
+                   (focus
+                      (UUID "1")
+                      (rhsSelectedState
+                         (InfixExpression
+                            (Label {labelUUID = UUID "2"})
+                            (ConstantExpression
+                               (Label {labelUUID = UUID "STARTER-EXPR"})
+                               (Identifier {identifierString = "_"}))
+                            ( "*"
+                            , VariableExpression
+                                (Label {labelUUID = UUID "3"})
+                                (Identifier {identifierString = "*"}))
+                            (ConstantExpression
+                               (Label {labelUUID = UUID "1"})
+                               (Identifier {identifierString = "_"})))))
+               , Test
+                   "Infix completion (after name)"
+                   (typeChars "x*")
+                   (focus
+                      (UUID "1")
+                      (rhsSelectedState
+                         (InfixExpression
+                            (Label {labelUUID = UUID "2"})
+                            (VariableExpression
+                               (Label {labelUUID = UUID "STARTER-EXPR"})
+                               (Identifier {identifierString = "x"}))
+                            ( "*"
+                            , VariableExpression
+                                (Label {labelUUID = UUID "3"})
+                                (Identifier {identifierString = "*"}))
+                            (ConstantExpression
+                               (Label {labelUUID = UUID "1"})
+                               (Identifier {identifierString = "_"})))))
                ]
            ])
     ]

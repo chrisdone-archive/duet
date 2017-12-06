@@ -103,7 +103,7 @@ margin-left: 0.3em;
 margin-left: 0.3em;
 }
 
-.duet-expression + .duet-expression {
+.duet-expression + .duet-expression, .duet-expression + .duet-implicit-parens {
 margin-left: 0.3em;
 }
     </style>
@@ -111,7 +111,7 @@ margin-left: 0.3em;
       // code based on: http://stackoverflow.com/questions/105034/create-guid-uuid-in-javascript
  var ids = null;
  function generateUUID(){
-if (typeof ids == 'null') {
+if (ids === null) {
     var d = new window['Date']()['getTime']();
     if(window['performance'] && typeof window['performance']['now'] === "function"){
         d += window['performance']['now'](); //use high-precision timer if available
@@ -121,6 +121,7 @@ if (typeof ids == 'null') {
         d = window['Math']['floor'](d/16);
         return (c=='x' ? r : (r&0x3|0x8))['toString'](16);
     });
+      return uuid;
 } else {
     ids++;
     return ids.toString();
