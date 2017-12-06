@@ -555,7 +555,7 @@ insertCharInto char =
            _ -> p)
     n -> n
   where
-    letter = isLetter char
+    letter = isLetter char && isLower char
     digit = isDigit char
     operator = elem char ("*/+-" :: [Char])
 

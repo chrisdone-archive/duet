@@ -46,10 +46,8 @@ tests =
             "Type valid name"
             (typeChars "foo")
             (makeState "foo" initExpression)
-        , Test
-            "Ignore invalid name"
-            (typeChars "123")
-            initState
+        , Test "Ignore invalid name (digits)" (typeChars "123") initState
+        , Test "Ignore invalid name (upper)" (typeChars "F") initState
         , Test
             "Type valid name, delete characters"
             (typeChars "foo" <> typeBackspace <> typeBackspace)
@@ -72,6 +70,13 @@ tests =
                       (VariableExpression
                          (Label {labelUUID = starterExprUUID})
                          (Identifier {identifierString = "foo"})))
+               , Test
+                   "Ignore uppercase beginning"
+                   (typeChars "Foo")
+                   (rhsSelectedState
+                      (VariableExpression
+                         (Label {labelUUID = starterExprUUID})
+                         (Identifier {identifierString = "oo"})))
                , Test
                    "Type variable name, delete characters"
                    (typeChars "foo" <> typeBackspace <> typeBackspace)
