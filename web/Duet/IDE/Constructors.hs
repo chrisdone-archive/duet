@@ -38,15 +38,9 @@ newInfixExpression op x y = do
   pure
     (InfixExpression
        (Label {labelUUID = uuid})
-       (peelHoleArgs x)
+       x
        (pure op, VariableExpression (Label uuid') (Identifier (pure op)))
        y)
-
-peelHoleArgs :: Expression Ignore Identifier Label -> Expression Ignore Identifier Label
-peelHoleArgs =
-  \case
-    ApplicationExpression _ f (ConstantExpression _ (Identifier "_")) -> peelHoleArgs f
-    e -> e
 
 newApplicationExpression
   :: Expression Ignore Identifier Label

@@ -376,9 +376,18 @@ interpretOperator c cursor ast = do
           (\_ _ -> do
              w <- liftIO newExpression
              focusNode (expressionLabel w)
-             fmap ExpressionNode (liftIO (newInfixExpression c parent w)))
+             fmap ExpressionNode (liftIO (newInfixExpression c (peelLastHole parent) w)))
           ast
       modify (\s -> s {stateAST = ast''})
+
+peelLastHole :: Expression Ignore Identifier Label -> Expression Ignore Identifier Label
+peelLastHole =
+  \case
+    ApplicationExpression _ f (ConstantExpression _ (Identifier "_")) ->
+      peelLastHole f
+    ApplicationExpression l f x -> ApplicationExpression l f (peelLastHole x)
+    InfixExpression l x op y -> InfixExpression l x op (peelLastHole y)
+    e -> e
 
 -- | Widen an expression to the top-level function application.
 --

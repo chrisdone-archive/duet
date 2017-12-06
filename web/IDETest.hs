@@ -224,6 +224,60 @@ tests =
                                (Label {labelUUID = UUID "3"})
                                (Identifier {identifierString = "_"})))))
                , Test
+                   "Infix completion (after nested function application of hole)"
+                   (typeChars "x*y *")
+                   (focus
+                      (UUID "6")
+                      (rhsSelectedState
+                         (InfixExpression
+                            (Label {labelUUID = UUID "2"})
+                            (VariableExpression
+                               (Label {labelUUID = UUID "STARTER-EXPR"})
+                               (Identifier {identifierString = "x"}))
+                            ( "*"
+                            , VariableExpression
+                                (Label {labelUUID = UUID "3"})
+                                (Identifier {identifierString = "*"}))
+                            (InfixExpression
+                               (Label {labelUUID = UUID "7"})
+                               (VariableExpression
+                                  (Label {labelUUID = UUID "1"})
+                                  (Identifier {identifierString = "y"}))
+                               ( "*"
+                               , VariableExpression
+                                   (Label {labelUUID = UUID "8"})
+                                   (Identifier {identifierString = "*"}))
+                               (ConstantExpression
+                                  (Label {labelUUID = UUID "6"})
+                                  (Identifier {identifierString = "_"}))))))
+               , Test
+                   "Infix completion (after nested function application of hole)"
+                   (typeChars "x*y +")
+                   (focus
+                      (UUID "6")
+                      (rhsSelectedState
+                         (InfixExpression
+                            (Label {labelUUID = UUID "7"})
+                            (InfixExpression
+                               (Label {labelUUID = UUID "2"})
+                               (VariableExpression
+                                  (Label {labelUUID = UUID "STARTER-EXPR"})
+                                  (Identifier {identifierString = "x"}))
+                               ( "*"
+                               , VariableExpression
+                                   (Label {labelUUID = UUID "3"})
+                                   (Identifier {identifierString = "*"}))
+                               (VariableExpression
+                                  (Label {labelUUID = UUID "1"})
+                                  (Identifier {identifierString = "y"})))
+                            ( "+"
+                            , VariableExpression
+                                (Label {labelUUID = UUID "8"})
+                                (Identifier {identifierString = "+"}))
+                            (ConstantExpression
+                               (Label {labelUUID = UUID "6"})
+                               (Identifier {identifierString = "_"})))))
+               , Test
                    "Infix preserves precedence"
                    (typeChars "*+/")
                    (focus
