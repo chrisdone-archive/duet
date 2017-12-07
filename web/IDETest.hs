@@ -203,6 +203,15 @@ functionApplicationTests =
                (VariableExpression
                   (Label {labelUUID = UUID "1"})
                   (Identifier {identifierString = "x"})))))
+  , Test
+      "Delete argument"
+      (typeChars "f x" <> typeBackspace <> typeBackspace)
+      (focus
+         starterExprUUID
+         (rhsSelectedState
+            (VariableExpression
+               (Label {labelUUID = starterExprUUID})
+               (Identifier {identifierString = "f"}))))
   ]
 
 infixTests :: [Test]
