@@ -287,10 +287,16 @@ interpretBackspace cursor ast = do
                        pure w
                    CaseExpression l e alts
                      | any predicate alts -> do
-                       case alts of
-                         [] -> focusNode (expressionLabel e)
-                         (CaseAlt _ _ x:_) -> focusNode (expressionLabel x)
-                       pure (CaseExpression l e alts')
+                       if length alts == 1
+                         then do
+                           w <- liftIO newExpression
+                           focusNode (expressionLabel w)
+                           pure w
+                         else do
+                           case alts of
+                             [] -> focusNode (expressionLabel e)
+                             (CaseAlt _ _ x:_) -> focusNode (expressionLabel x)
+                           pure (CaseExpression l e alts')
                      where alts' = filter (not . predicate) alts
                            predicate =
                              ((||) <$>
