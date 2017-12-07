@@ -73,13 +73,65 @@ rhsTests =
       [ Test
           "If completion"
           (typeChars "if ")
-          (rhsSelectedState
-             (VariableExpression
-                (Label {labelUUID = starterExprUUID})
-                (Identifier {identifierString = "foo"})))
+          (focus
+             (UUID "2")
+             (rhsSelectedState
+                (IfExpression
+                   (Label {labelUUID = UUID "1"})
+                   (ConstantExpression
+                      (Label {labelUUID = UUID "2"})
+                      (Identifier {identifierString = "_"}))
+                   (ConstantExpression
+                      (Label {labelUUID = UUID "3"})
+                      (Identifier {identifierString = "_"}))
+                   (ConstantExpression
+                      (Label {labelUUID = UUID "4"})
+                      (Identifier {identifierString = "_"})))))
       ]
-  , Group "Lambda" []
-  , Group "Case" []
+  , Group
+      "Lambda"
+      [ Test
+          "Lambda completion"
+          (typeChars "\\")
+          (focus
+             (UUID "3")
+             (rhsSelectedState
+                (LambdaExpression
+                   (Label {labelUUID = UUID "1"})
+                   (Alternative
+                    { alternativeLabel = Label {labelUUID = UUID "2"}
+                    , alternativePatterns =
+                        [WildcardPattern (Label {labelUUID = UUID "3"}) "_"]
+                    , alternativeExpression =
+                        ConstantExpression
+                          (Label {labelUUID = UUID "4"})
+                          (Identifier {identifierString = "_"})
+                    }))))
+      ]
+  , Group
+      "Case"
+      [ Test
+          "Case completion"
+          (typeChars "case ")
+          (focus
+             (UUID "2")
+             (rhsSelectedState
+                (CaseExpression
+                   (Label {labelUUID = UUID "1"})
+                   (ConstantExpression
+                      (Label {labelUUID = UUID "2"})
+                      (Identifier {identifierString = "_"}))
+                   [ CaseAlt
+                     { caseAltLabel = Label {labelUUID = UUID "3"}
+                     , caseAltPattern =
+                         WildcardPattern (Label {labelUUID = UUID "4"}) "_"
+                     , caseAltExpression =
+                         ConstantExpression
+                           (Label {labelUUID = UUID "5"})
+                           (Identifier {identifierString = "_"})
+                     }
+                   ])))
+      ]
   , Group "Variables" variableTests
   , Group
       "Literals"
