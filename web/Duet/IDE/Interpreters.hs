@@ -277,6 +277,9 @@ interpretBackspace cursor ast = do
                            focusNode (expressionLabel arg)
                          _ -> focusNode (expressionLabel f)
                        pure f
+                     | labelUUID (expressionLabel f) == cursorUUID cursor -> do
+                       focusNode (expressionLabel x)
+                       pure x
                    CaseExpression _ e _
                      | labelUUID (expressionLabel e) == cursorUUID cursor -> do
                        w <- liftIO newExpression

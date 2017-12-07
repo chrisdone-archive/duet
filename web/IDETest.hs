@@ -212,6 +212,15 @@ functionApplicationTests =
             (VariableExpression
                (Label {labelUUID = starterExprUUID})
                (Identifier {identifierString = "f"}))))
+  ,  Test
+       "Delete function"
+       (typeChars "f x" <> typeLeft <> typeBackspace <> typeBackspace)
+       (focus
+          (UUID "1")
+          (rhsSelectedState
+             (VariableExpression
+                (Label {labelUUID = UUID "1"})
+                (Identifier {identifierString = "x"}))))
   ]
 
 infixTests :: [Test]
@@ -431,6 +440,9 @@ typeChars = map KeyPressAction
 
 typeBackspace :: [Interaction]
 typeBackspace = [KeyDownAction False BackspaceKey]
+
+typeLeft :: [Interaction]
+typeLeft = [KeyDownAction False LeftKey]
 
 interactionToAction :: Interaction -> Action
 interactionToAction =
