@@ -485,14 +485,15 @@ interpretSpaceCompletion cursor ast = do
         case mparent of
           Just parentNode ->
             case parentNode of
-              ExpressionNode parent@ApplicationExpression {} ->
-                transformExpression
-                  (labelUUID (expressionLabel parent))
-                  (\_ app -> do
-                     w <- liftIO newExpression
-                     focusNode (expressionLabel w)
-                     liftIO (newApplicationExpression app w))
-                  ast
+              ExpressionNode parent@(ApplicationExpression _ f _)
+                | cursorUUID cursor /= expressionUUID f ->
+                  transformExpression
+                    (labelUUID (expressionLabel parent))
+                    (\_ app -> do
+                       w <- liftIO newExpression
+                       focusNode (expressionLabel w)
+                       liftIO (newApplicationExpression app w))
+                    ast
               _ -> pure ast'
           Nothing -> pure ast'
       else pure ast'

@@ -212,15 +212,34 @@ functionApplicationTests =
             (VariableExpression
                (Label {labelUUID = starterExprUUID})
                (Identifier {identifierString = "f"}))))
-  ,  Test
-       "Delete function"
-       (typeChars "f x" <> typeLeft <> typeBackspace <> typeBackspace)
-       (focus
-          (UUID "1")
-          (rhsSelectedState
-             (VariableExpression
-                (Label {labelUUID = UUID "1"})
-                (Identifier {identifierString = "x"}))))
+  , Test
+      "Delete function"
+      (typeChars "f x" <> typeLeft <> typeBackspace <> typeBackspace)
+      (focus
+         (UUID "1")
+         (rhsSelectedState
+            (VariableExpression
+               (Label {labelUUID = UUID "1"})
+               (Identifier {identifierString = "x"}))))
+  , Test
+      "Add argument inbetween func and arg"
+      (typeChars "f x" <> typeLeft <> typeChars " ")
+      (focus
+         (UUID "3")
+         (rhsSelectedState
+            (ApplicationExpression
+               (Label {labelUUID = UUID "2"})
+               (ApplicationExpression
+                  (Label {labelUUID = UUID "4"})
+                  (VariableExpression
+                     (Label {labelUUID = starterExprUUID})
+                     (Identifier {identifierString = "f"}))
+                  (ConstantExpression
+                     (Label {labelUUID = UUID "3"})
+                     (Identifier {identifierString = "_"})))
+               (VariableExpression
+                  (Label {labelUUID = UUID "1"})
+                  (Identifier {identifierString = "x"})))))
   ]
 
 infixTests :: [Test]
