@@ -28,7 +28,7 @@ main = do
     (Flux.defineControllerView
        "State"
        store
-       (\state () -> testview state (appview state ())))
+       (\state () -> testview state (renderModule (stateCursor state) (stateAST state))))
     ()
   runTest tests
 

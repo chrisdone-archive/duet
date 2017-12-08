@@ -33,4 +33,10 @@ main = do
     (\key -> do
        when False (print ("keypress", key))
        Flux.alterStore store (KeyPress key))
-  Flux.reactRender "app" (Flux.defineControllerView "State" store appview) ()
+  Flux.reactRender
+    "app"
+    (Flux.defineControllerView
+       "State"
+       store
+       (\state () -> renderModule (stateCursor state) (stateAST state)))
+    ()
