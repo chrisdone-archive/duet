@@ -9,11 +9,11 @@ import Duet.IDE.Types
 import Duet.Types
 import React.Flux.Persist
 
-tests :: Test
+tests :: [Test]
 tests =
-  Group
-    "Value declarations"
-    [Group "LHS" lhsTests, switchToRHS (Group "RHS" rhsTests)]
+  [ Group "Definitions" lhsTests
+  , switchToRHS (Group "Expressions" valueTests)
+  ]
 
 lhsTests :: [Test]
 lhsTests =
@@ -27,12 +27,15 @@ lhsTests =
       (makeState "f" initExpression)
   ]
 
-rhsTests :: [Test]
-rhsTests =
-  [ Test "Tab to RHS" [] (rhsSelectedState initExpression)
-  , Test "Backspace no-op" typeBackspace (rhsSelectedState initExpression)
+valueTests :: [Test]
+valueTests =
+  [ Test "Hit tab to move to the next slot" [] (rhsSelectedState initExpression)
   , Test
-      "Parens"
+      "Hitting backspace does nothing"
+      typeBackspace
+      (rhsSelectedState initExpression)
+  , Test
+      "Hit open parenthesis to create balanced parentheses"
       (typeChars "(")
       (focus
          (UUID "2")
@@ -42,17 +45,13 @@ rhsTests =
                (ConstantExpression
                   (Label {labelUUID = UUID "2"})
                   (Identifier {identifierString = "_"})))))
-  , Group "If" ifTests
-  , Group "Lambda" lambdaTests
-  , Group
-      "Case"
-      caseTests
-  , Group "Variables" variableTests
-  , Group
-      "Literals"
-      literalTests
+  , Group "Variable expressions" variableTests
   , Group "Function application" functionApplicationTests
-  , Group "Infix" infixTests
+  , Group "Infix expressions" infixTests
+  , Group "If expressions" ifTests
+  , Group "Lambda expressions" lambdaTests
+  , Group "Case expressions" caseTests
+  , Group "Literal expressions" literalTests
   ]
 
 literalTests :: [Test]
@@ -65,7 +64,7 @@ literalTests =
             (Label {labelUUID = starterExprUUID})
             (IntegerLiteral 123)))
   , Test
-      "Type integer literal, invalid chars ignored"
+      "Type integer literal, invalid chars are ignored"
       (typeChars "123abc")
       (rhsSelectedState
          (LiteralExpression
@@ -184,7 +183,21 @@ functionApplicationTests =
                   (Label {labelUUID = UUID "1"})
                   (Identifier {identifierString = "_"})))))
   , Test
-      "Function completion (2 args)"
+      "Type variable argument and typing one argument"
+      (typeChars "f x")
+      (focus
+         (UUID "1")
+         (rhsSelectedState
+            (ApplicationExpression
+               (Label {labelUUID = UUID "2"})
+               (VariableExpression
+                  (Label {labelUUID = starterExprUUID})
+                  (Identifier {identifierString = "f"}))
+               (VariableExpression
+                  (Label {labelUUID = UUID "1"})
+                  (Identifier {identifierString = "x"})))))
+  , Test
+      "Function completion and typing two arguments"
       (typeChars "f x y")
       (focus
          (UUID "5")
@@ -203,21 +216,7 @@ functionApplicationTests =
                   (Label {labelUUID = UUID "5"})
                   (Identifier {identifierString = "y"})))))
   , Test
-      "Type variable argument"
-      (typeChars "f x")
-      (focus
-         (UUID "1")
-         (rhsSelectedState
-            (ApplicationExpression
-               (Label {labelUUID = UUID "2"})
-               (VariableExpression
-                  (Label {labelUUID = starterExprUUID})
-                  (Identifier {identifierString = "f"}))
-               (VariableExpression
-                  (Label {labelUUID = UUID "1"})
-                  (Identifier {identifierString = "x"})))))
-  , Test
-      "Delete argument"
+      "Delete an argument from a function application"
       (typeChars "f x" <> typeBackspace <> typeBackspace)
       (focus
          starterExprUUID
@@ -226,7 +225,7 @@ functionApplicationTests =
                (Label {labelUUID = starterExprUUID})
                (Identifier {identifierString = "f"}))))
   , Test
-      "Delete function"
+      "Delete the function from a function application"
       (typeChars "f x" <> typeLeft <> typeBackspace <> typeBackspace)
       (focus
          (UUID "1")
@@ -235,7 +234,7 @@ functionApplicationTests =
                (Label {labelUUID = UUID "1"})
                (Identifier {identifierString = "x"}))))
   , Test
-      "Add argument inbetween func and arg"
+      "Add argument inbetween function and argument"
       (typeChars "f x" <> typeLeft <> typeChars " ")
       (focus
          (UUID "3")
@@ -258,7 +257,7 @@ functionApplicationTests =
 infixTests :: [Test]
 infixTests =
   [ Test
-      "Infix completion (after hole)"
+      "Infix completion (after a hole)"
       (typeChars "*")
       (focus
          (UUID "1")
@@ -276,7 +275,7 @@ infixTests =
                   (Label {labelUUID = UUID "1"})
                   (Identifier {identifierString = "_"})))))
   , Test
-      "Infix completion (after name)"
+      "Infix completion (after a variable)"
       (typeChars "x*")
       (focus
          (UUID "1")
@@ -294,7 +293,7 @@ infixTests =
                   (Label {labelUUID = UUID "1"})
                   (Identifier {identifierString = "_"})))))
   , Test
-      "Infix completion (after function application of hole)"
+      "Infix completion (after function application of a hole)"
       (typeChars "x *")
       (focus
          (UUID "3")
@@ -312,7 +311,7 @@ infixTests =
                   (Label {labelUUID = UUID "3"})
                   (Identifier {identifierString = "_"})))))
   , Test
-      "Infix completion (after nested function application of hole)"
+      "Infix completion (after nested function application of a hole)"
       (typeChars "x*y *")
       (focus
          (UUID "6")
@@ -339,7 +338,7 @@ infixTests =
                      (Label {labelUUID = UUID "6"})
                      (Identifier {identifierString = "_"}))))))
   , Test
-      "Infix completion (after nested function application of hole)"
+      "Infix completion (after nested function application of a hole)"
       (typeChars "x*y +")
       (focus
          (UUID "6")
@@ -366,7 +365,7 @@ infixTests =
                   (Label {labelUUID = UUID "6"})
                   (Identifier {identifierString = "_"})))))
   , Test
-      "Infix preserves precedence"
+      "Infix preserves order of operations"
       (typeChars "*+/")
       (focus
          (UUID "7")
@@ -413,7 +412,7 @@ variableTests =
             (Label {labelUUID = starterExprUUID})
             (Identifier {identifierString = "foo"})))
   , Test
-      "Ignore uppercase beginning"
+      "Uppercase at the beginning of a variable name is ignored"
       (typeChars "Foo")
       (rhsSelectedState
          (VariableExpression
@@ -427,14 +426,14 @@ variableTests =
             (Label {labelUUID = starterExprUUID})
             (Identifier {identifierString = "f"})))
   , Test
-      "Type variable name, empty back to constant"
+      "Type variable name, backspace to a hole"
       (typeChars "foo" <> typeBackspace <> typeBackspace <> typeBackspace)
       (rhsSelectedState
          (ConstantExpression
             (Label {labelUUID = starterExprUUID})
             (Identifier {identifierString = "_"})))
   , Test
-      "Type variable name with digits"
+      "Type variable name with digits in it"
       (typeChars "foo123")
       (rhsSelectedState
          (VariableExpression
