@@ -17,12 +17,15 @@ tests =
 
 lhsTests :: [Test]
 lhsTests =
-  [ Test "Backspace no-op" typeBackspace initState
-  , Test "Type valid name" (typeChars "foo") (makeState "foo" initExpression)
-  , Test "Ignore invalid name (digits)" (typeChars "123") initState
-  , Test "Ignore invalid name (upper)" (typeChars "F") initState
+  [ Test "Hitting backspace when it's empty does nothing" typeBackspace initState
   , Test
-      "Type valid name, delete characters"
+      "Names are letters and numbers"
+      (typeChars "foo")
+      (makeState "foo" initExpression)
+  , Test "Names can't start with digits" (typeChars "123") initState
+  , Test "Names can't start with uppercase" (typeChars "F") initState
+  , Test
+      "Hit backspace on a name to delete characters"
       (typeChars "foo" <> typeBackspace <> typeBackspace)
       (makeState "f" initExpression)
   ]

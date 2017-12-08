@@ -24,9 +24,12 @@ renderDoc t0 = go 2 t0
           heading indent t
           mapM_ (go (indent + 2)) ts
         Test name actions _ -> do
-          Flux.p_ (Flux.elemText (T.pack name))
-          Flux.p_ (do Flux.span_ ["className" Flux.@= "duet-key-legend"] "⌨"
-                      mapM_ renderAction actions)
+          Flux.p_
+            ["className" Flux.@= "duet-case-name"]
+            (Flux.elemText (T.pack name))
+          Flux.p_ ["className" Flux.@= "duet-case-description"]
+            (do Flux.span_ ["className" Flux.@= "duet-key-legend"] "⌨"
+                mapM_ renderAction actions)
 
 renderAction :: Interaction -> Flux.ReactElementM Flux.ViewEventHandler ()
 renderAction = go
