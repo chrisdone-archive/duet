@@ -304,13 +304,16 @@ interpretBackspace cursor ast = do
                                (labelUUID . expressionLabel . caseAltExpression)) <*>
                               ((== cursorUUID cursor) .
                                (labelUUID . patternLabel . caseAltPattern)))
-                   IfExpression _ e _ _
-                     | labelUUID (expressionLabel e) == cursorUUID cursor -> do
+                   IfExpression _ e f g
+                     | labelUUID (expressionLabel e) == cursorUUID cursor ||
+                         labelUUID (expressionLabel f) == cursorUUID cursor ||
+                         labelUUID (expressionLabel g) == cursorUUID cursor -> do
                        w <- liftIO newExpression
                        focusNode (expressionLabel w)
                        pure w
-                   LambdaExpression _ (Alternative _ [p] _)
-                     | labelUUID (patternLabel p) == cursorUUID cursor -> do
+                   LambdaExpression _ (Alternative _ [p] body)
+                     | labelUUID (patternLabel p) == cursorUUID cursor ||
+                         labelUUID (expressionLabel body) == cursorUUID cursor -> do
                        w <- liftIO newExpression
                        focusNode (expressionLabel w)
                        pure w
