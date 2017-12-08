@@ -141,7 +141,11 @@ line-height: 1.5em;
 .duet-key-press + .duet-key-press {
 margin-left: 0.5em;
 }
-
+.duet-editor {
+border: 2px solid #eee;
+border-radius: 0.25em;
+padding: 0.5em;
+}
     </style>
     <script>
       // code based on: http://stackoverflow.com/questions/105034/create-guid-uuid-in-javascript
@@ -169,8 +173,12 @@ function resetUUID(){ids=0}
       .show-dicts {margin-left: 15px;}
     </style>
   </head>
-  <body>
-    <div id="app"></div>
+  <body style="padding: 0 1em">
+    <h1><img src="duet.png" style="height: 3em; "></h1>
+    <p>Duet is an educational dialect of Haskell aimed at
+    interactivity. This is a demonstration page of the
+    work-in-progress structured editor.</p>
+    <div id="app" class="duet-editor"></div>
     <script language="javascript" src="all.js"></script>
   </body>
 </html>
