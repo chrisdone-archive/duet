@@ -2,6 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 
+-- | Test suite.
+
 module Main (main) where
 
 import qualified Data.Text as T

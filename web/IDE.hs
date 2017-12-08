@@ -1,6 +1,8 @@
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | IDE itself.
+
 module Main where
 
 import           Control.Monad
