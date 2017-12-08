@@ -68,90 +68,129 @@ rhsTests =
                (ConstantExpression
                   (Label {labelUUID = UUID "2"})
                   (Identifier {identifierString = "_"})))))
-  , Group
-      "If"
-      [ Test
-          "If completion"
-          (typeChars "if ")
-          (focus
-             (UUID "2")
-             (rhsSelectedState
-                (IfExpression
-                   (Label {labelUUID = UUID "1"})
-                   (ConstantExpression
-                      (Label {labelUUID = UUID "2"})
-                      (Identifier {identifierString = "_"}))
-                   (ConstantExpression
-                      (Label {labelUUID = UUID "3"})
-                      (Identifier {identifierString = "_"}))
-                   (ConstantExpression
-                      (Label {labelUUID = UUID "4"})
-                      (Identifier {identifierString = "_"})))))
-      ]
-  , Group
-      "Lambda"
-      [ Test
-          "Lambda completion"
-          (typeChars "\\")
-          (focus
-             (UUID "3")
-             (rhsSelectedState
-                (LambdaExpression
-                   (Label {labelUUID = UUID "1"})
-                   (Alternative
-                    { alternativeLabel = Label {labelUUID = UUID "2"}
-                    , alternativePatterns =
-                        [WildcardPattern (Label {labelUUID = UUID "3"}) "_"]
-                    , alternativeExpression =
-                        ConstantExpression
-                          (Label {labelUUID = UUID "4"})
-                          (Identifier {identifierString = "_"})
-                    }))))
-      ]
+  , Group "If" ifTests
+  , Group "Lambda" lambdaTests
   , Group
       "Case"
-      [ Test
-          "Case completion"
-          (typeChars "case ")
-          (focus
-             (UUID "2")
-             (rhsSelectedState
-                (CaseExpression
-                   (Label {labelUUID = UUID "1"})
-                   (ConstantExpression
-                      (Label {labelUUID = UUID "2"})
-                      (Identifier {identifierString = "_"}))
-                   [ CaseAlt
-                     { caseAltLabel = Label {labelUUID = UUID "3"}
-                     , caseAltPattern =
-                         WildcardPattern (Label {labelUUID = UUID "4"}) "_"
-                     , caseAltExpression =
-                         ConstantExpression
-                           (Label {labelUUID = UUID "5"})
-                           (Identifier {identifierString = "_"})
-                     }
-                   ])))
-      ]
+      caseTests
   , Group "Variables" variableTests
   , Group
       "Literals"
-      [ Test
-          "Type integer literal"
-          (typeChars "123")
-          (rhsSelectedState
-             (LiteralExpression
-                (Label {labelUUID = starterExprUUID})
-                (IntegerLiteral 123)))
-      , Test
-          "Type integer literal, invalid chars ignored"
-          (typeChars "123abc")
-          (rhsSelectedState
-             (LiteralExpression
-                (Label {labelUUID = starterExprUUID})
-                (IntegerLiteral 123)))
-      ]
+      literalTests
   , Group "Function application" functionApplicationTests
   , Group "Infix" infixTests
+  ]
+
+literalTests :: [Test]
+literalTests =
+  [ Test
+      "Type integer literal"
+      (typeChars "123")
+      (rhsSelectedState
+         (LiteralExpression
+            (Label {labelUUID = starterExprUUID})
+            (IntegerLiteral 123)))
+  , Test
+      "Type integer literal, invalid chars ignored"
+      (typeChars "123abc")
+      (rhsSelectedState
+         (LiteralExpression
+            (Label {labelUUID = starterExprUUID})
+            (IntegerLiteral 123)))
+  ]
+
+caseTests :: [Test]
+caseTests =
+  [ Test
+      "Case completion"
+      (typeChars "case ")
+      (focus
+         (UUID "2")
+         (rhsSelectedState
+            (CaseExpression
+               (Label {labelUUID = UUID "1"})
+               (ConstantExpression
+                  (Label {labelUUID = UUID "2"})
+                  (Identifier {identifierString = "_"}))
+               [ CaseAlt
+                 { caseAltLabel = Label {labelUUID = UUID "3"}
+                 , caseAltPattern =
+                     WildcardPattern (Label {labelUUID = UUID "4"}) "_"
+                 , caseAltExpression =
+                     ConstantExpression
+                       (Label {labelUUID = UUID "5"})
+                       (Identifier {identifierString = "_"})
+                 }
+               ])))
+  ]
+
+lambdaTests :: [Test]
+lambdaTests =
+  [ Test
+      "Lambda completion"
+      (typeChars "\\")
+      (focus
+         (UUID "3")
+         (rhsSelectedState
+            (LambdaExpression
+               (Label {labelUUID = UUID "1"})
+               (Alternative
+                { alternativeLabel = Label {labelUUID = UUID "2"}
+                , alternativePatterns =
+                    [WildcardPattern (Label {labelUUID = UUID "3"}) "_"]
+                , alternativeExpression =
+                    ConstantExpression
+                      (Label {labelUUID = UUID "4"})
+                      (Identifier {identifierString = "_"})
+                }))))
+  ]
+
+ifTests :: [Test]
+ifTests =
+  [ Test
+      "If completion"
+      (typeChars "if ")
+      (focus
+         (UUID "2")
+         (rhsSelectedState
+            (IfExpression
+               (Label {labelUUID = UUID "1"})
+               (ConstantExpression
+                  (Label {labelUUID = UUID "2"})
+                  (Identifier {identifierString = "_"}))
+               (ConstantExpression
+                  (Label {labelUUID = UUID "3"})
+                  (Identifier {identifierString = "_"}))
+               (ConstantExpression
+                  (Label {labelUUID = UUID "4"})
+                  (Identifier {identifierString = "_"})))))
+  , Test
+      "If deletion"
+      (typeChars "if " <> typeBackspace)
+      (focus
+         (UUID "5")
+         (rhsSelectedState
+            (ConstantExpression
+               (Label {labelUUID = UUID "5"})
+               (Identifier {identifierString = "_"}))))
+  , Test
+      "If deletion after then"
+      (typeChars "if " <> typeRight <> typeBackspace)
+      (focus
+         (UUID "5")
+         (rhsSelectedState
+            (ConstantExpression
+               (Label {labelUUID = UUID "5"})
+               (Identifier {identifierString = "_"}))))
+  , Test
+      "If deletion after else"
+      (typeChars "if " <> typeRight <> typeRight <> typeBackspace)
+      (focus
+         (UUID "5")
+         (rhsSelectedState
+            (ConstantExpression
+               (Label {labelUUID = UUID "5"})
+               (Identifier {identifierString = "_"}))))
   ]
 
 functionApplicationTests :: [Test]
@@ -462,6 +501,9 @@ typeBackspace = [KeyDownAction False BackspaceKey]
 
 typeLeft :: [Interaction]
 typeLeft = [KeyDownAction False LeftKey]
+
+typeRight :: [Interaction]
+typeRight = [KeyDownAction False RightKey]
 
 interactionToAction :: Interaction -> Action
 interactionToAction =
