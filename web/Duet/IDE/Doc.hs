@@ -50,7 +50,9 @@ renderAction = go
     key c title =
       Flux.code_
         ["className" Flux.@= "duet-key-press", "title" Flux.@= title]
-        (Flux.elemText (T.pack [c]))
+        (Flux.elemText (T.pack [if c == ' '
+                                   then '␣'
+                                   else c]))
 
 heading :: Int -> String -> Flux.ReactElementM Flux.ViewEventHandler ()
 heading n t =
