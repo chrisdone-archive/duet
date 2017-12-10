@@ -199,6 +199,45 @@ caseTests =
                        (Identifier {identifierString = "_"})
                  }
                ])))
+  , Test
+      "Case insert alts inbetween"
+      (typeChars "case " <> typeReturn <> typeLeft <> typeReturn)
+      (focus
+         (UUID "10")
+         (rhsSelectedState
+            (CaseExpression
+               (Label {labelUUID = UUID "1"})
+               (ConstantExpression
+                  (Label {labelUUID = UUID "2"})
+                  (Identifier {identifierString = "_"}))
+               [ CaseAlt
+                 { caseAltLabel = Label {labelUUID = UUID "3"}
+                 , caseAltPattern =
+                     WildcardPattern (Label {labelUUID = UUID "4"}) "_"
+                 , caseAltExpression =
+                     ConstantExpression
+                       (Label {labelUUID = UUID "5"})
+                       (Identifier {identifierString = "_"})
+                 }
+               , CaseAlt
+                 { caseAltLabel = Label {labelUUID = UUID "9"}
+                 , caseAltPattern =
+                     WildcardPattern (Label {labelUUID = UUID "10"}) "_"
+                 , caseAltExpression =
+                     ConstantExpression
+                       (Label {labelUUID = UUID "11"})
+                       (Identifier {identifierString = "_"})
+                 }
+               , CaseAlt
+                 { caseAltLabel = Label {labelUUID = UUID "6"}
+                 , caseAltPattern =
+                     WildcardPattern (Label {labelUUID = UUID "7"}) "_"
+                 , caseAltExpression =
+                     ConstantExpression
+                       (Label {labelUUID = UUID "8"})
+                       (Identifier {identifierString = "_"})
+                 }
+               ])))
   ]
 
 lambdaTests :: [Test]
