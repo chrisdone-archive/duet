@@ -369,7 +369,14 @@ interpretOpenParen s = do
                     focusNode (expressionLabel e')
                   _ -> pure ()
                 pure l'
-              _ -> pure e))
+              LiteralExpression {} -> pure e
+              _ -> do
+                l' <- liftIO newParens
+                case l' of
+                  ParensExpression _ e' ->
+                    focusNode (expressionLabel e')
+                  _ -> pure ()
+                liftIO (newApplicationExpression e l')))
       (stateAST s)
   modify (\s' -> s' {stateAST = ast})
 
@@ -384,10 +391,10 @@ interpretOperator c cursor ast = do
               ExpressionNode e -> do
                 if elem c ['+', '-']
                   then do
-                    put (Just (widenExpressionInfixApps e ast))
+                    put (Just (widenExpressionInfixApps (dropWhileParens ast e) ast))
                     pure node
                   else do
-                    put (Just (widenExpressionApps e ast))
+                    put (Just (widenExpressionApps (dropWhileParens ast e) ast))
                     pure node
               n@(OperatorNode {}) -> pure (insertCharInto c n)
               n -> pure n)
@@ -406,6 +413,7 @@ interpretOperator c cursor ast = do
           ast
       modify (\s -> s {stateAST = ast''})
 
+-- | Peel off layers of apps and infix to the right-hand-side hole.
 peelLastHole :: Expression Ignore Identifier Label -> Expression Ignore Identifier Label
 peelLastHole =
   \case
@@ -413,6 +421,19 @@ peelLastHole =
       peelLastHole f
     ApplicationExpression l f x -> ApplicationExpression l f (peelLastHole x)
     InfixExpression l x op y -> InfixExpression l x op (peelLastHole y)
+    e -> e
+
+-- | Climb the tree, dropping while we're looking at parens.
+dropWhileParens ::
+     Node
+  -> Expression Ignore Identifier Label
+  -> Expression Ignore Identifier Label
+dropWhileParens ast =
+  \case
+    e@(ParensExpression {}) ->
+      case findNodeParent (expressionUUID e) ast of
+        Just (ExpressionNode parent) -> dropWhileParens ast parent
+        _ -> e
     e -> e
 
 -- | Widen an expression to the top-level function application.

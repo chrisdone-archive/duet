@@ -37,7 +37,19 @@ valueTests =
       "Hitting backspace does nothing"
       typeBackspace
       (rhsSelectedState initExpression)
-  , Test
+  , Group "Parentheses" parensTests
+  , Group "Variable expressions" variableTests
+  , Group "Function application" functionApplicationTests
+  , Group "Infix expressions" infixTests
+  , Group "If expressions" ifTests
+  , Group "Lambda expressions" lambdaTests
+  , Group "Case expressions" caseTests
+  , Group "Literal expressions" literalTests
+  ]
+
+parensTests :: [Test]
+parensTests =
+  [ Test
       "Hit open parenthesis to create balanced parentheses"
       (typeChars "(")
       (focus
@@ -48,13 +60,72 @@ valueTests =
                (ConstantExpression
                   (Label {labelUUID = UUID "2"})
                   (Identifier {identifierString = "_"})))))
-  , Group "Variable expressions" variableTests
-  , Group "Function application" functionApplicationTests
-  , Group "Infix expressions" infixTests
-  , Group "If expressions" ifTests
-  , Group "Lambda expressions" lambdaTests
-  , Group "Case expressions" caseTests
-  , Group "Literal expressions" literalTests
+  , Test
+      "Hit open parenthesis when on a node to create balanced parentheses"
+      (typeChars "f(")
+      (focus
+         (UUID "2")
+         (rhsSelectedState
+            (ApplicationExpression
+               (Label {labelUUID = UUID "3"})
+               (VariableExpression
+                  (Label {labelUUID = starterExprUUID})
+                  (Identifier {identifierString = "f"}))
+               (ParensExpression
+                  (Label {labelUUID = UUID "1"})
+                  (ConstantExpression
+                     (Label {labelUUID = UUID "2"})
+                     (Identifier {identifierString = "_"}))))))
+  , Test
+      "Hit close parenthesis to select the parent node"
+      (typeChars "fib(n-1)+fib(n-2")
+      (focus
+         (UUID "13")
+         (rhsSelectedState
+            (InfixExpression
+               (Label {labelUUID = UUID "8"})
+               (ApplicationExpression
+                  (Label {labelUUID = UUID "3"})
+                  (VariableExpression
+                     (Label {labelUUID = starterExprUUID})
+                     (Identifier {identifierString = "fib"}))
+                  (ParensExpression
+                     (Label {labelUUID = UUID "1"})
+                     (InfixExpression
+                        (Label {labelUUID = UUID "5"})
+                        (VariableExpression
+                           (Label {labelUUID = UUID "2"})
+                           (Identifier {identifierString = "n"}))
+                        ( "-"
+                        , VariableExpression
+                            (Label {labelUUID = UUID "6"})
+                            (Identifier {identifierString = "-"}))
+                        (LiteralExpression
+                           (Label {labelUUID = UUID "4"})
+                           (IntegerLiteral 1)))))
+               ( "+"
+               , VariableExpression
+                   (Label {labelUUID = UUID "9"})
+                   (Identifier {identifierString = "+"}))
+               (ApplicationExpression
+                  (Label {labelUUID = UUID "12"})
+                  (VariableExpression
+                     (Label {labelUUID = UUID "7"})
+                     (Identifier {identifierString = "fib"}))
+                  (ParensExpression
+                     (Label {labelUUID = UUID "10"})
+                     (InfixExpression
+                        (Label {labelUUID = UUID "14"})
+                        (VariableExpression
+                           (Label {labelUUID = UUID "11"})
+                           (Identifier {identifierString = "n"}))
+                        ( "-"
+                        , VariableExpression
+                            (Label {labelUUID = UUID "15"})
+                            (Identifier {identifierString = "-"}))
+                        (LiteralExpression
+                           (Label {labelUUID = UUID "13"})
+                           (IntegerLiteral 2))))))))
   ]
 
 literalTests :: [Test]
