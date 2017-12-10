@@ -261,7 +261,9 @@ interpretBackspace cursor ast = do
                        pure w
                    InfixExpression _ x (_, op) y
                      | labelUUID (expressionLabel y) == cursorUUID cursor -> do
-                       focusNode (expressionLabel x)
+                       focusNode
+                         (expressionLabel
+                            (rightMostExpression x))
                        pure x
                      | labelUUID (expressionLabel x) == cursorUUID cursor -> do
                        focusNode (expressionLabel y)
@@ -321,6 +323,12 @@ interpretBackspace cursor ast = do
            ast)
       parentOfDoomedChild
   modify (\s -> s {stateAST = astWithDeletion})
+
+lastMaybe :: forall a. [a] -> Maybe a
+lastMaybe xs =
+  if null xs
+    then Nothing
+    else Just (last xs)
 
 interpretKeyPress :: Int -> StateT State IO ()
 interpretKeyPress k = do
@@ -842,3 +850,6 @@ codeAsDigit i =
     else Nothing
   where
     c = toEnum i
+
+rightMostExpression :: Expression Ignore Identifier Label -> Expression Ignore Identifier Label
+rightMostExpression x = fromMaybe x (lastMaybe (listify (const True) x))

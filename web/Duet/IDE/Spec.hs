@@ -474,6 +474,20 @@ infixTests =
                   (ConstantExpression
                      (Label {labelUUID = UUID "7"})
                      (Identifier {identifierString = "_"}))))))
+  , Test
+      "Deleting infix RHS selects last thing on the right"
+      (typeChars "f x-" <> typeBackspace)
+      (focus
+         (UUID "1")
+         (rhsSelectedState
+            (ApplicationExpression
+               (Label {labelUUID = UUID "2"})
+               (VariableExpression
+                  (Label {labelUUID = UUID "STARTER-EXPR"})
+                  (Identifier {identifierString = "f"}))
+               (VariableExpression
+                  (Label {labelUUID = UUID "1"})
+                  (Identifier {identifierString = "x"})))))
   ]
 
 variableTests :: [Test]
