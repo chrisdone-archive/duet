@@ -261,9 +261,7 @@ interpretBackspace cursor ast = do
                        pure w
                    InfixExpression _ x (_, op) y
                      | labelUUID (expressionLabel y) == cursorUUID cursor -> do
-                       focusNode
-                         (expressionLabel
-                            (rightMostExpression x))
+                       focusNode (expressionLabel (rightMostExpression x))
                        pure x
                      | labelUUID (expressionLabel x) == cursorUUID cursor -> do
                        focusNode (expressionLabel y)
@@ -295,9 +293,29 @@ interpretBackspace cursor ast = do
                            focusNode (expressionLabel w)
                            pure w
                          else do
+                           let focusCase = focusNode (expressionLabel e)
                            case alts of
-                             [] -> focusNode (expressionLabel e)
-                             (CaseAlt _ _ x:_) -> focusNode (expressionLabel x)
+                             [] -> focusCase
+                             _ ->
+                               let loop mlast [] =
+                                     maybe focusCase focusNode mlast
+                                   loop mlast (x:xs) =
+                                     if predicate x
+                                       then case mlast of
+                                              Nothing ->
+                                                maybe
+                                                  focusCase
+                                                  (focusNode .
+                                                   expressionLabel .
+                                                   caseAltExpression)
+                                                  (listToMaybe xs)
+                                              Just las -> focusNode (las)
+                                       else loop
+                                              (Just
+                                                 (expressionLabel
+                                                    (caseAltExpression x)))
+                                              xs
+                               in loop Nothing alts
                            pure (CaseExpression l e alts')
                      where alts' = filter (not . predicate) alts
                            predicate =
