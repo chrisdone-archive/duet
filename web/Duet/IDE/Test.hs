@@ -32,6 +32,9 @@ typeChars = map KeyPressAction
 typeBackspace :: [Interaction]
 typeBackspace = [KeyDownAction False BackspaceKey]
 
+typeReturn :: [Interaction]
+typeReturn = [KeyDownAction False ReturnKey]
+
 typeLeft :: [Interaction]
 typeLeft = [KeyDownAction False LeftKey]
 
