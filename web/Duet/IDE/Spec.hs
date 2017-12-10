@@ -169,36 +169,36 @@ caseTests =
                        (Identifier {identifierString = "_"})
                  }
                ])))
-  ,  Test
-       "Case delete only alt"
-       (typeChars "case " <> typeBackspace)
-       (focus
-          (UUID "6")
-          (rhsSelectedState
-             (ConstantExpression
-                (Label {labelUUID = UUID "6"})
-                (Identifier {identifierString = "_"}))))
-  ,   Test
-        "Case delete one alt of many"
-        (typeChars "case " <> typeReturn <> typeBackspace)
-        (focus
-           (UUID "5")
-           (rhsSelectedState
-              (CaseExpression
-                 (Label {labelUUID = UUID "1"})
-                 (ConstantExpression
-                    (Label {labelUUID = UUID "2"})
-                    (Identifier {identifierString = "_"}))
-                 [ CaseAlt
-                   { caseAltLabel = Label {labelUUID = UUID "3"}
-                   , caseAltPattern =
-                       WildcardPattern (Label {labelUUID = UUID "4"}) "_"
-                   , caseAltExpression =
-                       ConstantExpression
-                         (Label {labelUUID = UUID "5"})
-                         (Identifier {identifierString = "_"})
-                   }
-                 ])))
+  , Test
+      "Case delete only alt"
+      (typeChars "case " <> typeBackspace)
+      (focus
+         (UUID "6")
+         (rhsSelectedState
+            (ConstantExpression
+               (Label {labelUUID = UUID "6"})
+               (Identifier {identifierString = "_"}))))
+  , Test
+      "Case delete one alt of many"
+      (typeChars "case " <> typeReturn <> typeBackspace)
+      (focus
+         (UUID "5")
+         (rhsSelectedState
+            (CaseExpression
+               (Label {labelUUID = UUID "1"})
+               (ConstantExpression
+                  (Label {labelUUID = UUID "2"})
+                  (Identifier {identifierString = "_"}))
+               [ CaseAlt
+                 { caseAltLabel = Label {labelUUID = UUID "3"}
+                 , caseAltPattern =
+                     WildcardPattern (Label {labelUUID = UUID "4"}) "_"
+                 , caseAltExpression =
+                     ConstantExpression
+                       (Label {labelUUID = UUID "5"})
+                       (Identifier {identifierString = "_"})
+                 }
+               ])))
   ]
 
 lambdaTests :: [Test]
