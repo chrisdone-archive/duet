@@ -5,7 +5,7 @@ module Duet.IDE.Interpreters where
 
 import           Control.Applicative
 import           Control.Monad.IO.Class
-import           Control.Monad.State (StateT, get, put, modify, runStateT)
+import           Control.Monad.State (StateT, get, put, modify, runStateT, runState)
 import           Control.Monad.Trans
 import           Data.Char
 import           Data.Generics (listify, everything, mkQ, extQ)
@@ -69,7 +69,7 @@ interpretKeyDown shift k = do
             s
             (dropWhile ((== me) . labelUUID) . dropWhile ((/= me) . labelUUID))
           where me = cursorUUID (stateCursor s)
-        ReturnKey -> interpretReturn (cursorUUID cursor) (stateAST s)
+        ReturnKey -> interpretReturn cursor (cursorUUID cursor) (stateAST s)
         _ -> pure ()
   where
     navigate s skip =
@@ -112,8 +112,8 @@ isAtomicExpression e =
     ConstructorExpression {} -> True
     ParensExpression {} -> False
 
-interpretReturn :: UUID -> Node -> StateT State IO ()
-interpretReturn uuid ast = do
+interpretReturn :: Cursor -> UUID -> Node -> StateT State IO ()
+interpretReturn cursor uuid ast = do
   let me = findExpression uuid ast
   case me of
     Just e ->
@@ -125,15 +125,42 @@ interpretReturn uuid ast = do
               (\_ _ -> do
                  alt@(CaseAlt _ p _) <- liftIO newAlternative
                  focusNode (patternLabel p)
-                 pure (CaseExpression l ce (alts ++ [alt])))
+                 let (alts', inserted) =
+                       runState
+                         (fmap
+                            concat
+                            (mapM
+                               (\a ->
+                                  if isChildOf (cursorUUID cursor) a
+                                    then do put True
+                                            pure [a, alt]
+                                    else pure [a])
+                               alts))
+                         False
+                 pure
+                   (CaseExpression
+                      l
+                      ce
+                      (if inserted
+                         then alts'
+                         else alts' ++ [alt])))
               ast
           modify (\s -> s {stateAST = ast'})
         _ -> goUp
     Nothing -> goUp
   where
+    isChildOf candidateUUID parent =
+      not
+        (null
+           (listify
+              ((== candidateUUID) . expressionUUID :: Expression Ignore Identifier Label -> Bool)
+              parent))
     goUp = do
       let mparent = findNodeParent uuid ast
-      maybe (pure ()) (flip interpretReturn ast . labelUUID . nodeLabel) mparent
+      maybe
+        (pure ())
+        (flip (interpretReturn cursor) ast . labelUUID . nodeLabel)
+        mparent
 
 findExpression :: UUID -> Node -> Maybe (Expression Ignore Identifier Label)
 findExpression uuid =
