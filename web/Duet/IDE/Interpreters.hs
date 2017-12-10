@@ -333,23 +333,8 @@ interpretKeyPress k = do
         43 -> interpretOperator '+' (stateCursor s) (stateAST s)
         45 -> interpretOperator '-' (stateCursor s) (stateAST s)
         47 -> interpretOperator '/' (stateCursor s) (stateAST s)
-        40 -> do
-          ast <-
-            transformExpression
-              (cursorUUID (stateCursor s))
-              (const
-                 (\e ->
-                    case e of
-                      (ConstantExpression _ (Identifier "_")) -> do
-                        l' <- liftIO newParens
-                        case l' of
-                          ParensExpression _ e' ->
-                            focusNode (expressionLabel e')
-                          _ -> pure ()
-                        pure l'
-                      _ -> pure e))
-              (stateAST s)
-          modify (\s' -> s' {stateAST = ast})
+        40 -> interpretOpenParen s
+        41 -> interpretCloseParen s
         _ ->
           case stateCursor s of
             cursor ->
@@ -359,6 +344,34 @@ interpretKeyPress k = do
     Just c -> interpretAction (InsertChar c)
   where
     isSpaceCode = (== 32)
+
+interpretCloseParen :: Monad m => State -> StateT State m ()
+interpretCloseParen s =
+  case findNodeParent (cursorUUID (stateCursor s)) (stateAST s) of
+    Nothing -> pure ()
+    Just p ->
+      case findNodeParent (nodeUUID p) (stateAST s) of
+        Just p'@(ExpressionNode (ParensExpression{})) -> focusNode (nodeLabel p')
+        _ -> focusNode (nodeLabel p)
+
+interpretOpenParen :: MonadIO m => State -> StateT State m ()
+interpretOpenParen s = do
+  ast <-
+    transformExpression
+      (cursorUUID (stateCursor s))
+      (const
+         (\e ->
+            case e of
+              (ConstantExpression _ (Identifier "_")) -> do
+                l' <- liftIO newParens
+                case l' of
+                  ParensExpression _ e' ->
+                    focusNode (expressionLabel e')
+                  _ -> pure ()
+                pure l'
+              _ -> pure e))
+      (stateAST s)
+  modify (\s' -> s' {stateAST = ast})
 
 interpretOperator :: Char -> Cursor -> Node -> StateT State IO ()
 interpretOperator c cursor ast = do

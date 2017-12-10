@@ -79,7 +79,7 @@ makeState ident expr =
 instance Flux.StoreData State where
   type StoreAction State = Action
   transform action state = do
-    -- putStrLn ("Action: " ++ show action)
+    putStrLn ("Action: " ++ show action)
     -- putStrLn ("State before: " ++ show state)
     state' <- execStateT (interpretAction action) state
     -- putStrLn ("State after: " ++ show state')
