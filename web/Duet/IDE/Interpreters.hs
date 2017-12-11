@@ -361,12 +361,30 @@ interpretBackspace cursor ast = do
                        w <- liftIO newExpression
                        focusNode (expressionLabel w)
                        pure w
-                   LambdaExpression _ (Alternative _ [p] body)
-                     | labelUUID (patternLabel p) == cursorUUID cursor ||
-                         labelUUID (expressionLabel body) == cursorUUID cursor -> do
+                   LambdaExpression _ (Alternative _ [p] _)
+                     | labelUUID (patternLabel p) == cursorUUID cursor -> do
                        w <- liftIO newExpression
                        focusNode (expressionLabel w)
                        pure w
+                   LambdaExpression _ (Alternative _ _ body)
+                     | labelUUID (expressionLabel body) == cursorUUID cursor -> do
+                       w <- liftIO newExpression
+                       focusNode (expressionLabel w)
+                       pure w
+                   LambdaExpression l (Alternative l0 ps body)
+                     | any predicate ps -> do
+                       maybe
+                         (return ())
+                         (focusNode . patternLabel)
+                         (listToMaybe
+                            (reverse (takeWhile (not . predicate) ps) ++
+                             drop 1 (dropWhile (not . predicate) ps)))
+                       pure
+                         (LambdaExpression
+                            l
+                            (Alternative l0 (filter (not . predicate) ps) body))
+                     where predicate =
+                             (== cursorUUID cursor) . labelUUID . patternLabel
                    e -> pure e))
            ast)
       parentOfDoomedChild
