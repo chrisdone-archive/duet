@@ -10,18 +10,20 @@ import           Control.Monad
 import           Data.Generics
 import           Data.IORef
 import           Duet.IDE
+import           Duet.IDE.Test
 import           Duet.IDE.Types
 import           Duet.IDE.View
-import           Duet.IDE.Test
 import           Duet.Types
 import qualified React.Flux as Flux
 import qualified React.Flux.Events as Flux.Events
+import           React.Flux.Persist
 
 --------------------------------------------------------------------------------
 -- Main entry point
 
 main :: IO ()
 main = do
+  resetUUID
   Flux.alterStore store (ReplaceState (rhsSelectedState initExpression))
   keys <- newIORef []
   let dumpTest = do

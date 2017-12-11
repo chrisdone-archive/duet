@@ -173,6 +173,21 @@ caseTests =
                  }
                ])))
   , Test
+      "Case delete via expr"
+      [ KeyPressAction 'c'
+      , KeyPressAction 'a'
+      , KeyPressAction 's'
+      , KeyPressAction 'e'
+      , KeyPressAction ' '
+      , KeyDownAction False BackspaceKey
+      ]
+      (focus
+         (UUID "6")
+         (rhsSelectedState
+            (ConstantExpression
+               (Label {labelUUID = UUID "6"})
+               (Identifier {identifierString = "_"}))))
+  , Test
       "Case delete only alt"
       (typeChars "case " <> typeBackspace)
       (focus
@@ -262,6 +277,27 @@ lambdaTests =
                       (Label {labelUUID = UUID "4"})
                       (Identifier {identifierString = "_"})
                 }))))
+  , Test
+      "Lambda delete via arg"
+      [KeyPressAction '\\', KeyDownAction False BackspaceKey]
+      (focus
+         (UUID "5")
+         (rhsSelectedState
+            (ConstantExpression
+               (Label {labelUUID = UUID "5"})
+               (Identifier {identifierString = "_"}))))
+  , Test
+      "Lambda delete via body"
+      [ KeyPressAction '\\'
+      , KeyDownAction False RightKey
+      , KeyDownAction False BackspaceKey
+      ]
+      (focus
+         (UUID "5")
+         (rhsSelectedState
+            (ConstantExpression
+               (Label {labelUUID = UUID "5"})
+               (Identifier {identifierString = "_"}))))
   ]
 
 ifTests :: [Test]
