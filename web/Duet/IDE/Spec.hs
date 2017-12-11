@@ -90,6 +90,27 @@ parensTests =
                      (Identifier {identifierString = "_"}))))))
   , Test
       "Hit close parenthesis to select the parent node"
+      [ KeyPressAction '('
+      , KeyPressAction 'f'
+      , KeyPressAction ' '
+      , KeyPressAction 'x'
+      , KeyPressAction ')'
+      ]
+      (focus
+         (UUID "1")
+         (rhsSelectedState
+            (ParensExpression
+               (Label {labelUUID = UUID "1"})
+               (ApplicationExpression
+                  (Label {labelUUID = UUID "4"})
+                  (VariableExpression
+                     (Label {labelUUID = UUID "2"})
+                     (Identifier {identifierString = "f"}))
+                  (VariableExpression
+                     (Label {labelUUID = UUID "3"})
+                     (Identifier {identifierString = "x"}))))))
+  , Test
+      "Hit close parenthesis to select the parent node"
       (typeChars "fib(n-1)+fib(n-2")
       (focus
          (UUID "13")
