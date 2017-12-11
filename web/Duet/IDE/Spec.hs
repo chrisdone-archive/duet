@@ -64,6 +64,15 @@ parensTests =
                   (Label {labelUUID = UUID "2"})
                   (Identifier {identifierString = "_"})))))
   , Test
+      "Hit backspace to delete parens"
+      [KeyPressAction '(', KeyDownAction False BackspaceKey]
+      (focus
+         (UUID "3")
+         (rhsSelectedState
+            (ConstantExpression
+               (Label {labelUUID = UUID "3"})
+               (Identifier {identifierString = "_"}))))
+  , Test
       "Hit open parenthesis when on a node to create balanced parentheses"
       (typeChars "f(")
       (focus
