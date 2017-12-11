@@ -328,6 +328,39 @@ lambdaTests =
                       (Identifier {identifierString = "_"})
                 }))))
   , Test
+      "Lambda make many arguments and inserting between others"
+      [ KeyPressAction '\\'
+      , KeyPressAction 'a'
+      , KeyPressAction ' '
+      , KeyPressAction 'b'
+      , KeyDownAction False LeftKey
+      , KeyPressAction ' '
+      , KeyPressAction 'x'
+      ]
+      (focus
+         (UUID "6")
+         (rhsSelectedState
+            (LambdaExpression
+               (Label {labelUUID = UUID "1"})
+               (Alternative
+                { alternativeLabel = Label {labelUUID = UUID "2"}
+                , alternativePatterns =
+                    [ VariablePattern
+                        (Label {labelUUID = UUID "3"})
+                        (Identifier {identifierString = "a"})
+                    , VariablePattern
+                        (Label {labelUUID = UUID "6"})
+                        (Identifier {identifierString = "x"})
+                    , VariablePattern
+                        (Label {labelUUID = UUID "5"})
+                        (Identifier {identifierString = "b"})
+                    ]
+                , alternativeExpression =
+                    ConstantExpression
+                      (Label {labelUUID = UUID "4"})
+                      (Identifier {identifierString = "_"})
+                }))))
+  , Test
       "Lambda delete via arg"
       [KeyPressAction '\\', KeyDownAction False BackspaceKey]
       (focus

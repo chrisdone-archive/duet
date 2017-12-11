@@ -548,30 +548,38 @@ interpretSpaceCompletion :: Cursor -> Node -> StateT State IO ()
 interpretSpaceCompletion cursor ast = do
   (ast', parentEditAllowed) <-
     runStateT
-      (transformExpression
+      (transformNode
          (cursorUUID cursor)
-         (\_ f -> do
-            case f of
-              VariableExpression _ (Identifier "if") -> do
-                c <- liftIO newIfExpression
-                case c of
-                  IfExpression _ e _ _ -> do
-                    lift (focusNode (expressionLabel e))
-                    put False
-                  _ -> pure ()
-                pure c
-              VariableExpression _ (Identifier "case") -> do
-                c <- liftIO newCaseExpression
-                case c of
-                  CaseExpression _ e _ -> do
-                    lift (focusNode (expressionLabel e))
-                    put False
-                  _ -> pure ()
-                pure c
-              _ -> do
-                w <- liftIO newExpression
-                lift (focusNode (expressionLabel w))
-                liftIO (newApplicationExpression f w))
+         (\_ n -> do
+            case n of
+              PatternNode {} -> do
+                put True
+                pure n
+              ExpressionNode f ->
+                fmap
+                  ExpressionNode
+                  (case f of
+                     VariableExpression _ (Identifier "if") -> do
+                       c <- liftIO newIfExpression
+                       case c of
+                         IfExpression _ e _ _ -> do
+                           lift (focusNode (expressionLabel e))
+                           put False
+                         _ -> pure ()
+                       pure c
+                     VariableExpression _ (Identifier "case") -> do
+                       c <- liftIO newCaseExpression
+                       case c of
+                         CaseExpression _ e _ -> do
+                           lift (focusNode (expressionLabel e))
+                           put False
+                         _ -> pure ()
+                       pure c
+                     _ -> do
+                       w <- liftIO newExpression
+                       lift (focusNode (expressionLabel w))
+                       liftIO (newApplicationExpression f w))
+              _ -> pure n)
          ast)
       True
   ast'' <-
@@ -581,6 +589,26 @@ interpretSpaceCompletion cursor ast = do
         case mparent of
           Just parentNode ->
             case parentNode of
+              ExpressionNode parent@(LambdaExpression l (Alternative l' ps b)) ->
+                let (before, after) =
+                      break
+                        ((== cursorUUID cursor) . labelUUID . patternLabel)
+                        ps
+                in do new <- liftIO newPattern
+                      focusNode (patternLabel new)
+                      transformNode
+                        (labelUUID (expressionLabel parent))
+                        (\_ _ ->
+                           pure
+                             (ExpressionNode
+                                (LambdaExpression
+                                   l
+                                   (Alternative
+                                      l'
+                                      (before ++
+                                       take 1 after ++ [new] ++ drop 1 after)
+                                      b))))
+                        ast
               ExpressionNode parent@(ApplicationExpression _ f _)
                 | cursorUUID cursor /= expressionUUID f ->
                   transformExpression
@@ -743,7 +771,8 @@ findNodeParent uuid = goNode Nothing
                  go (Just (ExpressionNode e)) o <|>
                  go (Just (ExpressionNode e)) e2
                ParensExpression _ e1 -> go (Just (ExpressionNode e)) e1
-               LambdaExpression _ (Alternative _ _ e') ->
+               LambdaExpression _ (Alternative _ ps e') ->
+                 foldr (<|>) Nothing (map (goPat (Just (ExpressionNode e))) ps) <|>
                  go (Just (ExpressionNode e)) e'
                IfExpression _ a b c ->
                  go (Just (ExpressionNode e)) a <|>
