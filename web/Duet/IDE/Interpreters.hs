@@ -259,6 +259,9 @@ interpretBackspace cursor ast = do
                          _ -> put mparent
                        pure e
                      _ -> pure e)
+              NameNode (Identifier "_", _) -> do
+                put mparent
+                pure n
               NameNode (Identifier i, l) ->
                 pure
                   (NameNode
@@ -759,6 +762,11 @@ findNodeParent uuid = goNode Nothing
       if labelUUID l == uuid
         then mparent
         else goPat (Just (AltNode ca)) p <|> go (Just (AltNode ca)) e
+    goLamPat parent =
+      \case
+        VariablePattern l i -> goBinding parent (i, l)
+        WildcardPattern l i -> goBinding parent (Identifier i, l)
+        _ -> Nothing
     go mparent e =
       if labelUUID (expressionLabel e) == uuid
         then mparent
@@ -772,7 +780,10 @@ findNodeParent uuid = goNode Nothing
                  go (Just (ExpressionNode e)) e2
                ParensExpression _ e1 -> go (Just (ExpressionNode e)) e1
                LambdaExpression _ (Alternative _ ps e') ->
-                 foldr (<|>) Nothing (map (goPat (Just (ExpressionNode e))) ps) <|>
+                 foldr
+                   (<|>)
+                   Nothing
+                   (map (goLamPat (Just (ExpressionNode e))) ps) <|>
                  go (Just (ExpressionNode e)) e'
                IfExpression _ a b c ->
                  go (Just (ExpressionNode e)) a <|>
@@ -836,9 +847,23 @@ transformNode uuid f = goNode Nothing
         then do
           n <- f (fmap labelUUID mparent) (OperatorNode l i)
           case n of
-            OperatorNode l' opident -> pure (opident,l')
+            OperatorNode l' opident -> pure (opident, l')
             _ -> pure b
         else pure b
+    goLamPat parent b =
+      case b of
+        VariablePattern l i -> do
+          (Identifier i', l') <- goBinding parent (i, l)
+          pure (if i' == "_"
+                  then WildcardPattern l' i'
+                  else VariablePattern l' (Identifier i'))
+        WildcardPattern l i -> do
+          (Identifier i', l') <- goBinding parent (Identifier i, l)
+          pure
+            (if i' == "_"
+               then WildcardPattern l' i'
+               else VariablePattern l' (Identifier i'))
+        _ -> pure b
     goPat mparent b =
       if labelUUID (patternLabel b) == uuid
         then do
@@ -867,8 +892,8 @@ transformNode uuid f = goNode Nothing
                _ -> pure d
     goAlt mparent (Alternative l ps e) =
       Alternative l <$> mapM (goPat mparent) ps <*> go mparent e
-    go
-      :: Maybe Label
+    go ::
+         Maybe Label
       -> Expression Ignore Identifier Label
       -> m (Expression Ignore Identifier Label)
     go mparent e =
@@ -891,7 +916,8 @@ transformNode uuid f = goNode Nothing
                  go (Just l) e2
                LambdaExpression l (Alternative al ps e') ->
                  LambdaExpression l <$>
-                 (Alternative al <$> mapM (goPat (Just l)) ps <*> go (Just l) e')
+                 (Alternative al <$> mapM (goLamPat (Just l)) ps <*>
+                  go (Just l) e')
                IfExpression l a b c ->
                  IfExpression l <$> go (Just l) a <*> go (Just l) b <*>
                  go (Just l) c

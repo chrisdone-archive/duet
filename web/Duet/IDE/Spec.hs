@@ -308,6 +308,23 @@ lambdaTests =
                       (Identifier {identifierString = "_"})
                 }))))
   , Test
+      "Lambda arguments don't accept literal patterns"
+      [KeyPressAction '\\', KeyPressAction '2']
+      (focus
+         (UUID "3")
+         (rhsSelectedState
+            (LambdaExpression
+               (Label {labelUUID = UUID "1"})
+               (Alternative
+                { alternativeLabel = Label {labelUUID = UUID "2"}
+                , alternativePatterns =
+                    [WildcardPattern (Label {labelUUID = UUID "3"}) "_"]
+                , alternativeExpression =
+                    ConstantExpression
+                      (Label {labelUUID = UUID "4"})
+                      (Identifier {identifierString = "_"})
+                }))))
+  , Test
       "Lambda variable argument"
       [KeyPressAction '\\', KeyPressAction 'a']
       (focus
