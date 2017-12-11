@@ -17,7 +17,10 @@ tests =
 
 lhsTests :: [Test]
 lhsTests =
-  [ Test "Hitting backspace when it's empty does nothing" typeBackspace initState
+  [ Test
+      "Hitting backspace when it's empty does nothing"
+      typeBackspace
+      initState
   , Test
       "Names are letters and numbers"
       (typeChars "foo")
