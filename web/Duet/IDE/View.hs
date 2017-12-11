@@ -318,7 +318,12 @@ renderPattern mcursor =
         label
         "duet-pattern duet-pattern-variable"
         (Flux.elemText (T.pack string))
-    LiteralPattern label lit -> renderLiteral mcursor  label lit
+    LiteralPattern label lit ->
+      renderWrap
+        mcursor
+        label
+        "duet-pattern duet-pattern-literal"
+        (renderLiteral mcursor label lit)
     _ -> pure ()
 
 renderWrap
