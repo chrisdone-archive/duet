@@ -63,11 +63,13 @@ interpretKeyDown shift k = do
         LeftKey ->
           navigate
             s
-            (reverse . takeWhile ((/= cursorUUID (stateCursor s)) . labelUUID))
+            (reverse .
+             takeWhile ((/= cursorUUID (stateCursor s)) . labelUUID . nodeLabel))
         RightKey ->
           navigate
             s
-            (dropWhile ((== me) . labelUUID) . dropWhile ((/= me) . labelUUID))
+            (dropWhile ((== me) . labelUUID . nodeLabel) .
+             dropWhile ((/= me) . labelUUID . nodeLabel))
           where me = cursorUUID (stateCursor s)
         ReturnKey -> interpretReturn cursor (cursorUUID cursor) (stateAST s)
         _ -> pure ()
@@ -76,7 +78,12 @@ interpretKeyDown shift k = do
       maybe
         (return ())
         focusNode
-        (listToMaybe (skip (orderedNodes isAtomicNode (stateAST s))))
+        (listToMaybe
+           (map
+              nodeLabel
+              (filter
+                 isAtomicNode
+                 (skip (orderedNodes (stateAST s))))))
 
 isAtomicNode :: Node -> Bool
 isAtomicNode =
@@ -647,20 +654,18 @@ interpretSpaceCompletion cursor ast = do
 --------------------------------------------------------------------------------
 -- Interpreter utilities
 
-orderedNodes :: (Node -> Bool) -> Node -> [Label]
-orderedNodes ok =
+orderedNodes :: Node -> [Node]
+orderedNodes =
   everything
     (++)
     (extQ
        (extQ
           (mkQ
              []
-             (\(ImplicitlyTypedBinding _ bind@(_, l2) _ :: ImplicitlyTypedBinding Ignore Identifier Label) ->
-                [l2 | ok (NameNode bind)]))
-          (\(e :: Expression Ignore Identifier Label) ->
-             [expressionLabel e | ok (ExpressionNode e)]))
-       (\(p :: Pattern Ignore Identifier Label) ->
-          [patternLabel p | ok (PatternNode p)]))
+             (\(ImplicitlyTypedBinding _ bind@(_, _) _ :: ImplicitlyTypedBinding Ignore Identifier Label) ->
+                [NameNode bind]))
+          (\(e :: Expression Ignore Identifier Label) -> [ExpressionNode e]))
+       (\(p :: Pattern Ignore Identifier Label) -> [PatternNode p]))
 
 nodeHoles :: UUID -> Node -> [Label]
 nodeHoles base =

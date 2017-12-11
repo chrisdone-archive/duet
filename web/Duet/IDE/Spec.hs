@@ -728,6 +728,40 @@ infixTests =
                (VariableExpression
                   (Label {labelUUID = UUID "1"})
                   (Identifier {identifierString = "x"})))))
+  , Test
+      "Moving after focusing a parent works like normal"
+      [ KeyPressAction 'x'
+      , KeyPressAction '+'
+      , KeyPressAction '2'
+      , KeyPressAction '*'
+      , KeyPressAction '3'
+      , KeyPressAction ')'
+      , KeyDownAction False LeftKey
+      ]
+      (focus
+         (UUID "3")
+         (rhsSelectedState
+            (InfixExpression
+               (Label {labelUUID = UUID "2"})
+               (VariableExpression
+                  (Label {labelUUID = UUID "STARTER-EXPR"})
+                  (Identifier {identifierString = "x"}))
+               ( "+"
+               , VariableExpression
+                   (Label {labelUUID = UUID "3"})
+                   (Identifier {identifierString = "+"}))
+               (InfixExpression
+                  (Label {labelUUID = UUID "5"})
+                  (LiteralExpression
+                     (Label {labelUUID = UUID "1"})
+                     (IntegerLiteral 2))
+                  ( "*"
+                  , VariableExpression
+                      (Label {labelUUID = UUID "6"})
+                      (Identifier {identifierString = "*"}))
+                  (LiteralExpression
+                     (Label {labelUUID = UUID "4"})
+                     (IntegerLiteral 3))))))
   ]
 
 variableTests :: [Test]
