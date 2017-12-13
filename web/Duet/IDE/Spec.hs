@@ -31,6 +31,68 @@ lhsTests =
       "Hit backspace on a name to delete characters"
       (typeChars "foo" <> typeBackspace <> typeBackspace)
       (makeState "f" initExpression)
+  , Test
+      "Hit return to create a new declaration"
+      [KeyDownAction False ReturnKey]
+      (State
+       { stateCursor = Cursor {cursorUUID = UUID "3"}
+       , stateAST =
+           ModuleNode
+             (Label {labelUUID = UUID "STARTER-MODULE"})
+             [ BindGroupDecl
+                 (Label {labelUUID = UUID "STARTER-DECL"})
+                 (BindGroup
+                  { bindGroupExplicitlyTypedBindings = []
+                  , bindGroupImplicitlyTypedBindings =
+                      [ [ ImplicitlyTypedBinding
+                          { implicitlyTypedBindingLabel =
+                              Label {labelUUID = UUID "STARTER-BINDING"}
+                          , implicitlyTypedBindingId =
+                              ( Identifier {identifierString = "_"}
+                              , Label {labelUUID = UUID "STARTER-BINDING-ID"})
+                          , implicitlyTypedBindingAlternatives =
+                              [ Alternative
+                                { alternativeLabel =
+                                    Label {labelUUID = UUID "STARTER-ALT"}
+                                , alternativePatterns = []
+                                , alternativeExpression =
+                                    ConstantExpression
+                                      (Label {labelUUID = UUID "STARTER-EXPR"})
+                                      (Identifier {identifierString = "_"})
+                                }
+                              ]
+                          }
+                        ]
+                      ]
+                  })
+             , BindGroupDecl
+                 (Label {labelUUID = UUID "1"})
+                 (BindGroup
+                  { bindGroupExplicitlyTypedBindings = []
+                  , bindGroupImplicitlyTypedBindings =
+                      [ [ ImplicitlyTypedBinding
+                          { implicitlyTypedBindingLabel =
+                              Label {labelUUID = UUID "2"}
+                          , implicitlyTypedBindingId =
+                              ( Identifier {identifierString = "_"}
+                              , Label {labelUUID = UUID "3"})
+                          , implicitlyTypedBindingAlternatives =
+                              [ Alternative
+                                { alternativeLabel =
+                                    Label {labelUUID = UUID "4"}
+                                , alternativePatterns = []
+                                , alternativeExpression =
+                                    ConstantExpression
+                                      (Label {labelUUID = UUID "5"})
+                                      (Identifier {identifierString = "_"})
+                                }
+                              ]
+                          }
+                        ]
+                      ]
+                  })
+             ]
+       })
   ]
 
 valueTests :: [Test]

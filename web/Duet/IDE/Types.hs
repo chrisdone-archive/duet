@@ -26,6 +26,7 @@ data State = State
 data Node
   = ExpressionNode !(Expression Ignore Identifier Label)
   | DeclNode !(Decl Ignore Identifier Label)
+  | ModuleNode !Label ![Decl Ignore Identifier Label]
   | NameNode !(Identifier, Label)
   | OperatorNode !Label !Identifier
   | PatternNode !(Pattern Ignore Identifier Label)
@@ -39,6 +40,7 @@ nodeLabel :: Node -> Label
 nodeLabel =
   \case
     ExpressionNode e -> expressionLabel e
+    ModuleNode l _ -> l
     DeclNode d -> declLabel d
     NameNode (_, d) -> d
     OperatorNode l _ -> l

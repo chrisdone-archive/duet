@@ -94,6 +94,7 @@ isAtomicNode =
     OperatorNode {} -> True
     PatternNode p -> isAtomicPattern p
     AltNode {} -> False
+    ModuleNode {} -> False
 
 isAtomicPattern :: Pattern t i l -> Bool
 isAtomicPattern =
@@ -139,8 +140,9 @@ interpretReturn cursor uuid ast = do
                             (mapM
                                (\a ->
                                   if isChildOf (cursorUUID cursor) a
-                                    then do put True
-                                            pure [a, alt]
+                                    then do
+                                      put True
+                                      pure [a, alt]
                                     else pure [a])
                                alts))
                          False
@@ -165,9 +167,20 @@ interpretReturn cursor uuid ast = do
     goUp = do
       let mparent = findNodeParent uuid ast
       maybe
-        (pure ())
+        newDecl
         (flip (interpretReturn cursor) ast . labelUUID . nodeLabel)
         mparent
+    newDecl = do
+      (bid, bd) <- liftIO newBindDecl
+      modify
+        (\state ->
+           state
+           { stateAST =
+               case stateAST state of
+                 ModuleNode l ds -> ModuleNode l (ds ++ [bd])
+                 s -> s
+           , stateCursor = Cursor bid
+           })
 
 findExpression :: UUID -> Node -> Maybe (Expression Ignore Identifier Label)
 findExpression uuid =
@@ -760,6 +773,8 @@ findNodeParent uuid = goNode Nothing
                DeclNode d -> goDecl mparent d
                NameNode b -> goBinding mparent b
                PatternNode p -> goPat mparent p
+               ModuleNode _ ds ->
+                 foldr (<|>) Nothing (map (goDecl (Just node)) ds)
                _ -> Nothing
     goPat mparent p =
       if labelUUID (patternLabel p) == uuid
@@ -858,6 +873,7 @@ transformNode uuid f = goNode Nothing
                NameNode b -> fmap NameNode (goBinding mparent b)
                AltNode {} -> pure e
                OperatorNode {} -> pure e
+               ModuleNode l ds -> ModuleNode l <$> mapM (goDecl (Just l)) ds
     goBinding mparent b@(i, l) =
       if labelUUID l == uuid
         then do
@@ -878,9 +894,10 @@ transformNode uuid f = goNode Nothing
       case b of
         VariablePattern l i -> do
           (Identifier i', l') <- goBinding parent (i, l)
-          pure (if i' == "_"
-                  then WildcardPattern l' i'
-                  else VariablePattern l' (Identifier i'))
+          pure
+            (if i' == "_"
+               then WildcardPattern l' i'
+               else VariablePattern l' (Identifier i'))
         WildcardPattern l i -> do
           (Identifier i', l') <- goBinding parent (Identifier i, l)
           pure

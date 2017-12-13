@@ -44,32 +44,33 @@ makeState ident expr =
   State
   { stateCursor = Cursor {cursorUUID = uuidI}
   , stateAST =
-      DeclNode
-        (BindGroupDecl
-           (Label {labelUUID = uuidD})
-           (BindGroup
-            { bindGroupImplicitlyTypedBindings =
-                [ [ ImplicitlyTypedBinding
-                    { implicitlyTypedBindingLabel =
-                        Label (Flux.Persist.UUID "STARTER-BINDING")
-                    , implicitlyTypedBindingId = (Identifier ident, Label uuidI)
-                    , implicitlyTypedBindingAlternatives =
-                        [ Alternative
-                          { alternativeLabel =
-                              Label (Flux.Persist.UUID "STARTER-ALT")
-                          , alternativePatterns = []
-                          , alternativeExpression =
-                              expr
-                          }
-                        ]
-                    }
-                  ]
-                ]
-            , bindGroupExplicitlyTypedBindings = []
-            }))
+      ModuleNode
+        (Label (Flux.Persist.UUID "STARTER-MODULE"))
+        [ BindGroupDecl
+            (Label {labelUUID = uuidD})
+            (BindGroup
+             { bindGroupImplicitlyTypedBindings =
+                 [ [ ImplicitlyTypedBinding
+                     { implicitlyTypedBindingLabel =
+                         Label (Flux.Persist.UUID "STARTER-BINDING")
+                     , implicitlyTypedBindingId =
+                         (Identifier ident, Label uuidI)
+                     , implicitlyTypedBindingAlternatives =
+                         [ Alternative
+                           { alternativeLabel =
+                               Label (Flux.Persist.UUID "STARTER-ALT")
+                           , alternativePatterns = []
+                           , alternativeExpression = expr
+                           }
+                         ]
+                     }
+                   ]
+                 ]
+             , bindGroupExplicitlyTypedBindings = []
+             })
+        ]
   }
   where
-
     uuidD = Flux.Persist.UUID "STARTER-DECL"
     uuidI = Flux.Persist.UUID "STARTER-BINDING-ID"
 

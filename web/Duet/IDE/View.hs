@@ -44,6 +44,10 @@ renderNode cursor =
   \case
     ExpressionNode n -> renderExpression cursor n
     DeclNode d -> renderDecl cursor d
+    ModuleNode _ ds ->
+      mapM_
+        (\d -> renderDecl cursor d)
+        ds
     NameNode d -> renderBinding cursor d
     OperatorNode l d -> renderOperator cursor l d
     PatternNode p -> renderPattern cursor p
@@ -62,7 +66,7 @@ renderDecl cursor =
       renderWrap
         cursor
         label
-        "diet-bind-group"
+        "diet-bind-group duet-declaration"
         (mapM_ (mapM_ (renderImplicitBinding cursor)) implicit)
     _ -> pure ()
 

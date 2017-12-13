@@ -78,3 +78,33 @@ newParens :: IO (Expression Ignore Identifier Label)
 newParens = do
   uuid <- Flux.Persist.generateUUID
   ParensExpression (Label {labelUUID = uuid}) <$> newExpression
+
+newBindDecl :: IO (Flux.Persist.UUID,Decl Ignore Identifier Label)
+newBindDecl = do
+  bgd <- fmap Label Flux.Persist.generateUUID
+  implicitBinding <- fmap Label Flux.Persist.generateUUID
+  implicitBindingId <- Flux.Persist.generateUUID
+  alternativeId <- fmap Label Flux.Persist.generateUUID
+  expr <- newExpression
+  pure
+    ( implicitBindingId
+    , BindGroupDecl
+        bgd
+        (BindGroup
+         { bindGroupImplicitlyTypedBindings =
+             [ [ ImplicitlyTypedBinding
+                 { implicitlyTypedBindingLabel = implicitBinding
+                 , implicitlyTypedBindingId =
+                     (Identifier "_", Label implicitBindingId)
+                 , implicitlyTypedBindingAlternatives =
+                     [ Alternative
+                       { alternativeLabel = alternativeId
+                       , alternativePatterns = []
+                       , alternativeExpression = expr
+                       }
+                     ]
+                 }
+               ]
+             ]
+         , bindGroupExplicitlyTypedBindings = []
+         }))
