@@ -299,113 +299,128 @@ interpretBackspace cursor ast = do
     maybe
       (pure tweakedAST)
       (\uuid ->
-         transformExpression
+         transformNode
            uuid
            (const
-              (\en -> do
-                 case en of
-                   ParensExpression _ x
-                     | labelUUID (expressionLabel x) == cursorUUID cursor -> do
-                       w <- liftIO newExpression
-                       focusNode (expressionLabel w)
-                       pure w
-                   InfixExpression _ x (_, op) y
-                     | labelUUID (expressionLabel y) == cursorUUID cursor -> do
-                       focusNode (expressionLabel (rightMostExpression x))
-                       pure x
-                     | labelUUID (expressionLabel x) == cursorUUID cursor -> do
-                       focusNode (expressionLabel y)
-                       pure y
-                     | labelUUID (expressionLabel op) == cursorUUID cursor -> do
-                       w <- liftIO newExpression
-                       focusNode (expressionLabel w)
-                       pure w
-                   ApplicationExpression _ f x
-                     | labelUUID (expressionLabel x) == cursorUUID cursor -> do
-                       case f of
-                         ApplicationExpression _ _ arg ->
-                           focusNode (expressionLabel arg)
-                         _ -> focusNode (expressionLabel f)
-                       pure f
-                     | labelUUID (expressionLabel f) == cursorUUID cursor -> do
-                       focusNode (expressionLabel x)
-                       pure x
-                   CaseExpression _ e _
-                     | labelUUID (expressionLabel e) == cursorUUID cursor -> do
-                       w <- liftIO newExpression
-                       focusNode (expressionLabel w)
-                       pure w
-                   CaseExpression l e alts
-                     | any predicate alts -> do
-                       if length alts == 1
-                         then do
-                           w <- liftIO newExpression
-                           focusNode (expressionLabel w)
-                           pure w
-                         else do
-                           let focusCase = focusNode (expressionLabel e)
-                           case alts of
-                             [] -> focusCase
-                             _ ->
-                               let loop mlast [] =
-                                     maybe focusCase focusNode mlast
-                                   loop mlast (x:xs) =
-                                     if predicate x
-                                       then case mlast of
-                                              Nothing ->
-                                                maybe
-                                                  focusCase
-                                                  (focusNode .
-                                                   expressionLabel .
-                                                   caseAltExpression)
-                                                  (listToMaybe xs)
-                                              Just las -> focusNode (las)
-                                       else loop
-                                              (Just
-                                                 (expressionLabel
-                                                    (caseAltExpression x)))
-                                              xs
-                               in loop Nothing alts
-                           pure (CaseExpression l e alts')
-                     where alts' = filter (not . predicate) alts
-                           predicate =
-                             ((||) <$>
-                              ((== cursorUUID cursor) .
-                               (labelUUID . expressionLabel . caseAltExpression)) <*>
-                              ((== cursorUUID cursor) .
-                               (labelUUID . patternLabel . caseAltPattern)))
-                   IfExpression _ e f g
-                     | labelUUID (expressionLabel e) == cursorUUID cursor ||
-                         labelUUID (expressionLabel f) == cursorUUID cursor ||
-                         labelUUID (expressionLabel g) == cursorUUID cursor -> do
-                       w <- liftIO newExpression
-                       focusNode (expressionLabel w)
-                       pure w
-                   LambdaExpression _ (Alternative _ [p] _)
-                     | labelUUID (patternLabel p) == cursorUUID cursor -> do
-                       w <- liftIO newExpression
-                       focusNode (expressionLabel w)
-                       pure w
-                   LambdaExpression _ (Alternative _ _ body)
-                     | labelUUID (expressionLabel body) == cursorUUID cursor -> do
-                       w <- liftIO newExpression
-                       focusNode (expressionLabel w)
-                       pure w
-                   LambdaExpression l (Alternative l0 ps body)
-                     | any predicate ps -> do
-                       maybe
-                         (return ())
-                         (focusNode . patternLabel)
-                         (listToMaybe
-                            (reverse (takeWhile (not . predicate) ps) ++
-                             drop 1 (dropWhile (not . predicate) ps)))
-                       pure
-                         (LambdaExpression
-                            l
-                            (Alternative l0 (filter (not . predicate) ps) body))
-                     where predicate =
-                             (== cursorUUID cursor) . labelUUID . patternLabel
-                   e -> pure e))
+              (\node ->
+                 case node of
+                   ExpressionNode en ->
+                     fmap
+                       ExpressionNode
+                       (case en of
+                          ParensExpression _ x
+                            | labelUUID (expressionLabel x) == cursorUUID cursor -> do
+                              w <- liftIO newExpression
+                              focusNode (expressionLabel w)
+                              pure w
+                          InfixExpression _ x (_, op) y
+                            | labelUUID (expressionLabel y) == cursorUUID cursor -> do
+                              focusNode
+                                (expressionLabel (rightMostExpression x))
+                              pure x
+                            | labelUUID (expressionLabel x) == cursorUUID cursor -> do
+                              focusNode (expressionLabel y)
+                              pure y
+                            | labelUUID (expressionLabel op) ==
+                                cursorUUID cursor -> do
+                              w <- liftIO newExpression
+                              focusNode (expressionLabel w)
+                              pure w
+                          ApplicationExpression _ f x
+                            | labelUUID (expressionLabel x) == cursorUUID cursor -> do
+                              case f of
+                                ApplicationExpression _ _ arg ->
+                                  focusNode (expressionLabel arg)
+                                _ -> focusNode (expressionLabel f)
+                              pure f
+                            | labelUUID (expressionLabel f) == cursorUUID cursor -> do
+                              focusNode (expressionLabel x)
+                              pure x
+                          CaseExpression _ e _
+                            | labelUUID (expressionLabel e) == cursorUUID cursor -> do
+                              w <- liftIO newExpression
+                              focusNode (expressionLabel w)
+                              pure w
+                          CaseExpression l e alts
+                            | any predicate alts -> do
+                              if length alts == 1
+                                then do
+                                  w <- liftIO newExpression
+                                  focusNode (expressionLabel w)
+                                  pure w
+                                else do
+                                  let focusCase = focusNode (expressionLabel e)
+                                  case alts of
+                                    [] -> focusCase
+                                    _ ->
+                                      let loop mlast [] =
+                                            maybe focusCase focusNode mlast
+                                          loop mlast (x:xs) =
+                                            if predicate x
+                                              then case mlast of
+                                                     Nothing ->
+                                                       maybe
+                                                         focusCase
+                                                         (focusNode .
+                                                          expressionLabel .
+                                                          caseAltExpression)
+                                                         (listToMaybe xs)
+                                                     Just las -> focusNode (las)
+                                              else loop
+                                                     (Just
+                                                        (expressionLabel
+                                                           (caseAltExpression x)))
+                                                     xs
+                                      in loop Nothing alts
+                                  pure (CaseExpression l e alts')
+                            where alts' = filter (not . predicate) alts
+                                  predicate =
+                                    ((||) <$>
+                                     ((== cursorUUID cursor) .
+                                      (labelUUID .
+                                       expressionLabel . caseAltExpression)) <*>
+                                     ((== cursorUUID cursor) .
+                                      (labelUUID . patternLabel . caseAltPattern)))
+                          IfExpression _ e f g
+                            | labelUUID (expressionLabel e) == cursorUUID cursor ||
+                                labelUUID (expressionLabel f) ==
+                                cursorUUID cursor ||
+                                labelUUID (expressionLabel g) ==
+                                cursorUUID cursor -> do
+                              w <- liftIO newExpression
+                              focusNode (expressionLabel w)
+                              pure w
+                          LambdaExpression _ (Alternative _ [p] _)
+                            | labelUUID (patternLabel p) == cursorUUID cursor -> do
+                              w <- liftIO newExpression
+                              focusNode (expressionLabel w)
+                              pure w
+                          LambdaExpression _ (Alternative _ _ body)
+                            | labelUUID (expressionLabel body) ==
+                                cursorUUID cursor -> do
+                              w <- liftIO newExpression
+                              focusNode (expressionLabel w)
+                              pure w
+                          LambdaExpression l (Alternative l0 ps body)
+                            | any predicate ps -> do
+                              maybe
+                                (return ())
+                                (focusNode . patternLabel)
+                                (listToMaybe
+                                   (reverse (takeWhile (not . predicate) ps) ++
+                                    drop 1 (dropWhile (not . predicate) ps)))
+                              pure
+                                (LambdaExpression
+                                   l
+                                   (Alternative
+                                      l0
+                                      (filter (not . predicate) ps)
+                                      body))
+                            where predicate =
+                                    (== cursorUUID cursor) .
+                                    labelUUID . patternLabel
+                          e -> pure e)
+                   _ -> pure node))
            ast)
       parentOfDoomedChild
   modify (\s -> s {stateAST = astWithDeletion})
