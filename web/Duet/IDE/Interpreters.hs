@@ -617,26 +617,27 @@ interpretSpaceCompletion cursor ast = do
         case mparent of
           Just parentNode ->
             case parentNode of
-              ExpressionNode parent@(LambdaExpression l (Alternative l' ps b)) ->
-                let (before, after) =
-                      break
-                        ((== cursorUUID cursor) . labelUUID . patternLabel)
-                        ps
-                in do new <- liftIO newPattern
-                      focusNode (patternLabel new)
-                      transformNode
-                        (labelUUID (expressionLabel parent))
-                        (\_ _ ->
-                           pure
-                             (ExpressionNode
-                                (LambdaExpression
-                                   l
-                                   (Alternative
-                                      l'
-                                      (before ++
-                                       take 1 after ++ [new] ++ drop 1 after)
-                                      b))))
-                        ast
+              ExpressionNode parent@(LambdaExpression l (Alternative l' ps b))
+                | any ((== cursorUUID cursor) . labelUUID . patternLabel) ps ->
+                  let (before, after) =
+                        break
+                          ((== cursorUUID cursor) . labelUUID . patternLabel)
+                          ps
+                  in do new <- liftIO newPattern
+                        focusNode (patternLabel new)
+                        transformNode
+                          (labelUUID (expressionLabel parent))
+                          (\_ _ ->
+                             pure
+                               (ExpressionNode
+                                  (LambdaExpression
+                                     l
+                                     (Alternative
+                                        l'
+                                        (before ++
+                                         take 1 after ++ [new] ++ drop 1 after)
+                                        b))))
+                          ast
               ExpressionNode parent@(ApplicationExpression _ f _)
                 | cursorUUID cursor /= expressionUUID f ->
                   transformExpression

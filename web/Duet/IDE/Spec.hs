@@ -566,6 +566,32 @@ functionApplicationTests =
                (VariableExpression
                   (Label {labelUUID = UUID "1"})
                   (Identifier {identifierString = "x"})))))
+  , Test
+      "Add argument to application directly in a lambda (regression test)"
+      [ KeyPressAction '\\'
+      , KeyDownAction False RightKey
+      , KeyPressAction 'f'
+      , KeyPressAction ' '
+      ]
+      (focus
+         (UUID "5")
+         (rhsSelectedState
+            (LambdaExpression
+               (Label {labelUUID = UUID "1"})
+               (Alternative
+                { alternativeLabel = Label {labelUUID = UUID "2"}
+                , alternativePatterns =
+                    [WildcardPattern (Label {labelUUID = UUID "3"}) "_"]
+                , alternativeExpression =
+                    ApplicationExpression
+                      (Label {labelUUID = UUID "6"})
+                      (VariableExpression
+                         (Label {labelUUID = UUID "4"})
+                         (Identifier {identifierString = "f"}))
+                      (ConstantExpression
+                         (Label {labelUUID = UUID "5"})
+                         (Identifier {identifierString = "_"}))
+                }))))
   ]
 
 infixTests :: [Test]
