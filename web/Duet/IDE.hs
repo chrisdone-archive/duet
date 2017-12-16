@@ -106,7 +106,7 @@ instance Flux.StoreData State where
                           pure (binds, context))
                       [1 ..]))
                 (\e@(ContextException {}) -> pure (Left e))
-            when False (print result))
+            either (putStrLn . displayException) (const (pure ())) result)
     pure state'
 
 --------------------------------------------------------------------------------
