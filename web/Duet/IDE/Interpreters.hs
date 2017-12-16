@@ -3,17 +3,17 @@
 
 module Duet.IDE.Interpreters where
 
-import           Control.Applicative
-import           Control.Monad.IO.Class
-import           Control.Monad.State (StateT, get, put, modify, runStateT, runState)
-import           Control.Monad.Trans
-import           Data.Char
-import           Data.Generics (listify, everything, mkQ, extQ)
-import           Data.Maybe
-import           Duet.IDE.Constructors
-import           Duet.IDE.Types
-import           Duet.Types
-import           React.Flux.Persist (UUID)
+import Control.Applicative
+import Control.Monad.IO.Class
+import Control.Monad.State (StateT, get, put, modify, runStateT, runState)
+import Control.Monad.Trans
+import Data.Char
+import Data.Generics (listify, everything, mkQ, extQ)
+import Data.Maybe
+import Duet.IDE.Constructors
+import Duet.IDE.Types
+import Duet.Types
+import React.Flux.Persist (UUID)
 
 interpretAction :: Action -> StateT State IO ()
 interpretAction =
@@ -280,7 +280,15 @@ interpretBackspace cursor ast = do
                        pure e
                      _ -> pure e)
               NameNode (Identifier "_", _) -> do
-                put mparent
+                put
+                  (do binding <- mparent
+                      decl <- findNodeParent binding ast
+                      modul <- findNodeParent (nodeUUID decl) ast
+                      pure (nodeUUID modul))
+                liftIO
+                  (print
+                     (do parent <- mparent
+                         findNodeParent parent ast))
                 pure n
               NameNode (Identifier i, l) ->
                 pure
@@ -304,6 +312,16 @@ interpretBackspace cursor ast = do
            (const
               (\node ->
                  case node of
+                   ModuleNode l decls ->
+                     pure
+                       (ModuleNode
+                          l
+                          (filter
+                             (\case
+                                BindGroupDecl _ (BindGroup _ [[ImplicitlyTypedBinding _ (_, il) _]]) ->
+                                  labelUUID il /= cursorUUID cursor
+                                _ -> False)
+                             decls))
                    ExpressionNode en ->
                      fmap
                        ExpressionNode
@@ -807,10 +825,12 @@ findNodeParent uuid = goNode Nothing
                  foldr
                    (<|>)
                    Nothing
-                   (map (foldr (<|>) Nothing) (map (map (goIm mparent)) im))
+                   (map (foldr (<|>) Nothing) (map (map (goIm (Just (DeclNode d)))) im))
                _ -> Nothing
-    goIm mparent (ImplicitlyTypedBinding _ _ alts) =
-      foldr (<|>) Nothing (map (goAlt mparent) alts)
+    goIm mparent (ImplicitlyTypedBinding l _ alts) =
+      if labelUUID l == uuid
+         then mparent
+         else foldr (<|>) Nothing (map (goAlt mparent) alts)
     goAlt mparent (Alternative _ _ e) = go mparent e
     goCaseAlt mparent ca@(CaseAlt l p e) =
       if labelUUID l == uuid
