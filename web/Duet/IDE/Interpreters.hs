@@ -21,16 +21,6 @@ interpretAction =
     KeyPress k -> interpretKeyPress k
     KeyDown shift k -> interpretKeyDown shift k
     ReplaceState s -> put s
-    PutExpression e -> do
-      s <- get
-      case (stateAST s, stateCursor s) of
-        (ast, cursor) -> do
-          ast' <-
-            transformExpression
-              (cursorUUID cursor)
-              (const (const (pure e)))
-              ast
-          modify (\s' -> s' {stateAST = ast'})
     InsertChar c -> do
       s <- get
       case stateCursor s of

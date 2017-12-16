@@ -56,7 +56,6 @@ data Action
   | KeyDown !Bool !Keydown
   | KeyPress !Int
   | InsertChar !Char
-  | PutExpression !(Expression Ignore Identifier Label)
   deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 data Label = Label
