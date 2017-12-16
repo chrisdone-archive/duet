@@ -66,7 +66,7 @@ renderDecl cursor =
       renderWrap
         cursor
         label
-        "diet-bind-group duet-declaration"
+        "duet-bind-group duet-declaration"
         (mapM_ (mapM_ (renderImplicitBinding cursor)) implicit)
     _ -> pure ()
 
