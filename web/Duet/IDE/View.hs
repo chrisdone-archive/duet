@@ -59,7 +59,7 @@ renderOperator mcursor l op =
     ["className" @= "duet-op", "key" @= "op"]
     (renderExpression mcursor (VariableExpression l op))
 
-renderDecl :: Cursor -> Decl Ignore Identifier Label -> ReactElementM ViewEventHandler ()
+renderDecl :: Cursor -> Decl UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
 renderDecl cursor =
   \case
     BindGroupDecl label (BindGroup _ex implicit) ->
@@ -70,7 +70,7 @@ renderDecl cursor =
         (mapM_ (mapM_ (renderImplicitBinding cursor)) implicit)
     _ -> pure ()
 
-renderImplicitBinding :: Cursor -> ImplicitlyTypedBinding Ignore Identifier Label -> ReactElementM ViewEventHandler ()
+renderImplicitBinding :: Cursor -> ImplicitlyTypedBinding UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
 renderImplicitBinding cursor (ImplicitlyTypedBinding label binding a) =
   renderWrap
     cursor
@@ -89,7 +89,7 @@ renderBinding cursor (Identifier i, label') =
        else "")
     (Flux.elemText (T.pack i))
 
-renderAlternative :: Cursor -> Bool -> Maybe (Identifier, Label) -> Duet.Types.Alternative Ignore Identifier Label -> ReactElementM ViewEventHandler ()
+renderAlternative :: Cursor -> Bool -> Maybe (Identifier, Label) -> Duet.Types.Alternative UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
 renderAlternative cursor equals mbinding (Alternative label pats e) =
   renderWrap
     cursor
@@ -111,7 +111,7 @@ renderAlternative cursor equals mbinding (Alternative label pats e) =
 
 renderExpression
   :: Cursor
-  -> Expression Ignore Identifier Label
+  -> Expression UnkindedType Identifier Label
   -> ReactElementM ViewEventHandler ()
 renderExpression mcursor =
   \case
@@ -238,7 +238,7 @@ fargs e = go e []
     go (ApplicationExpression _ f x) args = go f (x : args)
     go f args = (f, args)
 
-renderExpressionIndented :: [Char] -> Cursor -> Expression Ignore Identifier Label -> ReactElementM ViewEventHandler ()
+renderExpressionIndented :: [Char] -> Cursor -> Expression UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
 renderExpressionIndented prefix mcursor e =
   if lineBreaks e
     then indented prefix (renderExpression mcursor e)
@@ -275,7 +275,7 @@ lineBreaks =
 
 parens
   :: String
-  -> Expression Ignore Identifier Label
+  -> Expression UnkindedType Identifier Label
   -> ReactElementM ViewEventHandler ()
   -> ReactElementM ViewEventHandler ()
 parens prefix e m =
@@ -306,7 +306,7 @@ atomic e =
 
 renderPattern
   :: Cursor
-  -> Pattern Ignore Identifier Label
+  -> Pattern UnkindedType Identifier Label
   -> ReactElementM ViewEventHandler ()
 renderPattern mcursor =
   \case

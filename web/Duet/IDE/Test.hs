@@ -47,7 +47,7 @@ interactionToAction =
     KeyDownAction s k -> KeyDown s k
     KeyPressAction k -> KeyPress (fromEnum k)
 
-rhsSelectedState :: Expression Ignore Identifier Label -> State
+rhsSelectedState :: Expression UnkindedType Identifier Label -> State
 rhsSelectedState e =
   (makeState initName e)
   {stateCursor = Cursor {cursorUUID = starterExprUUID}}

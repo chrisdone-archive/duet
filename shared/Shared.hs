@@ -25,9 +25,9 @@ import           Duet.Types
 -- | Setup the class environment.
 setupEnv
   :: (MonadThrow m, MonadSupply Int m)
-  => Map Name (Class Type Name Location)
+  => Map Name (Class Type Name ())
   -> [SpecialTypes Name -> m (DataType Type Name)]
-  -> m (Builtins Type Name Location)
+  -> m (Builtins Type Name ())
 setupEnv env typeMakers = do
   theArrow <- supplyTypeName "(->)"
   theChar <- supplyTypeName "Char"
@@ -92,16 +92,16 @@ setupEnv env typeMakers = do
          [ConstructorType (specialTypesString specialTypes)])
       [ ( "append"
         , Alternative
-            (Location 0 0 0 0)
+            ()
             []
             (VariableExpression
-               (Location 0 0 0 0)
+               ()
                (PrimopName PrimopStringAppend)))
       , ( "empty"
         , Alternative
-            (Location 0 0 0 0)
+            ()
             []
-            (LiteralExpression (Location 0 0 0 0) (StringLiteral "")))
+            (LiteralExpression () (StringLiteral "")))
       ]
   numInt <-
     makeInst
@@ -111,17 +111,17 @@ setupEnv env typeMakers = do
          [ConstructorType (specialTypesInteger specialTypes)])
       [ ( "times"
         , Alternative
-            (Location 0 0 0 0)
+            ()
             []
             (VariableExpression
-               (Location 0 0 0 0)
+               ()
                (PrimopName PrimopIntegerTimes)))
       , ( "plus"
         , Alternative
-            (Location 0 0 0 0)
+            ()
             []
             (VariableExpression
-               (Location 0 0 0 0)
+               ()
                (PrimopName PrimopIntegerPlus)))
       ]
   negInt <-
@@ -132,10 +132,10 @@ setupEnv env typeMakers = do
          [ConstructorType (specialTypesInteger specialTypes)])
       [ ( "subtract"
         , Alternative
-            (Location 0 0 0 0)
+            ()
             []
             (VariableExpression
-               (Location 0 0 0 0)
+               ()
                (PrimopName PrimopIntegerSubtract)))
       ]
   numRational <-
@@ -146,17 +146,17 @@ setupEnv env typeMakers = do
          [ConstructorType (specialTypesRational specialTypes)])
       [ ( "times"
         , Alternative
-            (Location 0 0 0 0)
+            ()
             []
             (VariableExpression
-               (Location 0 0 0 0)
+               ()
                (PrimopName PrimopRationalTimes)))
       , ( "plus"
         , Alternative
-            (Location 0 0 0 0)
+            ()
             []
             (VariableExpression
-               (Location 0 0 0 0)
+               ()
                (PrimopName PrimopRationalPlus)))
       ]
   negRational <-
@@ -167,10 +167,10 @@ setupEnv env typeMakers = do
          [ConstructorType (specialTypesRational specialTypes)])
       [ ( "subtract"
         , Alternative
-            (Location 0 0 0 0)
+            ()
             []
             (VariableExpression
-               (Location 0 0 0 0)
+               ()
                (PrimopName PrimopRationalSubtract)))
       ]
   fracRational <-
@@ -181,10 +181,10 @@ setupEnv env typeMakers = do
          [ConstructorType (specialTypesRational specialTypes)])
       [ ( "divide"
         , Alternative
-            (Location 0 0 0 0)
+            ()
             []
             (VariableExpression
-               (Location 0 0 0 0)
+               ()
                (PrimopName PrimopRationalDivide)))
       ]
   env' <-
@@ -211,7 +211,7 @@ setupEnv env typeMakers = do
 -- Builtin classes and primops
 
 makePrimOps
-  :: (MonadSupply Int m, MonadThrow m)
+  :: (MonadSupply Int m)
   => SpecialTypes Name -> m [TypeSignature Type Name Name]
 makePrimOps SpecialTypes {..} = do
   let sigs =

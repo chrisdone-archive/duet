@@ -575,6 +575,7 @@ renameExpression specials subs types = go
     go :: Expression t i l -> m (Expression Type Name l)
     go =
       \case
+        ParensExpression l e -> ParensExpression l <$> go e
         VariableExpression l i -> VariableExpression l <$> substituteVar subs i
         ConstructorExpression l i ->
           ConstructorExpression l <$> substituteCons subs i

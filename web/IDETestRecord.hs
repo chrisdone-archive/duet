@@ -44,7 +44,7 @@ main = do
                show
                  (head
                     (listify
-                       (const True :: Expression Ignore Identifier Label -> Bool)
+                       (const True :: Expression UnkindedType Identifier Label -> Bool)
                        (stateAST state))) ++
                ")))"
              ])

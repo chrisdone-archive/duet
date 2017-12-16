@@ -478,7 +478,7 @@ data Class (t :: * -> *) i l = Class
   , classInstances :: ![Instance t i l]
   , className :: i
   , classMethods :: Map i (Scheme t i t)
-  } deriving (Show, Generic, Data, Typeable)
+  } deriving (Show, Generic, Data, Typeable, Traversable, Foldable, Functor)
 
 -- | Class instance.
 instance (NFData (t i),  NFData l,NFData i) => NFData (Instance t i l)
@@ -487,7 +487,7 @@ instance (Ord i, ToJSON i,    FromJSON (t i),  FromJSON l,FromJSON i) => FromJSO
 data Instance (t :: * -> *) i l = Instance
   { instancePredicate :: !(Scheme t i (Predicate t))
   , instanceDictionary :: !(Dictionary t i l)
-  } deriving (Show, Generic, Data, Typeable)
+  } deriving (Show, Generic, Data, Typeable, Traversable, Foldable, Functor)
 
 instanceClassName :: Instance t1 i t -> i
 instanceClassName (Instance (Forall _ (Qualified _ (IsIn x _))) _) = x
@@ -603,7 +603,7 @@ data Builtins t i l = Builtins
   , builtinsSpecialTypes :: SpecialTypes i
   , builtinsSignatures :: [TypeSignature t i i]
   , builtinsTypeClasses :: Map i (Class t i l)
-  } deriving (Show, Generic, Data, Typeable)
+  } deriving (Show, Generic, Data, Typeable, Traversable, Foldable, Functor)
 
 data Token
   = If

@@ -152,7 +152,7 @@ interpretReturn cursor uuid ast = do
       not
         (null
            (listify
-              ((== candidateUUID) . expressionUUID :: Expression Ignore Identifier Label -> Bool)
+              ((== candidateUUID) . expressionUUID :: Expression UnkindedType Identifier Label -> Bool)
               parent))
     goUp = do
       let mparent = findNodeParent uuid ast
@@ -172,7 +172,7 @@ interpretReturn cursor uuid ast = do
            , stateCursor = Cursor bid
            })
 
-findExpression :: UUID -> Node -> Maybe (Expression Ignore Identifier Label)
+findExpression :: UUID -> Node -> Maybe (Expression UnkindedType Identifier Label)
 findExpression uuid =
   listToMaybe . listify ((== uuid) . labelUUID . expressionLabel)
 
@@ -531,7 +531,7 @@ interpretOperator c cursor ast = do
       modify (\s -> s {stateAST = ast''})
 
 -- | Peel off layers of apps and infix to the right-hand-side hole.
-peelLastHole :: Expression Ignore Identifier Label -> Expression Ignore Identifier Label
+peelLastHole :: Expression UnkindedType Identifier Label -> Expression UnkindedType Identifier Label
 peelLastHole =
   \case
     ApplicationExpression _ f (ConstantExpression _ (Identifier "_")) ->
@@ -543,8 +543,8 @@ peelLastHole =
 -- | Climb the tree, dropping while we're looking at parens.
 dropWhileParens ::
      Node
-  -> Expression Ignore Identifier Label
-  -> Expression Ignore Identifier Label
+  -> Expression UnkindedType Identifier Label
+  -> Expression UnkindedType Identifier Label
 dropWhileParens ast =
   \case
     e@(ParensExpression {}) ->
@@ -558,9 +558,9 @@ dropWhileParens ast =
 -- a * f [x] becomes a * [f x]
 -- f (k * [p]) remains f (k * [p])
 widenExpressionApps
-  :: Expression Ignore Identifier Label
+  :: Expression UnkindedType Identifier Label
   -> Node
-  -> Expression Ignore Identifier Label
+  -> Expression UnkindedType Identifier Label
 widenExpressionApps expression0 ast = go expression0
   where
     go expression =
@@ -583,9 +583,9 @@ widenExpressionApps expression0 ast = go expression0
 -- a * f [x] becomes [a * f x]
 -- f (k * [p]) becomes f ([k * p])
 widenExpressionInfixApps
-  :: Expression Ignore Identifier Label
+  :: Expression UnkindedType Identifier Label
   -> Node
-  -> Expression Ignore Identifier Label
+  -> Expression UnkindedType Identifier Label
 widenExpressionInfixApps expression0 ast = go True expression0
   where
     go ascendApplications expression =
@@ -699,10 +699,10 @@ orderedNodes =
        (extQ
           (mkQ
              []
-             (\(ImplicitlyTypedBinding _ bind@(_, _) _ :: ImplicitlyTypedBinding Ignore Identifier Label) ->
+             (\(ImplicitlyTypedBinding _ bind@(_, _) _ :: ImplicitlyTypedBinding UnkindedType Identifier Label) ->
                 [NameNode bind]))
-          (\(e :: Expression Ignore Identifier Label) -> [ExpressionNode e]))
-       (\(p :: Pattern Ignore Identifier Label) -> [PatternNode p]))
+          (\(e :: Expression UnkindedType Identifier Label) -> [ExpressionNode e]))
+       (\(p :: Pattern UnkindedType Identifier Label) -> [PatternNode p]))
 
 nodeHoles :: UUID -> Node -> [Label]
 nodeHoles base =
@@ -712,7 +712,7 @@ nodeHoles base =
        (extQ
           (mkQ
              []
-             (\(i :: ImplicitlyTypedBinding Ignore Identifier Label) ->
+             (\(i :: ImplicitlyTypedBinding UnkindedType Identifier Label) ->
                 case i of
                   ImplicitlyTypedBinding _ (Identifier "_", label) _ -> [label]
                   ImplicitlyTypedBinding _ (_, l) _
@@ -720,13 +720,13 @@ nodeHoles base =
                   ImplicitlyTypedBinding l _ _
                     | labelUUID l == base -> [l]
                   _ -> []))
-          (\(e :: Expression Ignore Identifier Label) ->
+          (\(e :: Expression UnkindedType Identifier Label) ->
              case e of
                ConstantExpression {} -> [expressionLabel e]
                _
                  | labelUUID (expressionLabel e) == base -> [expressionLabel e]
                  | otherwise -> []))
-       (\(p :: Pattern Ignore Identifier Label) ->
+       (\(p :: Pattern UnkindedType Identifier Label) ->
           case p of
             WildcardPattern l "_" -> [l]
             _
@@ -868,7 +868,7 @@ findNodeParent uuid = goNode Nothing
 transformExpression
   :: Monad m
   => UUID
-  -> (Maybe UUID -> Expression Ignore Identifier Label -> m (Expression Ignore Identifier Label))
+  -> (Maybe UUID -> Expression UnkindedType Identifier Label -> m (Expression UnkindedType Identifier Label))
   -> Node
   -> m Node
 transformExpression uuid f =
@@ -960,8 +960,8 @@ transformNode uuid f = goNode Nothing
       Alternative l <$> mapM (goPat mparent) ps <*> go mparent e
     go ::
          Maybe Label
-      -> Expression Ignore Identifier Label
-      -> m (Expression Ignore Identifier Label)
+      -> Expression UnkindedType Identifier Label
+      -> m (Expression UnkindedType Identifier Label)
     go mparent e =
       if labelUUID (expressionLabel e) == uuid
         then do
@@ -1017,5 +1017,5 @@ codeAsDigit i =
   where
     c = toEnum i
 
-rightMostExpression :: Expression Ignore Identifier Label -> Expression Ignore Identifier Label
+rightMostExpression :: Expression UnkindedType Identifier Label -> Expression UnkindedType Identifier Label
 rightMostExpression x = fromMaybe x (lastMaybe (listify (const True) x))

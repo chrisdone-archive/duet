@@ -7,16 +7,9 @@ module Duet.IDE.Types where
 import Control.DeepSeq
 import Data.Aeson
 import Data.Data
-import Duet.Printer (PrintableType(..))
 import Duet.Types
 import GHC.Generics
 import React.Flux.Persist (UUID)
-
-data Ignore a = Ignore
-  deriving (Generic, NFData, Show, FromJSON, ToJSON, Data, Typeable)
-
-instance PrintableType Ignore where
-  printType _ _ _ = ""
 
 data State = State
   { stateCursor :: !Cursor
@@ -24,13 +17,13 @@ data State = State
   } deriving (Generic, NFData, Show, FromJSON, ToJSON)
 
 data Node
-  = ExpressionNode !(Expression Ignore Identifier Label)
-  | DeclNode !(Decl Ignore Identifier Label)
-  | ModuleNode !Label ![Decl Ignore Identifier Label]
+  = ExpressionNode !(Expression UnkindedType Identifier Label)
+  | DeclNode !(Decl UnkindedType Identifier Label)
+  | ModuleNode !Label ![Decl UnkindedType Identifier Label]
   | NameNode !(Identifier, Label)
   | OperatorNode !Label !Identifier
-  | PatternNode !(Pattern Ignore Identifier Label)
-  | AltNode !(CaseAlt Ignore Identifier Label)
+  | PatternNode !(Pattern UnkindedType Identifier Label)
+  | AltNode !(CaseAlt UnkindedType Identifier Label)
   deriving (Generic, NFData, Show, FromJSON, ToJSON, Data, Typeable)
 
 nodeUUID :: Node -> UUID
