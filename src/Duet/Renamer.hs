@@ -231,7 +231,7 @@ renameClass specials subs types cls = do
 -- Instance renaming
 
 renameInstance
-  :: (MonadThrow m, MonadSupply Int m, Show l)
+  :: (MonadThrow m, MonadSupply Int m)
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
@@ -326,7 +326,7 @@ predicateToDict specials p =
 
 
 renamePredicate
-  :: (MonadThrow m, Typish (t i), Identifiable i, Ord i)
+  :: (MonadThrow m, Typish (t i), Identifiable i)
   => Specials Name
   -> Map Identifier Name
   -> [(Identifier, TypeVariable Name)]
@@ -347,7 +347,7 @@ _forceStarKind ty =
     _ -> throwM (MustBeStarKind ty (typeKind ty))
 
 renameScheme
-  :: (MonadSupply Int m, MonadThrow m, Identifiable i, Typish (t i), Ord i)
+  :: (MonadSupply Int m, MonadThrow m, Identifiable i, Typish (t i))
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
@@ -466,7 +466,7 @@ renameBindGroup  specials subs  types (BindGroup explicit implicit) = do
   pure (bindGroup', subs)
 
 getImplicitSubs
-  :: (MonadSupply Int m, Ord i, Identifiable i, MonadThrow m)
+  :: (MonadSupply Int m, Identifiable i, MonadThrow m)
   => Map Identifier Name
   -> [[ImplicitlyTypedBinding t i l]]
   -> m (Map Identifier Name)
@@ -480,7 +480,7 @@ getImplicitSubs subs implicit =
        (concat implicit))
 
 getExplicitSubs
-  :: (MonadSupply Int m, Ord i, Identifiable i, MonadThrow m)
+  :: (MonadSupply Int m, Identifiable i, MonadThrow m)
   => Map Identifier Name
   -> [ExplicitlyTypedBinding t i l]
   -> m (Map Identifier Name)
@@ -517,14 +517,8 @@ renameImplicit specials subs types (ImplicitlyTypedBinding l (id',l') alts) =
   do name <- substituteVar subs id'
      ImplicitlyTypedBinding l (name, l') <$> mapM (renameAlt specials subs types) alts
 
-renameAlt
-  :: ( MonadSupply Int m
-     , MonadThrow m
-     , Ord i
-     , Ord i
-     , Identifiable i
-     , Typish (t i)
-     )
+renameAlt ::
+     (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i, Typish (t i))
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
@@ -618,7 +612,7 @@ renameExpression specials subs types = go
 --------------------------------------------------------------------------------
 -- Provide a substitution
 
-substituteVar :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
+substituteVar :: (Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
 substituteVar subs i0 =
   case nonrenamableName i0 of
     Nothing -> do
@@ -632,7 +626,7 @@ substituteVar subs i0 =
           throwM (IdentifierNotInVarScope subs s)
     Just n -> pure n
 
-substituteClass :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
+substituteClass :: (Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
 substituteClass subs i0 =
   do i <- identifyValue i0
      case M.lookup i subs of
@@ -640,7 +634,7 @@ substituteClass subs i0 =
        _ -> do s <- identifyValue i
                throwM (IdentifierNotInClassScope subs s)
 
-substituteCons :: (Ord i, Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
+substituteCons :: (Identifiable i, MonadThrow m) => Map Identifier Name -> i -> m Name
 substituteCons subs i0 =
   do i <- identifyValue i0
      case M.lookup i subs of
