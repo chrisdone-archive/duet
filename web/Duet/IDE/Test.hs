@@ -79,11 +79,14 @@ runTest t0 = do
           resetUUID
           mapM_ (Flux.alterStore store . interactionToAction) actions
           actualState <- Flux.getStoreData store
-          if encode actualState == encode expectedState
+          if encode actualState {stateTypeCheck = Right ()} ==
+             encode expectedState {stateTypeCheck = Right ()}
             then pure ()
             else error
                    (unlines
                       [ "Test failed!"
-                      , "Expected state: " ++ show expectedState
-                      , "Actual state: " ++ show actualState
+                      , ""
+                      , "Expected state: " ++ show expectedState {stateTypeCheck = Right ()}
+                      , ""
+                      , "Actual state: " ++ show actualState {stateTypeCheck = Right ()}
                       ])

@@ -5,7 +5,6 @@ module Duet.IDE where
 
 import           Control.Concurrent
 import           Control.Monad.Catch
-import           Control.Monad.Except
 import           Control.Monad.State (execStateT)
 import           Control.Monad.Supply
 import           Data.Bifunctor
@@ -135,16 +134,14 @@ instance Exception ContextException where
 
 -- | Create a context of all renamed, checked and resolved code.
 createContext
-  :: (MonadSupply Int m, MonadIO m, MonadCatch m)
+  :: (MonadSupply Int m, MonadCatch m)
   => [Decl UnkindedType Identifier Label]
   -> m ([BindGroup Type Name (TypeSignature Type Name Label)], Context Type Name Label)
 createContext decls = do
   do builtins <-
        setupEnv mempty [] >>=
        traverse
-         (const
-            (do uuid <- liftIO Flux.Persist.generateUUID
-                pure (Label {labelUUID = uuid})))
+         (const (pure (Label {labelUUID = Flux.Persist.UUID "<GENERATED>"})))
      let specials = builtinsSpecials builtins
      catch
        (do (typeClasses, signatures, renamedBindings, scope, dataTypes) <-

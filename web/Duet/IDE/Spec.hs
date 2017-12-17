@@ -18,9 +18,10 @@ tests =
 lhsTests :: [Test]
 lhsTests =
   [ Test
-      "Hitting backspace when it's empty does nothing"
+      "Hitting backspace deletes decl"
       typeBackspace
       initState
+      {stateAST = ModuleNode (Label {labelUUID = UUID "STARTER-MODULE"}) []}
   , Test
       "Names are letters and numbers"
       (typeChars "foo")
@@ -36,6 +37,7 @@ lhsTests =
       [KeyDownAction False ReturnKey]
       (State
        { stateCursor = Cursor {cursorUUID = UUID "3"}
+       , stateTypeCheck = Right ()
        , stateAST =
            ModuleNode
              (Label {labelUUID = UUID "STARTER-MODULE"})
