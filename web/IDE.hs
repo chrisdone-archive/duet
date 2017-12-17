@@ -1,11 +1,13 @@
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ExtendedDefaultRules #-}
 
 -- | IDE itself.
 
 module Main where
 
 import           Control.Monad
+import qualified Data.Text as T
 import           Duet.IDE
 import           Duet.IDE.Types
 import           Duet.IDE.View
@@ -34,11 +36,19 @@ main = do
   Flux.Events.onBodyKeypress
     (\key -> do
        when False (print ("keypress", key))
+
        Flux.alterStore store (KeyPress key))
   Flux.reactRender
     "app"
     (Flux.defineControllerView
        "State"
        store
-       (\state () -> renderModule (stateCursor state) (stateAST state)))
+       (\state () -> do
+          case stateTypeCheck state of
+            Right () -> pure ()
+            Left msg ->
+              Flux.pre_
+                ["className" Flux.@= "duet-error-msg"]
+                (Flux.elemText (T.pack msg))
+          renderModule (stateCursor state) (stateAST state)))
     ()

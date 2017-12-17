@@ -154,6 +154,13 @@ display: block;
 .duet-bind-group + .duet-bind-group {
 margin-top: 1em;
 }
+.duet-error-msg {
+    background: #ffc;
+    border: 1px solid #e0b741;
+    border-radius: 0.3em;
+    padding: 0.5em;
+    color: #8d6e12;
+}
 .duet-editor-COMMENTED {
 border: 2px solid #eee;
 border-radius: 0.25em;
@@ -188,13 +195,20 @@ function resetUUID(){ids=0}
   </head>
   <body>
     <!-- <h1><img src="duet.png" style="height: 3em; "></h1> -->
-    <!-- <p>Duet is an educational dialect of Haskell aimed at -->
-    <!-- interactivity. This is a demonstration page of the -->
-    <!-- work-in-progress structured editor. Currently, you can write one -->
-    <!-- declaration with an expression in it.</p> -->
-    <!-- <p>The <a href="http://chrisdone.com/toys/duet-delta/">previous -->
-    <!-- demonstration release</a> demonstrated the type-checker and -->
-    <!-- evaluator.</p> -->
+    <p>Duet is an educational dialect of Haskell aimed at
+    interactivity. This is a demonstration page of the
+    work-in-progress structured editor. The [previous upload was
+    duet-delta](http://chrisdone.com/toys/duet-delta/). Currently, you can
+    write value declarations in it. Only integer numbers are supported
+    in the editor presently; you can't write strings and there are no
+    data types available.</p>
+    <p>The <a href="http://chrisdone.com/toys/duet-delta/">previous
+    demonstration release</a> demonstrated the type-checker and
+    evaluator.</p>
+    <p>
+      Presently, compilation messages are displayed above as you
+      type. I will making these part of the structured editor.
+    </p>
     <div id="app" class="duet-editor"></div>
     <script language="javascript" src="all.js"></script>
   </body>

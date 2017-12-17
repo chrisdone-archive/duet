@@ -8,6 +8,7 @@ import           Control.Monad.Catch
 import           Control.Monad.Except
 import           Control.Monad.State (execStateT)
 import           Control.Monad.Supply
+import           Data.Bifunctor
 import           Data.Typeable
 import           Duet.Context
 import           Duet.Errors
@@ -52,6 +53,7 @@ makeState :: String -> Expression UnkindedType Identifier Label -> State
 makeState ident expr =
   State
   { stateCursor = Cursor {cursorUUID = uuidI}
+  , stateTypeCheck = Right ()
   , stateAST =
       ModuleNode
         (Label (Flux.Persist.UUID "STARTER-MODULE"))
@@ -91,23 +93,20 @@ instance Flux.StoreData State where
   transform action state = do
     state' <- execStateT (interpretAction action) state
     _ <- forkIO (Flux.Persist.setAppStateVal state')
-    _ <-
-      forkIO
-        (do result <-
-              catch
-                (fmap
-                   Right
-                   (evalSupplyT
-                      (do (binds, context) <-
-                            createContext
-                              (case stateAST state' of
-                                 ModuleNode _ ds -> ds
-                                 _ -> [])
-                          pure (binds, context))
-                      [1 ..]))
-                (\e@(ContextException {}) -> pure (Left e))
-            either (putStrLn . displayException) (const (pure ())) result)
-    pure state'
+    result <-
+      catch
+        (fmap
+           (Right . const ())
+           (evalSupplyT
+              (do (binds, context) <-
+                    createContext
+                      (case stateAST state' of
+                         ModuleNode _ ds -> ds
+                         _ -> [])
+                  pure (binds, context))
+              [1 ..]))
+        (\e@(ContextException {}) -> pure (Left e))
+    pure state' {stateTypeCheck = bimap displayException id result}
 
 --------------------------------------------------------------------------------
 -- Context setup
@@ -123,13 +122,13 @@ instance Exception ContextException where
             (maybe
                (maybe
                   (displayException se)
-                  (displayRenamerException specialTypes)
+                  (("Renaming problem:\n" ++) . displayRenamerException specialTypes)
                   (cast se))
-               (displayInferException specialTypes)
+               (("Type checking problem:\n" ++) . displayInferException specialTypes)
                (cast se))
-            (displayStepperException specialTypes)
+            (("Stepping problem:\n" ++) . displayStepperException specialTypes)
             (cast se))
-         (displayResolveException specialTypes)
+         (("Instance resolving problem:\n" ++) . displayResolveException specialTypes)
          (cast se))
       displayParseException
       (cast se)

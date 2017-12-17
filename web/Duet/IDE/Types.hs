@@ -5,8 +5,10 @@
 module Duet.IDE.Types where
 
 import Control.DeepSeq
+import Control.Exception
 import Data.Aeson
 import Data.Data
+import Duet.Context
 import Duet.Types
 import GHC.Generics
 import React.Flux.Persist (UUID)
@@ -14,7 +16,9 @@ import React.Flux.Persist (UUID)
 data State = State
   { stateCursor :: !Cursor
   , stateAST :: !Node
+  , stateTypeCheck :: Either String ()
   } deriving (Generic, NFData, Show, FromJSON, ToJSON)
+
 
 data Node
   = ExpressionNode !(Expression UnkindedType Identifier Label)
