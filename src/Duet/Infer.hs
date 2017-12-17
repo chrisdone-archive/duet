@@ -82,26 +82,23 @@ typeCheckModule
   -> SpecialTypes Name -- ^ Special types that Haskell uses for pattern matching and literals.
   -> [BindGroup Type Name l] -- ^ Bindings in the module.
   -> m ([BindGroup Type Name (TypeSignature Type Name l)], Map Name (Class Type Name (TypeSignature Type Name l)))
-typeCheckModule ce as specialTypes bgs =
-  evalStateT
-    (runInferT $ do
-       instanceBgs <- classMethodsToGroups specialTypes ce
-       (ps, _, bgs') <-
-         inferSequenceTypes
-           inferBindGroupTypes
-           ce
-           as
-           (bgs ++ instanceBgs)
-       s <- InferT (gets inferStateSubstitutions)
-       let rs = reduce ce (map (substitutePredicate s) ps)
-       s' <- defaultSubst ce [] rs
-       let bgsFinal = map (fmap (substituteTypeSignature (s' @@ s))) bgs'
-       ce' <- collectMethods bgsFinal ce
-       return
-         ( bgsFinal
-         , ce'
-          ))
-    (InferState nullSubst 0 specialTypes)
+typeCheckModule ce as specialTypes bgs0 = do
+  (bgs, classes) <- runTypeChecker bgs0
+  pure (bgs, classes)
+  where
+    runTypeChecker bgs =
+      evalStateT
+        (runInferT $ do
+           instanceBgs <- classMethodsToGroups specialTypes ce
+           (ps, _, bgs') <-
+             inferSequenceTypes inferBindGroupTypes ce as (bgs ++ instanceBgs)
+           s <- InferT (gets inferStateSubstitutions)
+           let rs = reduce ce (map (substitutePredicate s) ps)
+           s' <- defaultSubst ce [] rs
+           let bgsFinal = map (fmap (substituteTypeSignature (s' @@ s))) bgs'
+           ce' <- collectMethods bgsFinal ce
+           return (bgsFinal, ce'))
+        (InferState nullSubst 0 specialTypes)
 
 collectMethods
   :: MonadThrow m
