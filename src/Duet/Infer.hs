@@ -75,15 +75,16 @@ import           Duet.Types
 -- ["id :: forall a0. a0 -> a0"]
 --
 -- Throws 'InferException' in case of a type error.
-typeCheckModule
-  :: (MonadThrow m, Show l)
+typeCheckModule ::
+     (MonadThrow m, Show l)
   => Map Name (Class Type Name l) -- ^ Set of defined type-classes.
   -> [(TypeSignature Type Name Name)] -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
   -> SpecialTypes Name -- ^ Special types that Haskell uses for pattern matching and literals.
-  -> [BindGroup Type Name l] -- ^ Bindings in the module.
-  -> m ([BindGroup Type Name (TypeSignature Type Name l)], Map Name (Class Type Name (TypeSignature Type Name l)))
+  -> [Binding Type Name l] -- ^ Bindings in the module.
+  -> m ( [BindGroup Type Name (TypeSignature Type Name l)]
+       , Map Name (Class Type Name (TypeSignature Type Name l)))
 typeCheckModule ce as specialTypes bgs0 = do
-  (bgs, classes) <- runTypeChecker bgs0
+  (bgs, classes) <- runTypeChecker (dependencyAnalysis bgs0)
   pure (bgs, classes)
   where
     runTypeChecker bgs =
@@ -99,6 +100,12 @@ typeCheckModule ce as specialTypes bgs0 = do
            ce' <- collectMethods bgsFinal ce
            return (bgsFinal, ce'))
         (InferState nullSubst 0 specialTypes)
+
+-- | Sort the list of bindings by order of no-dependencies first
+-- followed by things that depend on them. Group bindings that are
+-- mutually recursive.
+dependencyAnalysis :: [Binding t Name l] -> [BindGroup t Name l]
+dependencyAnalysis = undefined
 
 collectMethods
   :: MonadThrow m

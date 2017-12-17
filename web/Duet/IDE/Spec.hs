@@ -41,58 +41,47 @@ lhsTests =
        , stateAST =
            ModuleNode
              (Label {labelUUID = UUID "STARTER-MODULE"})
-             [ BindGroupDecl
+             [ BindDecl
                  (Label {labelUUID = UUID "STARTER-DECL"})
-                 (BindGroup
-                  { bindGroupExplicitlyTypedBindings = []
-                  , bindGroupImplicitlyTypedBindings =
-                      [ [ ImplicitlyTypedBinding
-                          { implicitlyTypedBindingLabel =
-                              Label {labelUUID = UUID "STARTER-BINDING"}
-                          , implicitlyTypedBindingId =
-                              ( Identifier {identifierString = "_"}
-                              , Label {labelUUID = UUID "STARTER-BINDING-ID"})
-                          , implicitlyTypedBindingAlternatives =
-                              [ Alternative
-                                { alternativeLabel =
-                                    Label {labelUUID = UUID "STARTER-ALT"}
-                                , alternativePatterns = []
-                                , alternativeExpression =
-                                    ConstantExpression
-                                      (Label {labelUUID = UUID "STARTER-EXPR"})
-                                      (Identifier {identifierString = "_"})
-                                }
-                              ]
-                          }
-                        ]
-                      ]
-                  })
-             , BindGroupDecl
+                 (ImplicitBinding
+                    (ImplicitlyTypedBinding
+                     { implicitlyTypedBindingLabel =
+                         Label {labelUUID = UUID "STARTER-BINDING"}
+                     , implicitlyTypedBindingId =
+                         ( Identifier {identifierString = "_"}
+                         , Label {labelUUID = UUID "STARTER-BINDING-ID"})
+                     , implicitlyTypedBindingAlternatives =
+                         [ Alternative
+                           { alternativeLabel =
+                               Label {labelUUID = UUID "STARTER-ALT"}
+                           , alternativePatterns = []
+                           , alternativeExpression =
+                               ConstantExpression
+                                 (Label {labelUUID = UUID "STARTER-EXPR"})
+                                 (Identifier {identifierString = "_"})
+                           }
+                         ]
+                     }))
+             , BindDecl
                  (Label {labelUUID = UUID "1"})
-                 (BindGroup
-                  { bindGroupExplicitlyTypedBindings = []
-                  , bindGroupImplicitlyTypedBindings =
-                      [ [ ImplicitlyTypedBinding
-                          { implicitlyTypedBindingLabel =
-                              Label {labelUUID = UUID "2"}
-                          , implicitlyTypedBindingId =
-                              ( Identifier {identifierString = "_"}
-                              , Label {labelUUID = UUID "3"})
-                          , implicitlyTypedBindingAlternatives =
-                              [ Alternative
-                                { alternativeLabel =
-                                    Label {labelUUID = UUID "4"}
-                                , alternativePatterns = []
-                                , alternativeExpression =
-                                    ConstantExpression
-                                      (Label {labelUUID = UUID "5"})
-                                      (Identifier {identifierString = "_"})
-                                }
-                              ]
-                          }
-                        ]
-                      ]
-                  })
+                 (ImplicitBinding
+                    (ImplicitlyTypedBinding
+                     { implicitlyTypedBindingLabel =
+                         Label {labelUUID = UUID "2"}
+                     , implicitlyTypedBindingId =
+                         ( Identifier {identifierString = "_"}
+                         , Label {labelUUID = UUID "3"})
+                     , implicitlyTypedBindingAlternatives =
+                         [ Alternative
+                           { alternativeLabel = Label {labelUUID = UUID "4"}
+                           , alternativePatterns = []
+                           , alternativeExpression =
+                               ConstantExpression
+                                 (Label {labelUUID = UUID "5"})
+                                 (Identifier {identifierString = "_"})
+                           }
+                         ]
+                     }))
              ]
        })
   ]

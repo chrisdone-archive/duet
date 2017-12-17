@@ -28,7 +28,7 @@ renderModule cursor node = do
           (Flux.elemText
              (T.pack
                 (case node of
-                   DeclNode (BindGroupDecl _ (BindGroup _ [[i]])) ->
+                   DeclNode (BindDecl _ (ImplicitBinding i)) ->
                      printImplicitlyTypedBinding defaultPrint i
                    _ -> "Nothing available to print.")))))
   when
@@ -62,12 +62,12 @@ renderOperator mcursor l op =
 renderDecl :: Cursor -> Decl UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
 renderDecl cursor =
   \case
-    BindGroupDecl label (BindGroup _ex implicit) ->
+    BindDecl label (ImplicitBinding implicit) ->
       renderWrap
         cursor
         label
-        "duet-bind-group duet-declaration"
-        (mapM_ (mapM_ (renderImplicitBinding cursor)) implicit)
+        "duet-declaration"
+        (renderImplicitBinding cursor implicit)
     _ -> pure ()
 
 renderImplicitBinding :: Cursor -> ImplicitlyTypedBinding UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()

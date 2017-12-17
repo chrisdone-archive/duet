@@ -34,16 +34,25 @@ instance ( ToJSON l, ToJSON i, ToJSON (t i)) => ToJSON (Decl t i l)
 instance (Ord i, ToJSON i,   FromJSON l, FromJSON i, FromJSON (t i)) => FromJSON (Decl t i l)
 data Decl t i l
   = DataDecl l (DataType t i)
-  | BindGroupDecl l (BindGroup t i l)
+  -- | BindGroupDecl l (BindGroup t i l)
+  | BindDecl l (Binding t i l)
   | ClassDecl l (Class t i l)
   | InstanceDecl l (Instance t i l)
+  deriving (Show, Generic, Data, Typeable)
+
+instance (NFData l, NFData i, NFData (t i)) => NFData (Binding t i l)
+instance (ToJSON l, ToJSON i, ToJSON (t i)) => ToJSON (Binding t i l)
+instance (Ord i, ToJSON i,   FromJSON l, FromJSON i, FromJSON (t i)) => FromJSON (Binding t i l)
+data Binding t i l
+  = ImplicitBinding (ImplicitlyTypedBinding t i l)
+  | ExplicitBinding (ExplicitlyTypedBinding t i l)
   deriving (Show, Generic, Data, Typeable)
 
 declLabel :: Decl t i l -> l
 declLabel =
   \case
     DataDecl l _ -> l
-    BindGroupDecl l _ -> l
+    BindDecl l _ -> l
     ClassDecl l _ -> l
     InstanceDecl l _ -> l
 

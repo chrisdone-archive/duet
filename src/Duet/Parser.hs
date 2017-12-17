@@ -542,27 +542,24 @@ varfundeclExplicit =
           e <- expParser
           _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
           pure
-            ( BindGroupDecl loc
-                (BindGroup
-                   [ (ExplicitlyTypedBinding
-                        (Identifier (T.unpack v))
-                        scheme
-                        [makeAlt loc e])
-                   ]
-                   [[]]))
+            (BindDecl
+               loc
+               (ExplicitBinding
+                  (ExplicitlyTypedBinding
+                     (Identifier (T.unpack v))
+                     scheme
+                     [makeAlt loc e])))
         Equals -> do
           e <- expParser
           _ <- (pure () <* satisfyToken (== NonIndentedNewline)) <|> endOfTokens
           pure
-            (BindGroupDecl loc
-               (BindGroup
-                  []
-                  [ [ ImplicitlyTypedBinding
-                        loc
-                        (Identifier (T.unpack v0), loc)
-                        [makeAlt loc e]
-                    ]
-                  ]))
+            (BindDecl
+               loc
+               (ImplicitBinding
+                  (ImplicitlyTypedBinding
+                     loc
+                     (Identifier (T.unpack v0), loc)
+                     [makeAlt loc e])))
         t -> unexpected (tokenStr t)
 
 

@@ -19,6 +19,7 @@
 
 module Duet.Renamer
   ( renameDataTypes
+  , renameBindings
   , renameBindGroups
   , renameExpression
   , renameClass
@@ -439,7 +440,7 @@ renameBindGroups
   -> [DataType Type Name]
   -> [BindGroup UnkindedType i l]
   -> m ([BindGroup Type Name l], Map Identifier Name)
-renameBindGroups specials subs  types groups = do
+renameBindGroups specials subs types groups = do
   subs' <-
     fmap
       mconcat
@@ -448,9 +449,40 @@ renameBindGroups specials subs  types groups = do
             implicit' <- getImplicitSubs subs implicit
             explicit' <- getExplicitSubs subs explicit
             pure (explicit' <> implicit'))
-         groups
-       )
-  fmap (second mconcat . unzip) (mapM (renameBindGroup specials subs'  types) groups)
+         groups)
+  fmap
+    (second mconcat . unzip)
+    (mapM (renameBindGroup specials subs' types) groups)
+
+renameBindings
+  :: (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i, Typish (t i))
+  => Specials Name
+  -> Map Identifier Name
+  -> [DataType Type Name]
+  -> [Binding t i l]
+  -> m ([Binding Type Name l], Map Identifier Name)
+renameBindings specials subs types bindings = do
+  subs' <-
+    fmap
+      ((<> subs) . M.fromList)
+      (mapM
+         (\case
+            ExplicitBinding (ExplicitlyTypedBinding i _ _) -> do
+              v <- identifyValue i
+              fmap (v, ) (supplyValueName i)
+            ImplicitBinding (ImplicitlyTypedBinding _ (i, _) _) -> do
+              v <- identifyValue i
+              fmap (v, ) (supplyValueName i))
+         bindings)
+  bindings' <-
+    mapM
+      (\case
+         ExplicitBinding e ->
+           ExplicitBinding <$> renameExplicit specials subs' types e
+         ImplicitBinding i ->
+           ImplicitBinding <$> renameImplicit specials subs' types i)
+      bindings
+  pure (bindings', subs')
 
 renameBindGroup
   :: (MonadSupply Int m, MonadThrow m, Ord i, Identifiable i, Typish (t i))
@@ -490,7 +522,6 @@ getExplicitSubs subs explicit =
     (mapM
        (\(ExplicitlyTypedBinding i _ _) -> do
           v <- identifyValue i
-
           fmap (v, ) (supplyValueName i))
        explicit)
 

@@ -308,7 +308,7 @@ interpretBackspace cursor ast = do
                           l
                           (filter
                              (\case
-                                BindGroupDecl _ (BindGroup _ [[ImplicitlyTypedBinding _ (_, il) _]]) ->
+                                BindDecl _ (ImplicitBinding (ImplicitlyTypedBinding _ (_, il) _)) ->
                                   labelUUID il /= cursorUUID cursor
                                 _ -> False)
                              decls))
@@ -811,16 +811,12 @@ findNodeParent uuid = goNode Nothing
       if labelUUID (declLabel d) == uuid
         then mparent
         else case d of
-               BindGroupDecl _ (BindGroup _ im) ->
-                 foldr
-                   (<|>)
-                   Nothing
-                   (map (foldr (<|>) Nothing) (map (map (goIm (Just (DeclNode d)))) im))
+               BindDecl _ (ImplicitBinding im) -> goIm (Just (DeclNode d)) im
                _ -> Nothing
     goIm mparent (ImplicitlyTypedBinding l _ alts) =
       if labelUUID l == uuid
-         then mparent
-         else foldr (<|>) Nothing (map (goAlt mparent) alts)
+        then mparent
+        else foldr (<|>) Nothing (map (goAlt mparent) alts)
     goAlt mparent (Alternative _ _ e) = go mparent e
     goCaseAlt mparent ca@(CaseAlt l p e) =
       if labelUUID l == uuid
@@ -946,15 +942,11 @@ transformNode uuid f = goNode Nothing
             DeclNode d' -> pure d'
             _ -> pure d
         else case d of
-               BindGroupDecl l (BindGroup ex im) ->
-                 BindGroupDecl l <$>
-                 (BindGroup ex <$>
-                  mapM
-                    (mapM
-                       (\(ImplicitlyTypedBinding l' i alts) ->
-                          ImplicitlyTypedBinding l' <$> goBinding (Just l') i <*>
-                          mapM (goAlt (Just l')) alts))
-                    im)
+               BindDecl l (ImplicitBinding (ImplicitlyTypedBinding l' i alts)) ->
+                 BindDecl l <$>
+                 (ImplicitBinding <$>
+                  (ImplicitlyTypedBinding l' <$> goBinding (Just l') i <*>
+                   mapM (goAlt (Just l')) alts))
                _ -> pure d
     goAlt mparent (Alternative l ps e) =
       Alternative l <$> mapM (goPat mparent) ps <*> go mparent e

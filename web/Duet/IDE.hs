@@ -56,28 +56,22 @@ makeState ident expr =
   , stateAST =
       ModuleNode
         (Label (Flux.Persist.UUID "STARTER-MODULE"))
-        [ BindGroupDecl
+        [ BindDecl
             (Label {labelUUID = uuidD})
-            (BindGroup
-             { bindGroupImplicitlyTypedBindings =
-                 [ [ ImplicitlyTypedBinding
-                     { implicitlyTypedBindingLabel =
-                         Label (Flux.Persist.UUID "STARTER-BINDING")
-                     , implicitlyTypedBindingId =
-                         (Identifier ident, Label uuidI)
-                     , implicitlyTypedBindingAlternatives =
-                         [ Alternative
-                           { alternativeLabel =
-                               Label (Flux.Persist.UUID "STARTER-ALT")
-                           , alternativePatterns = []
-                           , alternativeExpression = expr
-                           }
-                         ]
-                     }
-                   ]
-                 ]
-             , bindGroupExplicitlyTypedBindings = []
-             })
+            (ImplicitBinding
+               (ImplicitlyTypedBinding
+                { implicitlyTypedBindingLabel =
+                    Label (Flux.Persist.UUID "STARTER-BINDING")
+                , implicitlyTypedBindingId = (Identifier ident, Label uuidI)
+                , implicitlyTypedBindingAlternatives =
+                    [ Alternative
+                      { alternativeLabel =
+                          Label (Flux.Persist.UUID "STARTER-ALT")
+                      , alternativePatterns = []
+                      , alternativeExpression = expr
+                      }
+                    ]
+                }))
         ]
   }
   where

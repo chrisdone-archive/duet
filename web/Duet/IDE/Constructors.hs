@@ -88,23 +88,18 @@ newBindDecl = do
   expr <- newExpression
   pure
     ( implicitBindingId
-    , BindGroupDecl
+    , BindDecl
         bgd
-        (BindGroup
-         { bindGroupImplicitlyTypedBindings =
-             [ [ ImplicitlyTypedBinding
-                 { implicitlyTypedBindingLabel = implicitBinding
-                 , implicitlyTypedBindingId =
-                     (Identifier "_", Label implicitBindingId)
-                 , implicitlyTypedBindingAlternatives =
-                     [ Alternative
-                       { alternativeLabel = alternativeId
-                       , alternativePatterns = []
-                       , alternativeExpression = expr
-                       }
-                     ]
-                 }
-               ]
-             ]
-         , bindGroupExplicitlyTypedBindings = []
-         }))
+        (ImplicitBinding
+           (ImplicitlyTypedBinding
+            { implicitlyTypedBindingLabel = implicitBinding
+            , implicitlyTypedBindingId =
+                (Identifier "_", Label implicitBindingId)
+            , implicitlyTypedBindingAlternatives =
+                [ Alternative
+                  { alternativeLabel = alternativeId
+                  , alternativePatterns = []
+                  , alternativeExpression = expr
+                  }
+                ]
+            })))

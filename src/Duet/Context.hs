@@ -122,7 +122,7 @@ makeScope typeClasses signatures =
           signatures) <>
      M.map className typeClasses)
 
-renameEverything :: (Show l1, MonadThrow m, MonadSupply Int m) => [Decl UnkindedType Identifier l1] -> Specials Name -> Builtins Type Name l -> m (M.Map Identifier (Class Type Name l1), [TypeSignature Type Name Name], [BindGroup Type Name l1], M.Map Identifier Name, [DataType Type Name])
+renameEverything :: (MonadThrow m, MonadSupply Int m) => [Decl UnkindedType Identifier l1] -> Specials Name -> Builtins Type Name l -> m (M.Map Identifier (Class Type Name l1), [TypeSignature Type Name Name], [Binding Type Name l1], M.Map Identifier Name, [DataType Type Name])
 renameEverything decls specials builtins = do
   dataTypes <- renameDataTypes specials (declsDataTypes decls)
   (typeClasses, signatures, subs) <-
@@ -152,7 +152,7 @@ renameEverything decls specials builtins = do
              typeClasses
          , signatures
          , scope)
-  (renamedBindings, subs') <- renameBindGroups specials subs dataTypes bindings
+  (renamedBindings, subs') <- renameBindings specials subs dataTypes bindings
   pure (typeClasses, signatures, renamedBindings, subs', dataTypes)
   where declsDataTypes =
           mapMaybe
@@ -162,7 +162,7 @@ renameEverything decls specials builtins = do
         bindings =
           mapMaybe
             (\case
-               BindGroupDecl _ d -> Just d
+               BindDecl _ d -> Just d
                _ -> Nothing)
             decls
         classes =
