@@ -272,6 +272,7 @@ substitute i arg = go
           | otherwise -> VariableExpression l i'
         x@ConstructorExpression {} -> x
         x@ConstantExpression {} -> x
+        ParensExpression _ e -> go e
         ApplicationExpression l f x -> ApplicationExpression l (go f) (go x)
         InfixExpression l x (s, f) y -> InfixExpression l (go x) (s, go f) (go y)
         LetExpression {} -> error "let expressions unsupported."
@@ -306,7 +307,7 @@ lookupName identifier binds =
       listToMaybe
         (mapMaybe
            (\case
-              ExplicitlyTypedBinding _ i _ [Alternative _ [] e]
+              ExplicitlyTypedBinding _ (i, _) _ [Alternative _ [] e]
                 | i == identifier -> Just e
               _ -> Nothing)
            es)
@@ -332,7 +333,7 @@ lookupNameByString identifier binds =
       listToMaybe
         (mapMaybe
            (\case
-              ExplicitlyTypedBinding _ (ValueName _ i) _ [Alternative _ [] e]
+              ExplicitlyTypedBinding _ (ValueName _ i, _) _ [Alternative _ [] e]
                 | i == identifier -> Just e
               _ -> Nothing)
            es)

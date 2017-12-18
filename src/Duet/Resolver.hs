@@ -20,9 +20,8 @@ import           Duet.Printer
 import           Duet.Supply
 import           Duet.Types
 
-
 resolveTypeClasses
-  :: (Show l, MonadSupply Int f, MonadThrow f)
+  :: (MonadSupply Int f, MonadThrow f)
   => Map Name (Class Type Name (TypeSignature Type Name l))
   -> SpecialTypes Name
   -> f (Map Name (Class Type Name (TypeSignature Type Name l)))
@@ -51,7 +50,7 @@ resolveTypeClasses typeClasses specialTypes = go typeClasses
       M.toList
 
 resolveBindGroup
-  :: (MonadSupply Int m, MonadThrow m ,Show l)
+  :: (MonadSupply Int m, MonadThrow m)
   => Map Name (Class Type Name (TypeSignature Type Name l))
   -> SpecialTypes Name
   -> BindGroup Type Name (TypeSignature Type Name l)
@@ -62,7 +61,7 @@ resolveBindGroup classes specialTypes (BindGroup explicit implicit) = do
   pure (BindGroup explicits implicits)
 
 resolveImplicit
-  :: (MonadSupply Int m, MonadThrow m ,Show l)
+  :: (MonadSupply Int m, MonadThrow m)
   => Map Name (Class Type Name (TypeSignature Type Name l))
   -> SpecialTypes Name
   -> ImplicitlyTypedBinding Type Name (TypeSignature Type Name l)
@@ -71,7 +70,7 @@ resolveImplicit classes specialTypes (ImplicitlyTypedBinding l name alts) =
   ImplicitlyTypedBinding l name <$> mapM (resolveAlt classes specialTypes) alts
 
 resolveExplicit
-  :: (MonadSupply Int m, MonadThrow m ,Show l)
+  :: (MonadSupply Int m, MonadThrow m)
   => Map Name (Class Type Name (TypeSignature Type Name l))
   -> SpecialTypes Name
   -> ExplicitlyTypedBinding Type Name (TypeSignature Type Name l)

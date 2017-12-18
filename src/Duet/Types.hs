@@ -52,7 +52,7 @@ bindingIdentifier :: Binding t i l -> i
 bindingIdentifier =
   \case
     ImplicitBinding i -> fst (implicitlyTypedBindingId i)
-    ExplicitBinding i -> explicitlyTypedBindingId i
+    ExplicitBinding i -> fst (explicitlyTypedBindingId i)
 
 bindingAlternatives :: Binding t i l -> [Alternative t i l]
 bindingAlternatives =
@@ -309,7 +309,7 @@ instance (ToJSON (t i),  ToJSON l,ToJSON i) => ToJSON (ExplicitlyTypedBinding t 
 instance (FromJSON (t i),  FromJSON l,FromJSON i) => FromJSON (ExplicitlyTypedBinding t i l)
 data ExplicitlyTypedBinding t i l = ExplicitlyTypedBinding
   { explicitlyTypedBindingLabel :: l
-  , explicitlyTypedBindingId :: !i
+  , explicitlyTypedBindingId :: !(i, l)
   , explicitlyTypedBindingScheme :: !(Scheme t i t)
   , explicitlyTypedBindingAlternatives :: ![(Alternative t i l)]
   } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
@@ -522,6 +522,8 @@ data Dictionary (t :: * -> *) i l = Dictionary
   { dictionaryName :: i
   , dictionaryMethods :: Map i (l, Alternative t i l)
   } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
+
+
 
 -- | A type constructor.
 instance (NFData i) => NFData (TypeConstructor i)

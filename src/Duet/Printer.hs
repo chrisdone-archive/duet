@@ -121,7 +121,7 @@ printImplicitlyTypedBinding _ _ = ""
 printExplicitlyTypedBinding
   :: (Printable i, PrintableType t)
   => Print i l -> SpecialTypes i -> ExplicitlyTypedBinding t i l -> String
-printExplicitlyTypedBinding printer specialTypes (ExplicitlyTypedBinding _ i scheme [alt]) =
+printExplicitlyTypedBinding printer specialTypes (ExplicitlyTypedBinding _ (i, _) scheme [alt]) =
   printIdentifier printer i ++ " :: " ++ printScheme printer specialTypes scheme ++ "\n" ++
   printIdentifier printer i ++ " " ++ printAlternative printer alt
 printExplicitlyTypedBinding _ _ _ = ""

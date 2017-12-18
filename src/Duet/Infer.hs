@@ -178,7 +178,7 @@ collectMethods binds =
                    listToMaybe
                      (mapMaybe
                         (\i ->
-                           if explicitlyTypedBindingId i == key
+                           if fst (explicitlyTypedBindingId i) == key
                              then listToMaybe
                                     (explicitlyTypedBindingAlternatives i)
                              else Nothing)
@@ -205,8 +205,10 @@ classMethodsToGroups specialTypes =
                sequence
                  (zipWith
                     (\methodScheme (instMethodName, (l, methodAlt)) ->
-                       ExplicitlyTypedBinding <$> pure l <*> pure instMethodName <*>
-                       instanceMethodScheme specialTypes
+                       ExplicitlyTypedBinding <$> pure l <*>
+                       pure (instMethodName, l) <*>
+                       instanceMethodScheme
+                         specialTypes
                          class'
                          methodScheme
                          (instancePredicate inst) <*>
@@ -316,13 +318,16 @@ inferExplicitlyTypedBindingType
   -> [TypeSignature Type Name Name]
   -> (ExplicitlyTypedBinding Type Name l)
   -> InferT m ([Predicate Type Name], ExplicitlyTypedBinding Type Name (TypeSignature Type Name l))
-inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding l identifier sc alts) = do
+inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding l (identifier, l') sc alts) = do
   (Qualified qs t) <- freshInst sc
   (ps, alts') <- inferAltTypes ce as alts t
   s <- InferT (gets inferStateSubstitutions)
   let qs' = map (substitutePredicate s) qs
       t' = substituteType s t
-      fs = getTypeVariablesOf getTypeSignatureTypeVariables (map (substituteTypeSignature s) as)
+      fs =
+        getTypeVariablesOf
+          getTypeSignatureTypeVariables
+          (map (substituteTypeSignature s) as)
       gs = getTypeTypeVariables t' \\ fs
       sc' = quantify gs (Qualified qs' t')
       ps' = filter (not . entail ce qs') (map (substitutePredicate s) ps)
@@ -331,7 +336,13 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding l identifier sc al
     then throwM (ExplicitTypeMismatch sc sc')
     else if not (null rs)
            then throwM ContextTooWeak
-           else return (ds, ExplicitlyTypedBinding (TypeSignature l sc) identifier sc alts')
+           else return
+                  ( ds
+                  , ExplicitlyTypedBinding
+                      (TypeSignature l sc)
+                      (identifier, TypeSignature l' sc)
+                      sc
+                      alts')
 
 -- | Are two type schemes alpha-equivalent?
 schemesEquivalent :: Scheme Type Name Type ->  Scheme Type Name Type -> Bool
@@ -424,7 +435,7 @@ inferBindGroupTypes
   -> (BindGroup Type Name l)
   -> InferT m ([Predicate Type Name], [(TypeSignature Type Name Name)], BindGroup Type Name (TypeSignature Type Name l))
 inferBindGroupTypes ce as (BindGroup es iss) = do
-  let as' = [TypeSignature v sc | ExplicitlyTypedBinding _ v sc _alts <- es]
+  let as' = [TypeSignature v sc | ExplicitlyTypedBinding _ (v, _) sc _alts <- es]
   (ps, as'', iss') <-
     inferSequenceTypes0 inferImplicitlyTypedBindingsTypes ce (as' ++ as) iss
   qss <- mapM (inferExplicitlyTypedBindingType ce (as'' ++ as' ++ as)) es

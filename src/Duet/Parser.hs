@@ -546,7 +546,7 @@ varfundeclExplicit =
                loc
                (ExplicitBinding
                   (ExplicitlyTypedBinding loc
-                     (Identifier (T.unpack v))
+                     (Identifier (T.unpack v), loc)
                      scheme
                      [makeAlt loc e])))
         Equals -> do
