@@ -79,7 +79,7 @@ newParens = do
   uuid <- Flux.Persist.generateUUID
   ParensExpression (Label {labelUUID = uuid}) <$> newExpression
 
-newBindDecl :: IO (Flux.Persist.UUID,Decl UnkindedType Identifier Label)
+newBindDecl :: IO (UUID,Decl UnkindedType Identifier Label)
 newBindDecl = do
   bgd <- fmap Label Flux.Persist.generateUUID
   implicitBinding <- fmap Label Flux.Persist.generateUUID

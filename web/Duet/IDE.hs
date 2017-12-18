@@ -45,8 +45,8 @@ initExpression :: forall (t :: * -> *) i. Expression t i Label
 initExpression =
   (ConstantExpression (Label {labelUUID = starterExprUUID}) (Identifier "_"))
 
-starterExprUUID :: Flux.Persist.UUID
-starterExprUUID = Flux.Persist.UUID "STARTER-EXPR"
+starterExprUUID :: UUID
+starterExprUUID = UUID "STARTER-EXPR"
 
 makeState :: String -> Expression UnkindedType Identifier Label -> State
 makeState ident expr =
@@ -55,18 +55,18 @@ makeState ident expr =
   , stateTypeCheck = Right ()
   , stateAST =
       ModuleNode
-        (Label (Flux.Persist.UUID "STARTER-MODULE"))
+        (Label (UUID "STARTER-MODULE"))
         [ BindDecl
             (Label {labelUUID = uuidD})
             (ImplicitBinding
                (ImplicitlyTypedBinding
                 { implicitlyTypedBindingLabel =
-                    Label (Flux.Persist.UUID "STARTER-BINDING")
+                    Label (UUID "STARTER-BINDING")
                 , implicitlyTypedBindingId = (Identifier ident, Label uuidI)
                 , implicitlyTypedBindingAlternatives =
                     [ Alternative
                       { alternativeLabel =
-                          Label (Flux.Persist.UUID "STARTER-ALT")
+                          Label (UUID "STARTER-ALT")
                       , alternativePatterns = []
                       , alternativeExpression = expr
                       }
@@ -75,8 +75,8 @@ makeState ident expr =
         ]
   }
   where
-    uuidD = Flux.Persist.UUID "STARTER-DECL"
-    uuidI = Flux.Persist.UUID "STARTER-BINDING-ID"
+    uuidD = UUID "STARTER-DECL"
+    uuidI = UUID "STARTER-BINDING-ID"
 
 --------------------------------------------------------------------------------
 -- Model
@@ -135,7 +135,7 @@ createContext decls = do
   do builtins <-
        setupEnv mempty [] >>=
        traverse
-         (const (pure (Label {labelUUID = Flux.Persist.UUID "<GENERATED>"})))
+         (const (pure (Label {labelUUID = UUID "<GENERATED>"})))
      let specials = builtinsSpecials builtins
      catch
        (do (typeClasses, signatures, renamedBindings, scope, dataTypes) <-

@@ -9,7 +9,6 @@ import Data.Aeson
 import Data.Data
 import Duet.Types
 import GHC.Generics
-import React.Flux.Persist (UUID)
 
 data State = State
   { stateCursor :: !Cursor
@@ -52,10 +51,6 @@ data Action
   | KeyPress !Int
   | InsertChar !Char
   deriving (Generic, NFData, Show, FromJSON, ToJSON)
-
-data Label = Label
-  { labelUUID :: UUID
-  } deriving (Generic, NFData, Show, FromJSON, ToJSON, Data, Typeable)
 
 data Keydown
   = BackspaceKey

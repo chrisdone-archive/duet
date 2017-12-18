@@ -13,7 +13,6 @@ import Data.Maybe
 import Duet.IDE.Constructors
 import Duet.IDE.Types
 import Duet.Types
-import React.Flux.Persist (UUID)
 
 interpretAction :: Action -> StateT State IO ()
 interpretAction =

@@ -9,15 +9,11 @@
 module React.Flux.Persist where
 
 import Control.Concurrent
-import Control.DeepSeq
 import Control.Exception
 import Data.Aeson
 import Data.Aeson.Types
-import Data.Data
 import Data.JSString
-import Data.Typeable
-import GHC.Generics
-import GHCJS.Foreign.Callback
+import Duet.Types (UUID(..))
 import GHCJS.Marshal (FromJSVal(..), ToJSVal(..), toJSVal_aeson)
 import GHCJS.Types (JSVal, JSString)
 
@@ -63,9 +59,6 @@ foreign import javascript unsafe "window['resetUUID']()"
 
 resetUUID :: IO ()
 resetUUID = js_resetUUID
-
-newtype UUID = UUID String
-  deriving (Ord, Eq, Show, NFData, FromJSON, ToJSON, Generic, Data, Typeable)
 
 generateUUID :: IO UUID
 generateUUID = UUID . unpack <$> js_generateUUID

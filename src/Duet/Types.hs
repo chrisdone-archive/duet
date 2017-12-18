@@ -200,6 +200,19 @@ data StepException
   deriving (Typeable, Show)
 instance Exception StepException
 
+data Label = Label
+  { labelUUID :: UUID
+  } deriving (Generic, Show, Data, Typeable, Eq, Ord)
+instance NFData Label
+instance FromJSON Label
+instance ToJSON Label
+
+newtype UUID = UUID String
+  deriving (Ord, Eq, Show, Generic, Data, Typeable)
+instance NFData UUID
+instance FromJSON UUID
+instance ToJSON UUID
+
 instance NFData (RenamerException)
 instance ToJSON (RenamerException)
 instance FromJSON (RenamerException)
