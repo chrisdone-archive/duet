@@ -288,7 +288,7 @@ instancedecl =
               _ <- equalToken Equals <?> "‘=’ for method declaration e.g. x = 1"
               e <- expParser
               setState u
-              pure (Identifier (T.unpack v), makeAlt (expressionLabel e) e)
+              pure (Identifier (T.unpack v), (p, makeAlt (expressionLabel e) e))
 
 parseType :: Stream s m (Token, Location) => ParsecT s Int m (UnkindedType Identifier)
 parseType = do
@@ -545,7 +545,7 @@ varfundeclExplicit =
             (BindDecl
                loc
                (ExplicitBinding
-                  (ExplicitlyTypedBinding
+                  (ExplicitlyTypedBinding loc
                      (Identifier (T.unpack v))
                      scheme
                      [makeAlt loc e])))

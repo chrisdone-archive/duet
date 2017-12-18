@@ -93,17 +93,17 @@ data Print i l = Print
   , printNameDetails :: Bool
   }
 
-printDataType :: (Eq i, Printable i , PrintableType t) => Print i l -> SpecialTypes i -> DataType t i -> String
+printDataType :: (Printable i, PrintableType t) => Print i l -> SpecialTypes i -> DataType t i -> String
 printDataType printer specialTypes (DataType name vars cons) =
   "data " ++ printit printer name ++ " " ++ unwords (map (printTypeVariable printer) vars) ++ "\n  = " ++
     intercalate "\n  | " (map (printConstructor printer specialTypes) cons)
 
-printConstructor :: (Eq i, Printable i, PrintableType t) => Print i l ->  SpecialTypes i -> DataTypeConstructor t i -> [Char]
+printConstructor :: (Printable i, PrintableType t) => Print i l ->  SpecialTypes i -> DataTypeConstructor t i -> [Char]
 printConstructor printer specialTypes (DataTypeConstructor name fields) =
   printit printer name ++ " " ++ unwords (map (printType printer specialTypes) fields)
 
 printTypeSignature
-  :: (Printable i, Printable j, Eq i)
+  :: (Printable i, Printable j)
   => Print i l ->  SpecialTypes i -> TypeSignature Type i j -> String
 printTypeSignature printer specialTypes (TypeSignature thing scheme) =
   printit printer thing ++ " :: " ++ printScheme printer specialTypes scheme
@@ -121,12 +121,12 @@ printImplicitlyTypedBinding _ _ = ""
 printExplicitlyTypedBinding
   :: (Printable i, PrintableType t)
   => Print i l -> SpecialTypes i -> ExplicitlyTypedBinding t i l -> String
-printExplicitlyTypedBinding printer specialTypes (ExplicitlyTypedBinding i scheme [alt]) =
+printExplicitlyTypedBinding printer specialTypes (ExplicitlyTypedBinding _ i scheme [alt]) =
   printIdentifier printer i ++ " :: " ++ printScheme printer specialTypes scheme ++ "\n" ++
   printIdentifier printer i ++ " " ++ printAlternative printer alt
 printExplicitlyTypedBinding _ _ _ = ""
 
-printAlternative :: (Eq i, Printable i, PrintableType t) => Print i l -> Alternative t i l -> [Char]
+printAlternative :: (Printable i, PrintableType t) => Print i l -> Alternative t i l -> [Char]
 printAlternative printer (Alternative _ patterns expression) =
   concat (map (\p->printPattern printer p ++ " ") patterns) ++ "= " ++ printExpression printer expression
 
@@ -140,7 +140,7 @@ printPattern printer =
     ConstructorPattern _ i pats ->
       printIdentifier printer i ++ " " ++ unwords (map (printPattern printer) pats)
 
-printExpression :: (Printable i, Eq i, PrintableType t) => Print i l -> (Expression t i l) -> String
+printExpression :: (Printable i, PrintableType t) => Print i l -> (Expression t i l) -> String
 printExpression printer e =
   wrapType
     (case e of
@@ -291,7 +291,7 @@ printLiteral (RationalLiteral i) = printf "%f" (fromRational i :: Double)
 printLiteral (StringLiteral x) = show x
 printLiteral (CharacterLiteral x) = show x
 
-printScheme :: (Printable i, Eq i, PrintableType t, PrintableType t1) => Print i l -> SpecialTypes i -> Scheme t i t1 -> [Char]
+printScheme :: (Printable i, PrintableType t, PrintableType t1) => Print i l -> SpecialTypes i -> Scheme t i t1 -> [Char]
 printScheme printer specialTypes (Forall kinds qualifiedType') =
   (if null kinds
      then ""
@@ -348,7 +348,7 @@ printSupers printer specialTypes supers
     "(" ++ intercalate ", " (map (printPredicate printer specialTypes) supers) ++ ") => "
 
 
-printPredicate :: (Eq i, Printable i, PrintableType t) => Print i l -> SpecialTypes i -> Predicate t i -> [Char]
+printPredicate :: (Printable i, PrintableType t) => Print i l -> SpecialTypes i -> Predicate t i -> [Char]
 printPredicate printer specialTypes (IsIn identifier types) =
   printIdentifier printer identifier ++
   " " ++ unwords (map (wrap . printType printer specialTypes) types)
@@ -362,7 +362,7 @@ printKind =
     StarKind -> "Type"
     FunctionKind x' y -> printKind x' ++ " -> " ++ printKind y
 
-printTypeSansParens :: (Printable i, Eq i) => Print i l ->  SpecialTypes i -> Type i -> [Char]
+printTypeSansParens :: (Printable i) => Print i l ->  SpecialTypes i -> Type i -> [Char]
 printTypeSansParens printer specialTypes =
   \case
     ApplicationType (ApplicationType func x') y'

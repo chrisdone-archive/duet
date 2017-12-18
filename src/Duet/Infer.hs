@@ -1,5 +1,6 @@
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE FlexibleContexts #-}
-
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -139,8 +140,8 @@ bindingsGraph =
               _ -> False)
            (bindingAlternatives binding)))
 
-collectMethods
-  :: MonadThrow m
+collectMethods ::
+     forall l m. MonadThrow m
   => [BindGroup Type Name (TypeSignature Type Name l)]
   -> Map Name (Class Type Name l)
   -> m (Map Name (Class Type Name (TypeSignature Type Name l)))
@@ -153,23 +154,7 @@ collectMethods binds =
            (\inst -> do
               methods <-
                 mapM
-                  (\(key, _oldAlt) ->
-                     case listToMaybe
-                            (mapMaybe
-                               (\(BindGroup ex _) ->
-                                  listToMaybe
-                                    (mapMaybe
-                                       (\i ->
-                                          if explicitlyTypedBindingId i ==
-                                             key
-                                            then listToMaybe
-                                                   (explicitlyTypedBindingAlternatives
-                                                      i)
-                                            else Nothing)
-                                       ex))
-                               binds) of
-                       Just alt -> pure (key, alt)
-                       Nothing -> throwM MissingMethod)
+                  collectMethod
                   (M.toList (dictionaryMethods (instanceDictionary inst)))
               pure
                 inst
@@ -180,7 +165,31 @@ collectMethods binds =
            (classInstances cls)
        pure (name, cls {classInstances = insts})) .
   M.toList
-
+  where
+    collectMethod ::
+         (Name, (l, t))
+      -> m ( Name
+           , ( TypeSignature Type Name l
+             , Alternative Type Name (TypeSignature Type Name l)))
+    collectMethod (key, (l, _)) =
+      case listToMaybe
+             (mapMaybe
+                (\(BindGroup ex _) ->
+                   listToMaybe
+                     (mapMaybe
+                        (\i ->
+                           if explicitlyTypedBindingId i == key
+                             then listToMaybe
+                                    (explicitlyTypedBindingAlternatives i)
+                             else Nothing)
+                        ex))
+                binds) of
+        Just alt ->
+          pure
+            ( key
+            , ( TypeSignature l (typeSignatureScheme (alternativeLabel alt))
+              , alt))
+        Nothing -> throwM MissingMethod
 
 classMethodsToGroups
   :: MonadThrow m
@@ -195,8 +204,8 @@ classMethodsToGroups specialTypes =
             (\inst ->
                sequence
                  (zipWith
-                    (\methodScheme (instMethodName, methodAlt) ->
-                       ExplicitlyTypedBinding <$> pure instMethodName <*>
+                    (\methodScheme (instMethodName, (l, methodAlt)) ->
+                       ExplicitlyTypedBinding <$> pure l <*> pure instMethodName <*>
                        instanceMethodScheme specialTypes
                          class'
                          methodScheme
@@ -307,7 +316,7 @@ inferExplicitlyTypedBindingType
   -> [TypeSignature Type Name Name]
   -> (ExplicitlyTypedBinding Type Name l)
   -> InferT m ([Predicate Type Name], ExplicitlyTypedBinding Type Name (TypeSignature Type Name l))
-inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding identifier sc alts) = do
+inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding l identifier sc alts) = do
   (Qualified qs t) <- freshInst sc
   (ps, alts') <- inferAltTypes ce as alts t
   s <- InferT (gets inferStateSubstitutions)
@@ -322,7 +331,7 @@ inferExplicitlyTypedBindingType ce as (ExplicitlyTypedBinding identifier sc alts
     then throwM (ExplicitTypeMismatch sc sc')
     else if not (null rs)
            then throwM ContextTooWeak
-           else return (ds, ExplicitlyTypedBinding identifier sc alts')
+           else return (ds, ExplicitlyTypedBinding (TypeSignature l sc) identifier sc alts')
 
 -- | Are two type schemes alpha-equivalent?
 schemesEquivalent :: Scheme Type Name Type ->  Scheme Type Name Type -> Bool
@@ -415,7 +424,7 @@ inferBindGroupTypes
   -> (BindGroup Type Name l)
   -> InferT m ([Predicate Type Name], [(TypeSignature Type Name Name)], BindGroup Type Name (TypeSignature Type Name l))
 inferBindGroupTypes ce as (BindGroup es iss) = do
-  let as' = [TypeSignature v sc | ExplicitlyTypedBinding v sc _alts <- es]
+  let as' = [TypeSignature v sc | ExplicitlyTypedBinding _ v sc _alts <- es]
   (ps, as'', iss') <-
     inferSequenceTypes0 inferImplicitlyTypedBindingsTypes ce (as' ++ as) iss
   qss <- mapM (inferExplicitlyTypedBindingType ce (as'' ++ as' ++ as)) es

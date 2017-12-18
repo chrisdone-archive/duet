@@ -310,10 +310,10 @@ renameDict specials subs types (Dictionary _ methods) predicate = do
     fmap
       M.fromList
       (mapM
-         (\(n, alt) -> do
+         (\(n, (l, alt)) -> do
             n' <- supplyMethodName n
             alt' <- renameAlt specials subs  types alt
-            pure (n', alt'))
+            pure (n', (l, alt')))
          (M.toList methods))
   pure (Dictionary name' methods')
 
@@ -467,7 +467,7 @@ renameBindings specials subs types bindings = do
       ((<> subs) . M.fromList)
       (mapM
          (\case
-            ExplicitBinding (ExplicitlyTypedBinding i _ _) -> do
+            ExplicitBinding (ExplicitlyTypedBinding _ i _ _) -> do
               v <- identifyValue i
               fmap (v, ) (supplyValueName i)
             ImplicitBinding (ImplicitlyTypedBinding _ (i, _) _) -> do
@@ -520,7 +520,7 @@ getExplicitSubs subs explicit =
   fmap
     ((<> subs) . M.fromList)
     (mapM
-       (\(ExplicitlyTypedBinding i _ _) -> do
+       (\(ExplicitlyTypedBinding _ i _ _) -> do
           v <- identifyValue i
           fmap (v, ) (supplyValueName i))
        explicit)
@@ -532,9 +532,9 @@ renameExplicit
   -> [DataType Type Name]
   -> ExplicitlyTypedBinding t i l
   -> m (ExplicitlyTypedBinding Type Name l)
-renameExplicit specials subs  types (ExplicitlyTypedBinding i scheme alts) = do
+renameExplicit specials subs  types (ExplicitlyTypedBinding l i scheme alts) = do
   name <- substituteVar subs i
-  ExplicitlyTypedBinding name <$> renameScheme specials subs  types scheme <*>
+  ExplicitlyTypedBinding l name <$> renameScheme specials subs  types scheme <*>
     mapM (renameAlt specials subs  types) alts
 
 renameImplicit

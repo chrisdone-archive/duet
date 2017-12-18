@@ -308,7 +308,8 @@ instance (NFData (t i),  NFData l,NFData i) => NFData (ExplicitlyTypedBinding t 
 instance (ToJSON (t i),  ToJSON l,ToJSON i) => ToJSON (ExplicitlyTypedBinding t i l)
 instance (FromJSON (t i),  FromJSON l,FromJSON i) => FromJSON (ExplicitlyTypedBinding t i l)
 data ExplicitlyTypedBinding t i l = ExplicitlyTypedBinding
-  { explicitlyTypedBindingId :: !i
+  { explicitlyTypedBindingLabel :: l
+  , explicitlyTypedBindingId :: !i
   , explicitlyTypedBindingScheme :: !(Scheme t i t)
   , explicitlyTypedBindingAlternatives :: ![(Alternative t i l)]
   } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
@@ -519,7 +520,7 @@ instance ( ToJSON (t i),  ToJSON l,ToJSON i) => ToJSON (Dictionary t i l)
 instance (Ord i, ToJSON i,    FromJSON (t i),  FromJSON l,FromJSON i) => FromJSON (Dictionary t i l)
 data Dictionary (t :: * -> *) i l = Dictionary
   { dictionaryName :: i
-  , dictionaryMethods :: Map i (Alternative t i l)
+  , dictionaryMethods :: Map i (l, Alternative t i l)
   } deriving (Show, Generic, Data, Typeable, Functor, Traversable, Foldable, Eq)
 
 -- | A type constructor.

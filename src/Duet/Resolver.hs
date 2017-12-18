@@ -37,8 +37,8 @@ resolveTypeClasses typeClasses specialTypes = go typeClasses
                (\inst -> do
                   ms <-
                     mapM
-                      (\(nam, alt) ->
-                         fmap (nam, ) (resolveAlt typeClasses specialTypes alt))
+                      (\(nam, (l, alt)) ->
+                         fmap ((nam, ) . (l, )) (resolveAlt typeClasses specialTypes alt))
                       (M.toList (dictionaryMethods (instanceDictionary inst)))
                   pure
                     inst
@@ -76,16 +76,16 @@ resolveExplicit
   -> SpecialTypes Name
   -> ExplicitlyTypedBinding Type Name (TypeSignature Type Name l)
   -> m (ExplicitlyTypedBinding Type Name (TypeSignature Type Name l))
-resolveExplicit classes specialTypes (ExplicitlyTypedBinding scheme name alts) =
-  ExplicitlyTypedBinding scheme name <$> mapM (resolveAlt classes specialTypes) alts
+resolveExplicit classes specialTypes (ExplicitlyTypedBinding l scheme name alts) =
+  ExplicitlyTypedBinding l scheme name <$> mapM (resolveAlt classes specialTypes) alts
 
 resolveAlt
-  :: (MonadSupply Int m, MonadThrow m, Show l)
+  :: (MonadSupply Int m, MonadThrow m)
   => Map Name (Class Type Name (TypeSignature Type Name l))
   -> SpecialTypes Name
   -> Alternative Type Name (TypeSignature Type Name l)
   -> m (Alternative Type Name (TypeSignature Type Name l))
-resolveAlt classes specialTypes alt@(Alternative l ps e) = do
+resolveAlt classes specialTypes (Alternative l ps e) = do
   dicts <-
     mapM
       (\pred' ->
@@ -107,25 +107,24 @@ resolveAlt classes specialTypes alt@(Alternative l ps e) = do
     Forall _ (Qualified predicates _) = typeSignatureScheme l
 
 predicateToString
-  :: (Printable i, Show i)
+  :: (Printable i)
   => SpecialTypes i -> Predicate Type i -> String
 predicateToString _specialTypes (IsIn name _ts) =
   -- printIdentifier name ++ " " ++ unwords (map (printType specialTypes) ts)
   "?dict" ++ printIdentifier defaultPrint name
 
 resolveExp
-  :: (MonadThrow m, MonadSupply Int m, Show l)
+  :: (MonadThrow m)
   => Map Name (Class Type Name (TypeSignature Type Name l))
   -> SpecialTypes Name
   -> [(Predicate Type Name, Name)]
   -> Expression Type Name (TypeSignature Type Name l)
   -> m (Expression Type Name (TypeSignature Type Name l))
-
 resolveExp classes _ dicts = go
   where
     go =
       \case
-        ParensExpression l e-> ParensExpression l <$> go e
+        ParensExpression l e -> ParensExpression l <$> go e
         VariableExpression l i -> do
           dictArgs <- fmap concat (mapM (lookupDictionary l) predicates)
           pure
@@ -133,7 +132,7 @@ resolveExp classes _ dicts = go
           where Forall _ (Qualified predicates _) = typeSignatureScheme l
         ApplicationExpression l f x -> ApplicationExpression l <$> go f <*> go x
         InfixExpression l x (i, op) y ->
-          InfixExpression l <$> go x <*> fmap (i ,) (go op) <*> go y
+          InfixExpression l <$> go x <*> fmap (i, ) (go op) <*> go y
         LambdaExpression l0 (Alternative l vs b) ->
           LambdaExpression l0 <$> (Alternative l vs <$> go b)
         CaseExpression l e alts ->

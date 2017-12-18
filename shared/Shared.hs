@@ -91,17 +91,13 @@ setupEnv env typeMakers = do
          (className monoidClass)
          [ConstructorType (specialTypesString specialTypes)])
       [ ( "append"
-        , Alternative
-            ()
-            []
-            (VariableExpression
-               ()
-               (PrimopName PrimopStringAppend)))
+        , ( ()
+          , Alternative
+              ()
+              []
+              (VariableExpression () (PrimopName PrimopStringAppend))))
       , ( "empty"
-        , Alternative
-            ()
-            []
-            (LiteralExpression () (StringLiteral "")))
+        , ((), Alternative () [] (LiteralExpression () (StringLiteral ""))))
       ]
   numInt <-
     makeInst
@@ -110,19 +106,17 @@ setupEnv env typeMakers = do
          (className numClass)
          [ConstructorType (specialTypesInteger specialTypes)])
       [ ( "times"
-        , Alternative
-            ()
-            []
-            (VariableExpression
-               ()
-               (PrimopName PrimopIntegerTimes)))
+        , ( ()
+          , Alternative
+              ()
+              []
+              (VariableExpression () (PrimopName PrimopIntegerTimes))))
       , ( "plus"
-        , Alternative
-            ()
-            []
-            (VariableExpression
-               ()
-               (PrimopName PrimopIntegerPlus)))
+        , ( ()
+          , Alternative
+              ()
+              []
+              (VariableExpression () (PrimopName PrimopIntegerPlus))))
       ]
   negInt <-
     makeInst
@@ -131,12 +125,11 @@ setupEnv env typeMakers = do
          (className negClass)
          [ConstructorType (specialTypesInteger specialTypes)])
       [ ( "subtract"
-        , Alternative
-            ()
-            []
-            (VariableExpression
-               ()
-               (PrimopName PrimopIntegerSubtract)))
+        , ( ()
+          , Alternative
+              ()
+              []
+              (VariableExpression () (PrimopName PrimopIntegerSubtract))))
       ]
   numRational <-
     makeInst
@@ -145,19 +138,17 @@ setupEnv env typeMakers = do
          (className numClass)
          [ConstructorType (specialTypesRational specialTypes)])
       [ ( "times"
-        , Alternative
-            ()
-            []
-            (VariableExpression
-               ()
-               (PrimopName PrimopRationalTimes)))
+        , ( ()
+          , Alternative
+              ()
+              []
+              (VariableExpression () (PrimopName PrimopRationalTimes))))
       , ( "plus"
-        , Alternative
-            ()
-            []
-            (VariableExpression
-               ()
-               (PrimopName PrimopRationalPlus)))
+        , ( ()
+          , Alternative
+              ()
+              []
+              (VariableExpression () (PrimopName PrimopRationalPlus))))
       ]
   negRational <-
     makeInst
@@ -166,12 +157,11 @@ setupEnv env typeMakers = do
          (className negClass)
          [ConstructorType (specialTypesRational specialTypes)])
       [ ( "subtract"
-        , Alternative
-            ()
-            []
-            (VariableExpression
-               ()
-               (PrimopName PrimopRationalSubtract)))
+        , ( ()
+          , Alternative
+              ()
+              []
+              (VariableExpression () (PrimopName PrimopRationalSubtract))))
       ]
   fracRational <-
     makeInst
@@ -180,12 +170,11 @@ setupEnv env typeMakers = do
          (className fracClass)
          [ConstructorType (specialTypesRational specialTypes)])
       [ ( "divide"
-        , Alternative
-            ()
-            []
-            (VariableExpression
-               ()
-               (PrimopName PrimopRationalDivide)))
+        , ( ()
+          , Alternative
+              ()
+              []
+              (VariableExpression () (PrimopName PrimopRationalDivide))))
       ]
   env' <-
     let update =

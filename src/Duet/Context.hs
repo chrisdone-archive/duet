@@ -21,7 +21,7 @@ makeInst
   :: MonadSupply Int m
   => Specials Name
   -> Predicate Type Name
-  -> [(String, Alternative Type Name l)]
+  -> [(String, (l, Alternative Type Name l))]
   -> m (Instance Type Name l)
 makeInst specials pred' methods = do
   name <- supplyDictName (predicateToDict specials pred')

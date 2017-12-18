@@ -17,7 +17,6 @@ module Duet.Stepper
 import           Control.Applicative
 import           Control.Monad.Catch
 import           Control.Monad.State
-import           Control.Monad.Supply
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
@@ -29,7 +28,7 @@ import           Duet.Types
 -- Expansion
 
 expandSeq1
-  :: (MonadThrow m, MonadSupply Int m)
+  :: (MonadThrow m)
   => Context Type Name (Location)
   -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
   -> Expression Type Name (TypeSignature Type Name Location)
@@ -69,6 +68,7 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
   where
     go x =
       case x of
+        ParensExpression _ e -> go e -- Parens aren't an expansion step, just a grouping.
         VariableExpression _ i -> do
           case find ((== i) . typeSignatureA) signatures of
             Nothing -> do
@@ -124,7 +124,7 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                           error
                             ("Missing method " ++
                              show methodName ++ " in dictionary: " ++ show dict)
-                        Just (Alternative _ _ e) -> pure e
+                        Just (_, Alternative _ _ e) -> pure e
             _ -> do
               func' <- go func
               pure (ApplicationExpression l func' arg)
@@ -220,7 +220,7 @@ expandAt typeClassEnv is specialSigs signatures e0 b  = go [0] e0
 -- Pattern matching
 
 match
-  :: (Show l, Show i, Eq i)
+  :: (Eq i)
   => Expression Type i l -> Pattern Type i l -> Result (Match Type i l)
 match = go [0]
   where
@@ -306,7 +306,7 @@ lookupName identifier binds =
       listToMaybe
         (mapMaybe
            (\case
-              ExplicitlyTypedBinding i _ [Alternative _ [] e]
+              ExplicitlyTypedBinding _ i _ [Alternative _ [] e]
                 | i == identifier -> Just e
               _ -> Nothing)
            es)
@@ -332,7 +332,7 @@ lookupNameByString identifier binds =
       listToMaybe
         (mapMaybe
            (\case
-              ExplicitlyTypedBinding (ValueName _ i) _ [Alternative _ [] e]
+              ExplicitlyTypedBinding _ (ValueName _ i) _ [Alternative _ [] e]
                 | i == identifier -> Just e
               _ -> Nothing)
            es)
