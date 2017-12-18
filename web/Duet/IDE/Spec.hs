@@ -7,7 +7,6 @@ import Duet.IDE
 import Duet.IDE.Test
 import Duet.IDE.Types
 import Duet.Types
-import React.Flux.Persist
 
 tests :: [Test]
 tests =
@@ -38,6 +37,7 @@ lhsTests =
       (State
        { stateCursor = Cursor {cursorUUID = UUID "3"}
        , stateTypeCheck = Right ()
+       , stateHighlightErrors = mempty
        , stateAST =
            ModuleNode
              (Label {labelUUID = UUID "STARTER-MODULE"})
@@ -97,7 +97,7 @@ valueTests =
   , Group "Variable expressions" variableTests
   , Group "Function application" functionApplicationTests
   , Group "Infix expressions" infixTests
-  , Group "If expressions" ifTests
+  -- , Group "If expressions" ifTests
   , Group "Lambda expressions" lambdaTests
   , Group "Case expressions" caseTests
   , Group "Literal expressions" literalTests

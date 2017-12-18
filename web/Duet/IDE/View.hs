@@ -6,6 +6,8 @@
 module Duet.IDE.View where
 
 import           Control.Monad
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
@@ -17,9 +19,9 @@ import           React.Flux (ViewEventHandler)
 import qualified React.Flux as Flux
 import           React.Flux.Internal (ReactElementM)
 
-renderModule :: Cursor -> Node -> ReactElementM ViewEventHandler ()
-renderModule cursor node = do
-  renderNode cursor node
+renderModule :: State -> Node -> ReactElementM ViewEventHandler ()
+renderModule state node = do
+  renderNode state node
   when
     debug
     (Flux.p_
@@ -39,49 +41,49 @@ renderModule cursor node = do
   where
     debug = False
 
-renderNode :: Cursor -> Node -> ReactElementM ViewEventHandler ()
-renderNode cursor =
+renderNode :: State -> Node -> ReactElementM ViewEventHandler ()
+renderNode state =
   \case
-    ExpressionNode n -> renderExpression cursor n
-    DeclNode d -> renderDecl cursor d
+    ExpressionNode n -> renderExpression state n
+    DeclNode d -> renderDecl state d
     ModuleNode _ ds ->
       mapM_
-        (\d -> renderDecl cursor d)
+        (\d -> renderDecl state d)
         ds
-    NameNode d -> renderBinding cursor d
-    OperatorNode l d -> renderOperator cursor l d
-    PatternNode p -> renderPattern cursor p
+    NameNode d -> renderBinding state d
+    OperatorNode l d -> renderOperator state l d
+    PatternNode p -> renderPattern state p
     AltNode _ -> pure ()
 
-renderOperator :: forall eventHandler handler t. Flux.Term eventHandler [Flux.PropertyOrHandler handler] (ReactElementM ViewEventHandler () -> t) => Cursor -> Label -> Identifier -> t
-renderOperator mcursor l op =
+renderOperator :: forall eventHandler handler t. Flux.Term eventHandler [Flux.PropertyOrHandler handler] (ReactElementM ViewEventHandler () -> t) => State -> Label -> Identifier -> t
+renderOperator state l op =
   Flux.span_
     ["className" @= "duet-op", "key" @= "op"]
-    (renderExpression mcursor (VariableExpression l op))
+    (renderExpression state (VariableExpression l op))
 
-renderDecl :: Cursor -> Decl UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
-renderDecl cursor =
+renderDecl :: State -> Decl UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
+renderDecl state =
   \case
     BindDecl label (ImplicitBinding implicit) ->
       renderWrap
-        cursor
+        state
         label
         "duet-declaration"
-        (renderImplicitBinding cursor implicit)
+        (renderImplicitBinding state implicit)
     _ -> pure ()
 
-renderImplicitBinding :: Cursor -> ImplicitlyTypedBinding UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
-renderImplicitBinding cursor (ImplicitlyTypedBinding label binding a) =
+renderImplicitBinding :: State -> ImplicitlyTypedBinding UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
+renderImplicitBinding state (ImplicitlyTypedBinding label binding a) =
   renderWrap
-    cursor
+    state
     label
     "duet-binding duet-implicit-binding"
-    (mapM_ (renderAlternative cursor True (Just binding)) a)
+    (mapM_ (renderAlternative state True (Just binding)) a)
 
-renderBinding :: Cursor -> (Identifier, Label) -> ReactElementM ViewEventHandler ()
-renderBinding cursor (Identifier i, label') =
+renderBinding :: State -> (Identifier, Label) -> ReactElementM ViewEventHandler ()
+renderBinding state (Identifier i, label') =
   renderWrap
-    cursor
+    state
     label'
     ("duet-binding-name" <>
      if i == "_"
@@ -89,14 +91,14 @@ renderBinding cursor (Identifier i, label') =
        else "")
     (Flux.elemText (T.pack i))
 
-renderAlternative :: Cursor -> Bool -> Maybe (Identifier, Label) -> Duet.Types.Alternative UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
-renderAlternative cursor equals mbinding (Alternative label pats e) =
+renderAlternative :: State -> Bool -> Maybe (Identifier, Label) -> Duet.Types.Alternative UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
+renderAlternative state equals mbinding (Alternative label pats e) =
   renderWrap
-    cursor
+    state
     label
     "duet-alternative"
-    (do maybe (return ()) (renderBinding cursor) mbinding
-        mapM_ (renderPattern cursor) pats
+    (do maybe (return ()) (renderBinding state) mbinding
+        mapM_ (renderPattern state) pats
         if not equals
           then Flux.span_
                  ["className" @= "duet-keyword duet-arrow", "key" @= "arrow"]
@@ -107,27 +109,27 @@ renderAlternative cursor equals mbinding (Alternative label pats e) =
         Flux.br_ ["key" @= "alt-break"]
         Flux.span_
           ["className" @= "duet-rhs", "key" @= "alt-expr"]
-          (renderExpression cursor e))
+          (renderExpression state e))
 
 renderExpression
-  :: Cursor
+  :: State
   -> Expression UnkindedType Identifier Label
   -> ReactElementM ViewEventHandler ()
-renderExpression mcursor =
+renderExpression state =
   \case
     VariableExpression label (Identifier ident) ->
       renderExpr label "duet-variable" (Flux.elemText (T.pack ident))
-    LiteralExpression label lit -> renderLiteral mcursor label lit
+    LiteralExpression label lit -> renderLiteral state label lit
     ParensExpression label e ->
-      renderExpr label "duet-parens" (renderExpression mcursor e)
+      renderExpr label "duet-parens" (renderExpression state e)
     app@(ApplicationExpression label _ _) ->
       renderExpr
         label
         "duet-application"
         (do let (f, xs) = fargs app
             case f of
-              ApplicationExpression {} -> renderExpression mcursor f
-              _ -> parens "func" f (renderExpression mcursor f)
+              ApplicationExpression {} -> renderExpression state f
+              _ -> parens "func" f (renderExpression state f)
             if any lineBreaks xs
               then indented
                      "app"
@@ -139,19 +141,19 @@ renderExpression mcursor =
                            parens
                              ("app-" ++ show i)
                              x
-                             (renderExpression mcursor x))
+                             (renderExpression state x))
                         (zip [1 ..] xs))
               else mapM_
                      (\(i, x) ->
-                        parens ("app-" ++ show i) x (renderExpression mcursor x))
+                        parens ("app-" ++ show i) x (renderExpression state x))
                      (zip [1 ..] xs))
     InfixExpression label f (_, VariableExpression l op) x ->
       renderExpr
         label
         "duet-infix"
-        (do renderExpression mcursor f
-            renderOperator mcursor l op
-            renderExpression mcursor x)
+        (do renderExpression state f
+            renderOperator state l op
+            renderExpression state x)
     ConstantExpression label (Identifier ident) ->
       renderExpr label "duet-constant" (Flux.elemText (T.pack ident))
     IfExpression label e f g ->
@@ -161,17 +163,17 @@ renderExpression mcursor =
         (do Flux.span_
               ["className" @= "duet-keyword", "key" @= "if"]
               (Flux.elemText "if")
-            renderExpressionIndented "if" mcursor e
+            renderExpressionIndented "if" state e
             Flux.br_ ["key" @= "then-break"]
             Flux.span_
               ["className" @= "duet-keyword", "key" @= "then"]
               (Flux.elemText "then")
-            renderExpressionIndented "then" mcursor f
+            renderExpressionIndented "then" state f
             Flux.br_ ["key" @= "else-break"]
             Flux.span_
               ["className" @= "duet-keyword", "key" @= "else"]
               (Flux.elemText "else")
-            renderExpressionIndented "else" mcursor g)
+            renderExpressionIndented "else" state g)
     CaseExpression label e alts ->
       renderExpr
         label
@@ -181,9 +183,9 @@ renderExpression mcursor =
               (Flux.elemText "case")
             if lineBreaks e
               then do
-                renderExpressionIndented "case-expr" mcursor e
+                renderExpressionIndented "case-expr" state e
                 Flux.br_ ["key" @= "else-break"]
-              else renderExpression mcursor e
+              else renderExpression state e
             Flux.span_
               ["className" @= "duet-keyword", "key" @= "of"]
               (Flux.elemText "of")
@@ -198,7 +200,7 @@ renderExpression mcursor =
                     renderExpr
                       l
                       "duet-case-alt"
-                      (do renderPattern mcursor pat
+                      (do renderPattern state pat
                           Flux.span_
                             [ "className" @= "duet-keyword duet-arrow"
                             , "key" @= ("arrow" ++ show i)
@@ -209,7 +211,7 @@ renderExpression mcursor =
                             [ "className" @= "duet-rhs"
                             , "key" @= ("rhs-" ++ show i)
                             ]
-                            (renderExpression mcursor expr)))
+                            (renderExpression state expr)))
                  (zip [1 ..] alts)))
     LambdaExpression label (Alternative _ ps e) ->
       renderExpr
@@ -218,18 +220,18 @@ renderExpression mcursor =
         (do Flux.span_
               ["className" @= "duet-lambda duet-keyword", "key" @= "backslash"]
               (Flux.elemText "\\")
-            mapM_ (renderPattern mcursor) ps
+            mapM_ (renderPattern state) ps
             Flux.span_
               ["className" @= "duet-keyword duet-arrow", "key" @= "arrow"]
               (Flux.elemText "→")
             Flux.br_ ["key" @= "lambda-br"]
             Flux.span_
               ["className" @= "duet-rhs", "key" @= "lambda-rhs"]
-              (renderExpression mcursor e))
+              (renderExpression state e))
     _ -> pure ()
   where
     renderExpr label className' =
-      renderWrap mcursor label ("duet-expression " <> className')
+      renderWrap state label ("duet-expression " <> className')
 
 -- | Flatten an application f x y into (f,[x,y]).
 fargs :: Expression t i l -> (Expression t i l, [(Expression t i l)])
@@ -238,11 +240,11 @@ fargs e = go e []
     go (ApplicationExpression _ f x) args = go f (x : args)
     go f args = (f, args)
 
-renderExpressionIndented :: [Char] -> Cursor -> Expression UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
-renderExpressionIndented prefix mcursor e =
+renderExpressionIndented :: [Char] -> State -> Expression UnkindedType Identifier Label -> ReactElementM ViewEventHandler ()
+renderExpressionIndented prefix state e =
   if lineBreaks e
-    then indented prefix (renderExpression mcursor e)
-    else renderExpression mcursor e
+    then indented prefix (renderExpression state e)
+    else renderExpression state e
 
 indented :: forall eventHandler handler t b handler1. Flux.Term eventHandler [Flux.PropertyOrHandler handler] (ReactElementM handler1 b -> t) => [Char] -> ReactElementM handler1 b -> t
 indented prefix m = do
@@ -253,14 +255,14 @@ indented prefix m = do
           ["key" @= (prefix ++ "-indented-padding"), "className" @= "duet-indented"]
           m)
 
-renderLiteral :: Cursor -> Label -> Literal -> ReactElementM ViewEventHandler ()
-renderLiteral mcursor label lit =
+renderLiteral :: State -> Label -> Literal -> ReactElementM ViewEventHandler ()
+renderLiteral state label lit =
   case lit of
     IntegerLiteral i ->
       renderExpr  "duet-integer" (Flux.elemText (T.pack (show i)))
     _ -> pure ()
   where renderExpr  className' =
-              renderWrap mcursor label ("duet-expression " <> className')
+              renderWrap state label ("duet-expression " <> className')
 
 lineBreaks :: Expression x y z -> Bool
 lineBreaks =
@@ -305,43 +307,47 @@ atomic e =
     ParensExpression {} -> True
 
 renderPattern
-  :: Cursor
+  :: State
   -> Pattern UnkindedType Identifier Label
   -> ReactElementM ViewEventHandler ()
-renderPattern mcursor =
+renderPattern state =
   \case
     WildcardPattern label string ->
       renderWrap
-        mcursor
+        state
         label
         "duet-pattern duet-pattern-wildcard"
         (Flux.elemText (T.pack string))
     VariablePattern label (Identifier string) ->
       renderWrap
-        mcursor
+        state
         label
         "duet-pattern duet-pattern-variable"
         (Flux.elemText (T.pack string))
     LiteralPattern label lit ->
       renderWrap
-        mcursor
+        state
         label
         "duet-pattern duet-pattern-literal"
-        (renderLiteral mcursor label lit)
+        (renderLiteral state label lit)
     _ -> pure ()
 
 renderWrap
-  :: Cursor
+  :: State
   -> Label
   -> Text
   -> ReactElementM ViewEventHandler ()
   -> ReactElementM ViewEventHandler ()
-renderWrap mcursor label className' =
+renderWrap state label className' =
   Flux.span_
-    [ "key" @= labelUUID label, "data-key" @= labelUUID label
+    [ "key" @= labelUUID label
+    , "data-key" @= labelUUID label
     , "className" @=
       ("duet-node " <> className' <> " " <>
-       (if (labelUUID label) == cursorUUID mcursor
+       (if (labelUUID label) == cursorUUID (stateCursor state)
           then "duet-selected"
-          else "duet-unselected"))
+          else "duet-unselected") <> " " <>
+       if M.member (labelUUID label) (stateHighlightErrors state)
+         then "duet-erroneous"
+         else "")
     ]

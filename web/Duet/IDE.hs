@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE BangPatterns, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, LambdaCase, TupleSections, ExtendedDefaultRules, FlexibleContexts, ScopedTypeVariables, DeriveDataTypeable #-}
 {-# OPTIONS_GHC -fno-warn-orphans -fno-warn-type-defaults #-}
 
@@ -8,6 +9,7 @@ import           Control.Monad.Catch
 import           Control.Monad.State (execStateT)
 import           Control.Monad.Supply
 import           Data.Bifunctor
+import qualified Data.Map.Strict as M
 import           Data.Typeable
 import           Duet.Context
 import           Duet.Errors
@@ -53,6 +55,7 @@ makeState ident expr =
   State
   { stateCursor = Cursor {cursorUUID = uuidI}
   , stateTypeCheck = Right ()
+  , stateHighlightErrors = mempty
   , stateAST =
       ModuleNode
         (Label (UUID "STARTER-MODULE"))
@@ -99,7 +102,15 @@ instance Flux.StoreData State where
                   pure (binds, context))
               [1 ..]))
         (\e@(ContextException {}) -> pure (Left e))
-    pure state' {stateTypeCheck = bimap displayException id result}
+    pure
+      state'
+      { stateTypeCheck = bimap displayException id result
+      , stateHighlightErrors =
+          case result of
+            Left (ContextException _ (SomeException (cast -> Just (IdentifierNotInVarScope _scope _i l)))) ->
+              M.singleton (labelUUID l) "unknown variable"
+            _ -> mempty
+      }
 
 --------------------------------------------------------------------------------
 -- Context setup

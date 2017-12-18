@@ -621,7 +621,7 @@ interpretSpaceCompletion cursor ast = do
                 fmap
                   ExpressionNode
                   (case f of
-                     VariableExpression _ (Identifier "if") -> do
+                     VariableExpression _ (Identifier "if") | False -> do
                        c <- liftIO newIfExpression
                        case c of
                          IfExpression _ e _ _ -> do

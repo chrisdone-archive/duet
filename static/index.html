@@ -12,7 +12,7 @@
     <style>
 
 body { font-family: arial, sans-serif; }
-.duet-node { display: inline-block }
+.duet-node { display: inline-block; padding: 0.25em; }
 
 .duet-indented {
   padding-left: 1em;
@@ -68,6 +68,13 @@ border-bottom: 1px solid #eee;
 .duet-selected .duet-implicit-parens {
 border-left: 1px solid #ccc;
 border-right: 1px solid #ccc;
+}
+
+.duet-erroneous, .duet-selected.duet-erroneous {
+    border: 1px solid #e0b741;
+    background: #ffc;
+    border-radius: 0.3em;
+    color: #8d6e12;
 }
 
 .duet-pattern + .duet-keyword {

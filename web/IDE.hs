@@ -44,11 +44,11 @@ main = do
        "State"
        store
        (\state () -> do
+          renderModule state (stateAST state)
           case stateTypeCheck state of
             Right () -> pure ()
             Left msg ->
               Flux.pre_
                 ["className" Flux.@= "duet-error-msg", "key" Flux.@= "error-msg"]
-                (Flux.elemText (T.pack msg))
-          renderModule (stateCursor state) (stateAST state)))
+                (Flux.elemText (T.pack msg))))
     ()
