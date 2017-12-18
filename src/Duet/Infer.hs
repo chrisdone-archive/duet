@@ -52,6 +52,8 @@ module Duet.Infer
 import           Control.Arrow (first,second)
 import           Control.Monad.Catch
 import           Control.Monad.State
+import           Data.Generics
+import           Data.Graph
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
@@ -76,7 +78,7 @@ import           Duet.Types
 --
 -- Throws 'InferException' in case of a type error.
 typeCheckModule ::
-     (MonadThrow m, Show l)
+     (MonadThrow m, Show l, Data l)
   => Map Name (Class Type Name l) -- ^ Set of defined type-classes.
   -> [(TypeSignature Type Name Name)] -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
   -> SpecialTypes Name -- ^ Special types that Haskell uses for pattern matching and literals.
@@ -104,8 +106,38 @@ typeCheckModule ce as specialTypes bgs0 = do
 -- | Sort the list of bindings by order of no-dependencies first
 -- followed by things that depend on them. Group bindings that are
 -- mutually recursive.
-dependencyAnalysis :: [Binding t Name l] -> [BindGroup t Name l]
-dependencyAnalysis = undefined
+dependencyAnalysis :: Data l => [Binding Type Name l] -> [BindGroup Type Name l]
+dependencyAnalysis = map toBindGroup . stronglyConnComp . bindingsGraph
+  where
+    toBindGroup =
+      \case
+        AcyclicSCC binding ->
+          BindGroup (explicits [binding]) [implicits [binding]]
+        CyclicSCC bindings ->
+          BindGroup (explicits bindings) [implicits bindings]
+    explicits =
+      mapMaybe
+        (\case
+           ExplicitBinding i -> Just i
+           _ -> Nothing)
+    implicits =
+      mapMaybe
+        (\case
+           ImplicitBinding i -> Just i
+           _ -> Nothing)
+
+-- | Make a graph of the bindings with their dependencies.
+bindingsGraph :: Data l => [Binding Type Name l] -> [(Binding Type Name l, Name, [Name])]
+bindingsGraph =
+  map
+    (\binding ->
+       ( binding
+       , bindingIdentifier binding
+       , listify
+           (\case
+              n@ValueName {} -> n /= bindingIdentifier binding
+              _ -> False)
+           (bindingAlternatives binding)))
 
 collectMethods
   :: MonadThrow m
