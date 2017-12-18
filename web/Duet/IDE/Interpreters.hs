@@ -10,7 +10,6 @@ import Control.Monad.Trans
 import Data.Char
 import Data.Generics (listify, everything, mkQ, extQ)
 import Data.Maybe
-import Debug.Trace
 import Duet.IDE.Constructors
 import Duet.IDE.Types
 import Duet.Types
@@ -272,13 +271,13 @@ interpretBackspace cursor ast = do
                      _ -> pure e)
               NameNode (Identifier "_", _) -> do
                 case findNodeParent (cursorUUID cursor) ast of
-                  Just (ExpressionNode LambdaExpression{}) -> put mparent
-                  _ -> put
-                         (do binding <- mparent
-                             trace (show binding) (return ())
-                             decl <- findNodeParent binding ast
-                             modul <- findNodeParent (nodeUUID decl) ast
-                             pure (nodeUUID modul))
+                  Just (ExpressionNode LambdaExpression {}) -> put mparent
+                  _ ->
+                    put
+                      (do binding <- mparent
+                          decl <- findNodeParent binding ast
+                          modul <- findNodeParent (nodeUUID decl) ast
+                          pure (nodeUUID modul))
                 pure n
               NameNode (Identifier i, l) ->
                 pure

@@ -48,6 +48,18 @@ data Binding t i l
   | ExplicitBinding (ExplicitlyTypedBinding t i l)
   deriving (Show, Generic, Data, Typeable)
 
+bindingIdentifier :: Binding t i l -> i
+bindingIdentifier =
+  \case
+    ImplicitBinding i -> fst (implicitlyTypedBindingId i)
+    ExplicitBinding i -> explicitlyTypedBindingId i
+
+bindingAlternatives :: Binding t i l -> [Alternative t i l]
+bindingAlternatives =
+  \case
+    ImplicitBinding i -> implicitlyTypedBindingAlternatives i
+    ExplicitBinding i -> explicitlyTypedBindingAlternatives i
+
 declLabel :: Decl t i l -> l
 declLabel =
   \case

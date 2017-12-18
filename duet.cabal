@@ -19,7 +19,8 @@ library
     text,
     edit-distance,
     deepseq,
-    aeson
+    aeson,
+    syb
   if !impl(ghcjs)
     build-depends:
        monad-logger

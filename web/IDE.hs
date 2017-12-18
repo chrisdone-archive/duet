@@ -48,7 +48,7 @@ main = do
             Right () -> pure ()
             Left msg ->
               Flux.pre_
-                ["className" Flux.@= "duet-error-msg"]
+                ["className" Flux.@= "duet-error-msg", "key" Flux.@= "error-msg"]
                 (Flux.elemText (T.pack msg))
           renderModule (stateCursor state) (stateAST state)))
     ()
