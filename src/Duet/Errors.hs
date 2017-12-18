@@ -77,9 +77,10 @@ displayInferException specialTypes =
 displayRenamerException :: SpecialTypes Name -> RenamerException -> [Char]
 displayRenamerException specialTypes =
   wrap (\case
-          IdentifierNotInVarScope scope name ->
+          IdentifierNotInVarScope scope name label ->
             "Not in variable scope " ++
             curlyQuotes (printit defaultPrint name) ++
+            " (AST tree label: "++show label ++")"++
             "\n" ++
             "Nearest names in scope:\n\n" ++
             intercalate

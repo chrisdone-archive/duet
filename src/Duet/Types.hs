@@ -217,7 +217,7 @@ instance NFData (RenamerException)
 instance ToJSON (RenamerException)
 instance FromJSON (RenamerException)
 data RenamerException
-  = IdentifierNotInVarScope !(Map Identifier Name) !Identifier
+  = IdentifierNotInVarScope !(Map Identifier Name) !Identifier !Label
   | IdentifierNotInConScope !(Map Identifier Name) !Identifier
   | IdentifierNotInClassScope !(Map Identifier Name) !Identifier
   | IdentifierNotInTypeScope !(Map Identifier Name) !Identifier

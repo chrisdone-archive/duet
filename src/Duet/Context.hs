@@ -122,7 +122,16 @@ makeScope typeClasses signatures =
           signatures) <>
      M.map className typeClasses)
 
-renameEverything :: (MonadThrow m, MonadSupply Int m) => [Decl UnkindedType Identifier l1] -> Specials Name -> Builtins Type Name l -> m (M.Map Identifier (Class Type Name l1), [TypeSignature Type Name Name], [Binding Type Name l1], M.Map Identifier Name, [DataType Type Name])
+renameEverything ::
+     (MonadThrow m, MonadSupply Int m)
+  => [Decl UnkindedType Identifier Label]
+  -> Specials Name
+  -> Builtins Type Name Label
+  -> m ( M.Map Identifier (Class Type Name Label)
+       , [TypeSignature Type Name Name]
+       , [Binding Type Name Label]
+       , M.Map Identifier Name
+       , [DataType Type Name])
 renameEverything decls specials builtins = do
   dataTypes <- renameDataTypes specials (declsDataTypes decls)
   (typeClasses, signatures, subs) <-
