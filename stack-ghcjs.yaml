@@ -1,5 +1,8 @@
 resolver: lts-7.1
 
+ghc-options:
+  duet: -O0
+
 flags: {}
 
 extra-deps:
@@ -8,7 +11,6 @@ extra-deps:
   - reflex-0.4.0
   - reflex-dom-0.3
   - ref-tf-0.4
-  - basic-lens-0.0.2
   - react-flux-1.2.3
   - basic-lens-0.0.2
 
