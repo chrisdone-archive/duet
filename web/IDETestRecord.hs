@@ -38,9 +38,11 @@ main = do
                        KeyPress n -> KeyPressAction (toEnum (fromIntegral n))
                        KeyDown bool keydown -> KeyDownAction bool keydown
                        event ->
-                         error ("Can't translate this event: " ++  show event))
+                         error ("Can't translate this event: " ++ show event))
                     keys')
-             , "(focus (" ++ show (cursorUUID (stateCursor state)) ++ ") (rhsSelectedState (" ++
+             , "(focus (" ++
+               show (cursorUUID (stateCursor state)) ++
+               ") (rhsSelectedState (" ++
                show
                  (head
                     (listify
@@ -78,5 +80,7 @@ main = do
     (Flux.defineControllerView
        "State"
        store
-       (\state () -> renderModule (stateCursor state) (stateAST state)))
+       (\state () -> do
+          Flux.elemText "Record some actions:"
+          renderModule state (stateAST state)))
     ()
