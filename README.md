@@ -5,7 +5,7 @@ the developer and the computer.
 
 ## Status
 
-This project is a work in progress and an experiment; do not open
+⚠ This project is a work in progress and an experiment; do not open
 issues or pull requests, they will be ignored.
 
 ## Web releases
