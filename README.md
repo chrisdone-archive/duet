@@ -5,6 +5,7 @@ the developer and the computer.
 
 ## Web releases
 
+* [Epsilon](http://chrisdone.com/toys/duet-epsilon/) - December 18 2017
 * [Delta](http://chrisdone.com/toys/duet-delta/) - June 19 2017
 * [Gamma](http://chrisdone.com/toys/duet-gamma/) - May 2nd 2017
 * [Beta](http://chrisdone.com/toys/duet-beta/) - April 30th 2017
