@@ -3,6 +3,11 @@
 A programming language focused on interactive collaboration between
 the developer and the computer.
 
+## Status
+
+This project is a work in progress and an experiment; do not open
+issues or pull requests, they will be ignored.
+
 ## Web releases
 
 * [Epsilon](http://chrisdone.com/toys/duet-epsilon/) - December 18 2017
