@@ -68,17 +68,6 @@ instance (Monoid w, MonadSupply s m) => MonadSupply s (WriterT w m) where
   peek = lift peek
   exhausted = lift exhausted
 
--- | Monoid instance for the supply monad. Actually any monad/monoid pair
--- gives rise to this monoid instance, but we can't write its type like that
--- because it would conflict with existing instances provided by Data.Monoid.
---instance (Monoid a, Monad m) => Monoid (m a) where
-instance (Monoid a) => Monoid (Supply s a) where
-  mempty = return mempty
-  m1 `mappend` m2 = do
-    x1 <- m1
-    x2 <- m2
-    return (x1 `mappend` x2)
-
 evalSupplyT :: Monad m => SupplyT s m a -> [s] -> m a
 evalSupplyT (SupplyT s) = evalStateT s
 

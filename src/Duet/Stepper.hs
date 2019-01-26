@@ -21,7 +21,6 @@ import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
-import           Data.Semigroup
 import           Duet.Types
 
 --------------------------------------------------------------------------------
