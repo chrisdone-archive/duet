@@ -63,7 +63,6 @@ test-suite duet-test
     monad-logger
 
 executable duet
-  type: exitcode-stdio-1.0
   main-is: Main.hs
   hs-source-dirs: app
   ghc-options: -Wall
