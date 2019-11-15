@@ -46,7 +46,8 @@ main = do
           flag False True (long "concise" <> help "Concise view") <*>
           option
             auto
-            (long "steps" <> short 'n' <> metavar "steps" <> help "steps" <>
+            (long "steps" <> short 'n' <> metavar "steps" <>
+             help "Maximum number of steps to run (default: 100)" <>
              value 100)))
   cmd
 
