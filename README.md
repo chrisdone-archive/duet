@@ -57,6 +57,9 @@ available syntax.
   type variable.
 * Indentation is stricter, a case's alts must be at a column larger
   than the `case`.
+* Duet does not have `seq`, but it does have bang patterns in
+  cases. `case x of !x -> ..` is a perfectly legitimate way to force a
+  value.
 * Infix operators are stricter: an infix operator must have spaces
   around it. You **cannot** have more than one operator without
   parentheses, therefore operator precedence does not come into play
