@@ -58,7 +58,8 @@ available syntax.
 * Infix operators are stricter: an infix operator must have spaces
   around it. You **cannot** have more than one operator without
   parentheses, therefore operator precedence does not come into play
-  in Duet (this is intentional).
+  in Duet (this is intentional). This also permits you to write `-5`
+  without worrying about where it rests.
 * Superclasses are not supported.
 * Operator definitions are not supported.
 * There is only `Integer` and `Rational` number types: they are
