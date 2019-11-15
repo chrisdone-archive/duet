@@ -21,9 +21,8 @@ Available commands:
   run                      Run the given program source
 ```
 
-Example:
+Example `integers.hs`:
 
-integers.hs:
 ```haskell
 main = 3 + ((2 + -3) - 3)
 ```
