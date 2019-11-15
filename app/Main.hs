@@ -39,7 +39,7 @@ main = do
          (Run <$>
           strArgument (metavar "FILEPATH" <> help "The .hs file to interpret") <*>
           strOption
-            (long "--main" <> metavar "NAME" <> help "The main value to run" <>
+            (long "main" <> metavar "NAME" <> help "The main value to run" <>
              value "main") <*>
           option
             auto

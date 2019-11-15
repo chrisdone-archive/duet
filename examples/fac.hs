@@ -1,13 +1,14 @@
-go = \n res ->
-  case n of
-    0 -> 1
-    n -> go (n - 1) (res * n)
+factorial = \n -> case n of
+                    0 -> 1
+                    1 -> 1
+                    _ -> n * factorial (n - 1)
 
-fac = \n -> go n 1
 
-factorial = \n ->
-  case n of
-    0 -> 1
-    n -> n * factorial (n - 1)
+go =
+  \n acc ->
+    case n of
+      0 -> 1
+      1 -> 1
+      _ -> go (n - 1) (n * acc)
 
-main = fac 5
+it = go 5 1

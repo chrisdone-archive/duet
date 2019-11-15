@@ -20,3 +20,24 @@ Available options:
 Available commands:
   run                      Run the given program source
 ```
+
+Example:
+
+integers.hs:
+```haskell
+main = 3 + ((2 + -3) - 3)
+```
+
+Output for this program:
+
+``` haskell
+$ duet run examples/integers.hs
+[1]
+3 + ((2 + -3) - 3)
+[2]
+3 + (-1 - 3)
+[3]
+3 + -4
+[4]
+-1
+```
