@@ -63,6 +63,9 @@ available syntax.
 * Operator definitions are not supported.
 * There is only `Integer` and `Rational` number types: they are
   written as `1` or `1.0`.
+* Any `_` or `_foo` means "hole" and the interpreter does not touch
+  them, it continues performing rewrites without caring. This is good
+  for teaching.
 * There is no standard `Prelude`. The only defined base types are:
   * String
   * Char
