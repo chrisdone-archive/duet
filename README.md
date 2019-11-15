@@ -9,13 +9,9 @@ time. For example, evaluating `(\x -> x + 5) (2 * 3)`, we get:
 
 ``` haskell
 $ duet run demo.hs
-[1]
 (\x -> x + 5) (2 * 3)
-[2]
 (2 * 3) + 5
-[3]
 6 + 5
-[4]
 11
 ```
 
