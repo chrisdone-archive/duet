@@ -41,6 +41,7 @@ library
     Duet.Supply
     Duet.Context
     Duet.Setup
+    Duet.Simple
     Control.Monad.Supply
 
 test-suite duet-test
@@ -62,3 +63,21 @@ test-suite duet-test
     syb,
     hspec,
     monad-logger
+
+executable duet
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: app
+  ghc-options: -Wall
+  default-language: Haskell2010
+  build-depends:
+      base, duet,
+    containers,
+    mtl,
+    exceptions,
+    text,
+    deepseq,
+    aeson,
+    syb,
+    monad-logger,
+    optparse-simple
