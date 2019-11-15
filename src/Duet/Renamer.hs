@@ -567,6 +567,7 @@ renamePattern
   -> WriterT [(Identifier, Name)] m (Pattern Type Name l)
 renamePattern subs =
   \case
+    BangPattern p -> fmap BangPattern (renamePattern subs p)
     VariablePattern l i -> do
       name <- maybe (lift (supplyValueName i)) pure (nonrenamableName i)
       v <- identifyValue i

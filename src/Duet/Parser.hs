@@ -614,8 +614,15 @@ altParser e' startCol =
       Nothing -> ""))
 
 altPat :: TokenParser (Pattern UnkindedType Identifier Location)
-altPat = varp <|> intliteral <|> consParser <|> stringlit
+altPat = bang <|> varp <|> intliteral <|> consParser <|> stringlit
   where
+    bang =
+      (BangPattern <$>
+       (consumeToken
+          (\case
+             Bang -> Just Bang
+             _ -> Nothing) *>
+        patInner)) <?> "bang pattern"
     patInner = parenpat <|> varp <|> intliteral <|> unaryConstructor
     parenpat = go
       where

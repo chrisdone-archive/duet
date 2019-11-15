@@ -229,6 +229,9 @@ match = go [0]
   where
     go is val pat =
       case pat of
+        BangPattern p
+          | isWhnf val -> go is val p
+          | otherwise -> OK (NeedsMoreEval is)
         AsPattern _l ident pat ->
           case go is val pat of
             OK (Success binds) -> OK (Success ((ident, val) : binds))
@@ -256,6 +259,20 @@ match = go [0]
               else Fail
           | otherwise -> OK (NeedsMoreEval is)
 
+isWhnf :: Expression Type i l -> Bool
+isWhnf =
+  \case
+    VariableExpression {} -> True
+    ConstructorExpression {} -> True
+    ConstantExpression {} -> True
+    LiteralExpression {} -> True
+    ApplicationExpression {} -> False
+    InfixExpression {} -> False
+    LetExpression {} -> False
+    LambdaExpression {} -> True
+    IfExpression {} -> False
+    CaseExpression {} -> False
+    ParensExpression {} -> False
 
 --------------------------------------------------------------------------------
 -- Expression manipulators

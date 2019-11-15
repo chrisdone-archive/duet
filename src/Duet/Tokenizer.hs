@@ -50,6 +50,7 @@ tokenTokenizer prespaces =
     , atomThenSpace ForallToken "forall"
     , atomThenSpace Case "case"
     , atomThenSpace Of "of"
+    , atom Bang "!"
     , atom Period "."
     , atom Backslash "\\"
     , atom OpenParen "("
@@ -354,6 +355,7 @@ tokenStr tok =
     Decimal !d -> "decimal " ++ printf "%f" d
     Bar -> curlyQuotes "|"
     Period -> curlyQuotes "."
+    Bang -> curlyQuotes "!"
 
 -- | Update the position by the token.
 tokenPosition :: SourcePos -> (Token, Location) -> t -> SourcePos

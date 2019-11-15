@@ -451,7 +451,7 @@ data Pattern (t :: * -> *) i l
   | AsPattern l i (Pattern t i l)
   | LiteralPattern l Literal
   | ConstructorPattern l i [Pattern t i l]
---  | LazyPattern Pattern
+  | BangPattern (Pattern t i l)
   deriving (Show, Generic, Data, Typeable , Eq , Functor, Traversable, Foldable)
 
 patternLabel :: Pattern ty t t1 -> t1
@@ -460,6 +460,7 @@ patternLabel (ConstructorPattern loc _ _) = loc
 patternLabel (WildcardPattern l _) = l
 patternLabel (AsPattern l  _ _) = l
 patternLabel (LiteralPattern l _) =l
+patternLabel (BangPattern p) = patternLabel p
 
 instance NFData (Literal)
 data Literal
@@ -634,6 +635,7 @@ data Token
   | Bar
   | ClassToken
   | InstanceToken
+  | Bang
   deriving (Eq, Ord)
 
 data Specials n = Specials

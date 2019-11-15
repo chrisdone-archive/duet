@@ -132,6 +132,7 @@ printAlternative printer (Alternative _ patterns expression) =
 printPattern :: (Printable i, PrintableType t) => Print i l ->  Pattern t i l -> [Char]
 printPattern printer =
   \case
+    BangPattern p -> "!" ++ printPattern printer p
     VariablePattern _ i -> printIdentifier printer i
     WildcardPattern _ s -> s
     AsPattern _ i p -> printIdentifier printer i ++ "@" ++ printPattern printer p
@@ -227,6 +228,7 @@ lined = intercalate "\n  "
 printPat :: (Printable i, PrintableType t) => Print i l ->  Pattern t i l -> String
 printPat printer=
   \case
+    BangPattern p -> "!" ++ printPat printer p
     VariablePattern _ i -> printit printer i
     ConstructorPattern _ i ps ->
       printit printer i ++
@@ -239,6 +241,7 @@ printPat printer=
   where
     inner =
       \case
+        BangPattern p -> "!" ++ inner p
         VariablePattern _ i -> printit printer i
         WildcardPattern _ s -> s
         ConstructorPattern _ i ps

@@ -629,33 +629,50 @@ inferPattern
   => [TypeSignature Type Name Name] -> Pattern Type Name l
   -> InferT m (Pattern Type Name (TypeSignature Type Name l), [Predicate Type Name], [(TypeSignature Type Name Name)], Type Name)
 inferPattern signatures = go
-  where go (VariablePattern l i) = do
-          v <- newVariableType StarKind
-          return
-            ( VariablePattern (TypeSignature l (toScheme v)) i
-            , []
-            , [TypeSignature i (toScheme v)]
-            , v)
-        go (WildcardPattern l s) = do
-          v <- newVariableType StarKind
-          return (WildcardPattern (TypeSignature l (toScheme v)) s, [], [], v)
-        go (AsPattern l i pat) = do
-          (pat', ps, as, t) <- go pat
-          return (AsPattern (TypeSignature l (toScheme t)) i pat', ps, (TypeSignature i (toScheme t)) : as, t)
-        go (LiteralPattern l0 l) = do
-          specialTypes <- InferT (gets inferStateSpecialTypes)
-          (ps, t) <- inferLiteralType specialTypes l
-          return (LiteralPattern (TypeSignature l0 (toScheme t)) l, ps, [], t)
-        go (ConstructorPattern l i pats) = do
-          TypeSignature _ sc <- substituteConstr signatures i
-          (pats', ps, as, ts) <- inferPatterns signatures pats
-          t' <- newVariableType StarKind
-          (Qualified qs t) <- freshInst sc
-          specialTypes <- InferT (gets inferStateSpecialTypes)
-          let makeArrow :: Type Name -> Type  Name -> Type  Name
-              a `makeArrow` b = ApplicationType (ApplicationType (ConstructorType (specialTypesFunction specialTypes)) a) b
-          unify t (foldr makeArrow t' ts)
-          return (ConstructorPattern (TypeSignature l (toScheme t')) i pats',ps ++ qs, as, t')
+  where
+    go (BangPattern p) = do
+      (p', x, y, z) <- go p
+      pure (BangPattern p', x, y, z)
+    go (VariablePattern l i) = do
+      v <- newVariableType StarKind
+      return
+        ( VariablePattern (TypeSignature l (toScheme v)) i
+        , []
+        , [TypeSignature i (toScheme v)]
+        , v)
+    go (WildcardPattern l s) = do
+      v <- newVariableType StarKind
+      return (WildcardPattern (TypeSignature l (toScheme v)) s, [], [], v)
+    go (AsPattern l i pat) = do
+      (pat', ps, as, t) <- go pat
+      return
+        ( AsPattern (TypeSignature l (toScheme t)) i pat'
+        , ps
+        , (TypeSignature i (toScheme t)) : as
+        , t)
+    go (LiteralPattern l0 l) = do
+      specialTypes <- InferT (gets inferStateSpecialTypes)
+      (ps, t) <- inferLiteralType specialTypes l
+      return (LiteralPattern (TypeSignature l0 (toScheme t)) l, ps, [], t)
+    go (ConstructorPattern l i pats) = do
+      TypeSignature _ sc <- substituteConstr signatures i
+      (pats', ps, as, ts) <- inferPatterns signatures pats
+      t' <- newVariableType StarKind
+      (Qualified qs t) <- freshInst sc
+      specialTypes <- InferT (gets inferStateSpecialTypes)
+      let makeArrow :: Type Name -> Type Name -> Type Name
+          a `makeArrow` b =
+            ApplicationType
+              (ApplicationType
+                 (ConstructorType (specialTypesFunction specialTypes))
+                 a)
+              b
+      unify t (foldr makeArrow t' ts)
+      return
+        ( ConstructorPattern (TypeSignature l (toScheme t')) i pats'
+        , ps ++ qs
+        , as
+        , t')
 -- inferPattern (LazyPattern pat) = inferPattern pat
 
 substituteConstr
