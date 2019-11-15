@@ -26,7 +26,6 @@ Available commands:
 The help for this command:
 
 ```
-$ duet run --help
 Usage: duet run FILEPATH [--main NAME] [--concise] [-n|--steps steps]
   Run the given program source
 
@@ -35,7 +34,7 @@ Available options:
   FILEPATH                 The .hs file to interpret
   --main NAME              The main value to run
   --concise                Concise view
-  -n,--steps steps         steps
+  -n,--steps steps         Maximum number of steps to run (default: 100)
 ```
 
 Running code in Duet literally performs one substitution step at
