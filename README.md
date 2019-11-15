@@ -8,6 +8,7 @@ Running code in Duet literally performs one substitution step at
 time. For example, evaluating `(\x -> x + 5) (2 * 3)`, we get:
 
 ``` haskell
+$ duet run demo.hs
 [1]
 (\x -> x + 5) (2 * 3)
 [2]
@@ -19,26 +20,6 @@ time. For example, evaluating `(\x -> x + 5) (2 * 3)`, we get:
 ```
 
 Note that this demonstrates basic argument application and non-strictness.
-
-Example `integers.hs`:
-
-```haskell
-main = 3 + ((2 + -3) - 3)
-```
-
-Output for this program:
-
-``` haskell
-$ duet run examples/integers.hs
-[1]
-3 + ((2 + -3) - 3)
-[2]
-3 + (-1 - 3)
-[3]
-3 + -4
-[4]
--1
-```
 
 ## Differences from Haskell
 
