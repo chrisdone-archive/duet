@@ -123,12 +123,12 @@ makeScope typeClasses signatures =
 
 renameEverything ::
      (MonadThrow m, MonadSupply Int m)
-  => [Decl UnkindedType Identifier Label]
+  => [Decl UnkindedType Identifier Location]
   -> Specials Name
-  -> Builtins Type Name Label
-  -> m ( M.Map Identifier (Class Type Name Label)
+  -> Builtins Type Name Location
+  -> m ( M.Map Identifier (Class Type Name Location)
        , [TypeSignature Type Name Name]
-       , [Binding Type Name Label]
+       , [Binding Type Name Location]
        , M.Map Identifier Name
        , [DataType Type Name])
 renameEverything decls specials builtins = do

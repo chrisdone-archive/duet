@@ -191,10 +191,6 @@ data StepException
   deriving (Typeable, Show)
 instance Exception StepException
 
-data Label = Label
-  { labelUUID :: UUID
-  } deriving (Generic, Show, Data, Typeable, Eq, Ord)
-instance NFData Label
 
 newtype UUID = UUID String
   deriving (Ord, Eq, Show, Generic, Data, Typeable)
@@ -202,7 +198,7 @@ instance NFData UUID
 
 instance NFData (RenamerException)
 data RenamerException
-  = IdentifierNotInVarScope !(Map Identifier Name) !Identifier !Label
+  = IdentifierNotInVarScope !(Map Identifier Name) !Identifier !Location
   | IdentifierNotInConScope !(Map Identifier Name) !Identifier
   | IdentifierNotInClassScope !(Map Identifier Name) !Identifier
   | IdentifierNotInTypeScope !(Map Identifier Name) !Identifier
@@ -220,7 +216,9 @@ data RenamerException
 instance Exception RenamerException
 
 
-
+data ContextException = ContextException (SpecialTypes Name) RenamerException
+  deriving (Show, Generic, Data, Typeable, Typeable)
+instance Exception ContextException
 
 -- | An exception that may be thrown when reading in source code,
 -- before we do any type-checking.-}

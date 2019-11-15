@@ -6,13 +6,12 @@
 
 -- | Shared application code between commandline and web interface.
 
-module Shared where
+module Duet.Setup where
 
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.Supply
 import           Data.Map.Strict (Map)
-import           Data.Monoid
 import           Duet.Context
 import           Duet.Infer
 import           Duet.Renamer

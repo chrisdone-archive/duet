@@ -29,9 +29,9 @@ import           Duet.Types
 expandSeq1
   :: (MonadThrow m)
   => Context Type Name (Location)
-  -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
-  -> Expression Type Name (TypeSignature Type Name Location)
-  -> m (Expression Type Name (TypeSignature Type Name Location))
+  -> [BindGroup Type Name (Location)]
+  -> Expression Type Name (Location)
+  -> m (Expression Type Name (Location))
 expandSeq1 (Context { contextTypeClasses = typeClassEnv
                     , contextSpecialSigs = specialSigs
                     , contextSignatures = signatures
@@ -60,9 +60,9 @@ expandWhnf
   => Map Name (Class Type Name (TypeSignature Type Name Location))
   -> SpecialSigs Name
   -> [TypeSignature Type Name Name]
-  -> Expression Type Name (TypeSignature Type Name Location)
-  -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
-  -> m (Expression Type Name (TypeSignature Type Name Location))
+  -> Expression Type Name (Location)
+  -> [BindGroup Type Name (Location)]
+  -> m (Expression Type Name (Location))
 expandWhnf typeClassEnv specialSigs signatures e b = go e
   where
     go x =
@@ -124,7 +124,7 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                           error
                             ("Missing method " ++
                              show methodName ++ " in dictionary: " ++ show dict)
-                        Just (_, Alternative _ _ e) -> pure e
+                        Just (_, Alternative _ _ e) -> pure (fmap typeSignatureA e)
                 _ -> error "Unsupported variable expression."
             _ -> do
               func' <- go func
@@ -202,9 +202,9 @@ expandAt
   -> [Int]
   -> SpecialSigs Name
   -> [TypeSignature Type Name Name]
-  -> Expression Type Name (TypeSignature Type Name Location)
-  -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
-  -> m (Expression Type Name (TypeSignature Type Name Location))
+  -> Expression Type Name (Location)
+  -> [BindGroup Type Name (Location)]
+  -> m (Expression Type Name (Location))
 expandAt typeClassEnv is specialSigs signatures e0 b  = go [0] e0
   where
     go js e =
@@ -297,8 +297,8 @@ substitute i arg = go
 lookupName
   :: (MonadThrow m)
   => Name
-  -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
-  -> m (Expression Type Name (TypeSignature Type Name Location))
+  -> [BindGroup Type Name (Location)]
+  -> m (Expression Type Name (Location))
 lookupName identifier binds =
   case listToMaybe (mapMaybe findIdent binds) of
     Nothing -> throwM (CouldntFindName identifier)
@@ -323,8 +323,8 @@ lookupName identifier binds =
 lookupNameByString
   :: (MonadThrow m)
   => String
-  -> [BindGroup Type Name (TypeSignature Type Name Duet.Types.Location)]
-  -> m (Expression Type Name (TypeSignature Type Name Location))
+  -> [BindGroup Type Name (Location)]
+  -> m (Expression Type Name (Location))
 lookupNameByString identifier binds =
   case listToMaybe (mapMaybe findIdent binds) of
     Nothing -> throwM (CouldntFindNameByString identifier)

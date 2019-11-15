@@ -80,12 +80,12 @@ import           Duet.Types
 -- Throws 'InferException' in case of a type error.
 typeCheckModule ::
      (MonadThrow m)
-  => Map Name (Class Type Name Label) -- ^ Set of defined type-classes.
+  => Map Name (Class Type Name Location) -- ^ Set of defined type-classes.
   -> [(TypeSignature Type Name Name)] -- ^ Pre-defined type signatures e.g. for built-ins or FFI.
   -> SpecialTypes Name -- ^ Special types that Haskell uses for pattern matching and literals.
-  -> [Binding Type Name Label] -- ^ Bindings in the module.
-  -> m ( [BindGroup Type Name (TypeSignature Type Name Label)]
-       , Map Name (Class Type Name (TypeSignature Type Name Label)))
+  -> [Binding Type Name Location] -- ^ Bindings in the module.
+  -> m ( [BindGroup Type Name (TypeSignature Type Name Location)]
+       , Map Name (Class Type Name (TypeSignature Type Name Location)))
 typeCheckModule ce as specialTypes bgs0 = do
   (bgs, classes) <- runTypeChecker (dependencyAnalysis bgs0)
   pure (bgs, classes)

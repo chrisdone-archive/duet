@@ -175,8 +175,8 @@ renameClass
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
-  -> Class UnkindedType Identifier Label
-  -> m (Class Type Name Label)
+  -> Class UnkindedType Identifier Location
+  -> m (Class Type Name Location)
 renameClass specials subs types cls = do
   name <- supplyClassName (className cls)
   classVars <-
@@ -237,8 +237,8 @@ renameInstance
   -> Map Identifier Name
   -> [DataType Type Name]
   -> [Class Type Name l]
-  -> Instance UnkindedType Identifier Label
-  -> m (Instance Type Name Label)
+  -> Instance UnkindedType Identifier Location
+  -> m (Instance Type Name Location)
 renameInstance specials subs types classes inst@(Instance (Forall _ (Qualified _ (IsIn className' _))) _) = do
   {-trace ("renameInstance: Classes: " ++ show (map className classes)) (return ())-}
   table <- mapM (\c -> fmap (, c) (identifyClass (className c))) classes
@@ -264,8 +264,8 @@ renameInstance'
   -> Map Identifier Name
   -> [DataType Type Name]
   -> [(Identifier, TypeVariable Name)]
-  -> Instance UnkindedType Identifier Label
-  -> m (Instance Type Name Label)
+  -> Instance UnkindedType Identifier Location
+  -> m (Instance Type Name Location)
 renameInstance' specials subs types _tyVars (Instance (Forall vars (Qualified preds ty)) dict) = do
   let vars0 =
         nub
@@ -299,9 +299,9 @@ renameDict
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
-  -> Dictionary UnkindedType Identifier Label
+  -> Dictionary UnkindedType Identifier Location
   -> Predicate Type Name
-  -> m (Dictionary Type Name Label)
+  -> m (Dictionary Type Name Location)
 renameDict specials subs types (Dictionary _ methods) predicate = do
   name' <-
     supplyDictName'
@@ -438,8 +438,8 @@ renameBindGroups
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
-  -> [BindGroup UnkindedType i Label]
-  -> m ([BindGroup Type Name Label], Map Identifier Name)
+  -> [BindGroup UnkindedType i Location]
+  -> m ([BindGroup Type Name Location], Map Identifier Name)
 renameBindGroups specials subs types groups = do
   subs' <-
     fmap
@@ -459,8 +459,8 @@ renameBindings
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
-  -> [Binding t i Label]
-  -> m ([Binding Type Name Label], Map Identifier Name)
+  -> [Binding t i Location]
+  -> m ([Binding Type Name Location], Map Identifier Name)
 renameBindings specials subs types bindings = do
   subs' <-
     fmap
@@ -489,8 +489,8 @@ renameBindGroup
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
-  -> BindGroup t i Label
-  -> m (BindGroup Type Name Label, Map Identifier Name)
+  -> BindGroup t i Location
+  -> m (BindGroup Type Name Location, Map Identifier Name)
 renameBindGroup  specials subs  types (BindGroup explicit implicit) = do
   bindGroup' <-
     BindGroup <$> mapM (renameExplicit specials subs  types) explicit <*>
@@ -530,8 +530,8 @@ renameExplicit
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
-  -> ExplicitlyTypedBinding t i Label
-  -> m (ExplicitlyTypedBinding Type Name Label)
+  -> ExplicitlyTypedBinding t i Location
+  -> m (ExplicitlyTypedBinding Type Name Location)
 renameExplicit specials subs  types (ExplicitlyTypedBinding l (i, l') scheme alts) = do
   name <- substituteVar subs i l'
   ExplicitlyTypedBinding l (name, l') <$> renameScheme specials subs  types scheme <*>
@@ -542,8 +542,8 @@ renameImplicit
   => Specials Name
        -> Map Identifier Name
        -> [DataType Type Name]
-  -> ImplicitlyTypedBinding t i Label
-  -> m (ImplicitlyTypedBinding Type Name Label)
+  -> ImplicitlyTypedBinding t i Location
+  -> m (ImplicitlyTypedBinding Type Name Location)
 renameImplicit specials subs types (ImplicitlyTypedBinding l (id',l') alts) =
   do name <- substituteVar subs id' l'
      ImplicitlyTypedBinding l (name, l') <$> mapM (renameAlt specials subs types) alts
@@ -553,8 +553,8 @@ renameAlt ::
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
-  -> Alternative t i Label
-  -> m (Alternative Type Name Label)
+  -> Alternative t i Location
+  -> m (Alternative Type Name Location)
 renameAlt specials subs types (Alternative l ps e) =
   do (ps', subs') <- runWriterT (mapM (renamePattern subs) ps)
      let subs'' = M.fromList subs' <> subs
@@ -593,11 +593,11 @@ renameExpression
   => Specials Name
   -> Map Identifier Name
   -> [DataType Type Name]
-  -> Expression t i Label
-  -> m (Expression Type Name Label)
+  -> Expression t i Location
+  -> m (Expression Type Name Location)
 renameExpression specials subs types = go
   where
-    go :: Expression t i Label -> m (Expression Type Name Label)
+    go :: Expression t i Location -> m (Expression Type Name Location)
     go =
       \case
         ParensExpression l e -> ParensExpression l <$> go e
@@ -643,7 +643,7 @@ renameExpression specials subs types = go
 --------------------------------------------------------------------------------
 -- Provide a substitution
 
-substituteVar :: (Identifiable i, MonadThrow m) => Map Identifier Name -> i -> Label -> m Name
+substituteVar :: (Identifiable i, MonadThrow m) => Map Identifier Name -> i -> Location -> m Name
 substituteVar subs i0 l =
   case nonrenamableName i0 of
     Nothing -> do
