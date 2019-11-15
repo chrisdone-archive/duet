@@ -10,7 +10,6 @@ import           Control.Monad.Catch
 import           Control.Monad.Supply
 import qualified Data.Map.Strict as M
 import           Data.Maybe
-import           Data.Monoid
 import           Duet.Infer
 import           Duet.Renamer
 import           Duet.Supply

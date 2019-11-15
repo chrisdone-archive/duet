@@ -85,6 +85,7 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                   case primop of
                     PrimopStringAppend ->
                       pure (LiteralExpression l (StringLiteral (sx <> sy)))
+                    _ -> error "Runtime type error that should not occurr"
                 _ -> do
                   y' <- go y
                   pure
@@ -103,7 +104,7 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                        _ ->
                          pure
                            (LambdaExpression l0 (Alternative l' params' body'))
-                [] -> error "Unsupported lambda."
+                _ -> error "Unsupported lambda."
             VariableExpression _ (MethodName _ methodName) ->
               case arg of
                 VariableExpression _ dictName@DictName {} ->
@@ -124,10 +125,11 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                             ("Missing method " ++
                              show methodName ++ " in dictionary: " ++ show dict)
                         Just (_, Alternative _ _ e) -> pure e
+                _ -> error "Unsupported variable expression."
             _ -> do
               func' <- go func
               pure (ApplicationExpression l func' arg)
-        orig@(InfixExpression l x op@(s, VariableExpression _ (PrimopName primop)) y) ->
+        orig@(InfixExpression l x op@(_s, VariableExpression _ (PrimopName primop)) y) ->
           case x of
             LiteralExpression _ x' ->
               case y of
@@ -140,7 +142,8 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                            (case primop of
                               PrimopIntegerPlus -> IntegerLiteral (i1 + i2)
                               PrimopIntegerTimes -> IntegerLiteral (i1 * i2)
-                              PrimopIntegerSubtract -> IntegerLiteral (i1 - i2)))
+                              PrimopIntegerSubtract -> IntegerLiteral (i1 - i2)
+                              _ -> error "Unexpected operation for integer literals."))
                     (RationalLiteral i1, RationalLiteral i2) ->
                       pure
                         (LiteralExpression
@@ -150,7 +153,8 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                               PrimopRationalTimes -> RationalLiteral (i1 * i2)
                               PrimopRationalSubtract ->
                                 RationalLiteral (i1 - i2)
-                              PrimopRationalDivide -> RationalLiteral (i1 / i2)))
+                              PrimopRationalDivide -> RationalLiteral (i1 / i2)
+                              _ -> error "Unexpected operation for rational literals."))
                     _ -> pure orig
                 _ -> do
                   y' <- go y
@@ -225,6 +229,10 @@ match = go [0]
   where
     go is val pat =
       case pat of
+        AsPattern _l ident pat ->
+          case go is val pat of
+            OK (Success binds) -> OK (Success ((ident, val) : binds))
+            res -> res
         WildcardPattern _ _ -> OK (Success [])
         VariablePattern _ i -> OK (Success [(i, val)])
         LiteralPattern _ l ->
@@ -247,6 +255,7 @@ match = go [0]
                      else Fail
               else Fail
           | otherwise -> OK (NeedsMoreEval is)
+
 
 --------------------------------------------------------------------------------
 -- Expression manipulators

@@ -141,6 +141,7 @@ resolveExp classes _ dicts = go
         e@ConstantExpression {} -> pure e
         IfExpression l a b c -> IfExpression l <$> go a <*> go b <*> go c
         e@LiteralExpression {} -> pure e
+        LetExpression {} -> error "Let expressions not supported."
     lookupDictionary l p =
       (case byInst classes p of
          Just (preds, dict) -> do

@@ -13,7 +13,6 @@ module Duet.Printer where
 import           Data.Char
 import           Data.List
 import qualified Data.Map.Strict as M
-import           Data.Monoid
 import           Duet.Types
 import           Text.Printf
 
