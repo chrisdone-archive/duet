@@ -23,6 +23,7 @@ data Run = Run
   { runInputFile :: FilePath
   , runMainIs :: String
   , runConcise :: Bool
+  , runNumbered :: Bool
   , runSteps :: Int
   } deriving (Show)
 
@@ -44,6 +45,7 @@ main = do
             (long "main" <> metavar "NAME" <> help "The main value to run" <>
              value "main") <*>
           flag False True (long "concise" <> help "Concise view") <*>
+          flag False True (long "numbered" <> help "Number outputs") <*>
           option
             auto
             (long "steps" <> short 'n' <> metavar "steps" <>
@@ -71,7 +73,10 @@ runProgram Run {..} = do
       mapM_
         (\(step, expr) ->
            putStrLn
-             ("[" ++ show step ++ "]\n" ++ printExpression defaultPrint expr))
+             ((if runNumbered
+                 then "[" ++ show step ++ "]\n"
+                 else "") ++
+              printExpression defaultPrint expr))
         (zip
            [1 :: Integer ..]
            (filter
