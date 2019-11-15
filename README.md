@@ -1,6 +1,6 @@
 # Duet
 
-A tiny language, a subset of Haskell aimed at aiding teachers teach Haskell
+A tiny language, a subset of Haskell (with type classes) aimed at aiding teachers teach Haskell
 
 ## Usage
 
