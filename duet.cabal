@@ -6,12 +6,20 @@ cabal-version:
   >=1.10
 build-type:
   Simple
+maintainer:
+  chrisdone@gmail.com
+synopsis:
+  A tiny language, a subset of Haskell (with type classes) aimed at aiding teachers teach Haskell
+description:
+  A tiny language, a subset of Haskell (with type classes) aimed at aiding teachers teach Haskell
+license: BSD3
+extra-source-files: README.md, LICENSE.md
 
 library
   hs-source-dirs:
     src
   build-depends:
-    base,
+    base >= 4.5 && < 5,
     containers,
     mtl,
     exceptions,
@@ -49,7 +57,7 @@ test-suite duet-test
   ghc-options: -Wall -O0
   default-language: Haskell2010
   build-depends:
-      base, duet,
+      base >= 4.5 && < 5, duet,
     containers,
     mtl,
     exceptions,
@@ -68,7 +76,7 @@ executable duet
   ghc-options: -Wall
   default-language: Haskell2010
   build-depends:
-      base, duet,
+      base >= 4.5 && < 5, duet,
     containers,
     mtl,
     exceptions,
