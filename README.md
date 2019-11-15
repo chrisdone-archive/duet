@@ -78,7 +78,9 @@ $ duet run examples/integers.hs
 See also the next section for a complete example using all the
 available syntax.
 
-* Duet is non-strict, but is not lazy. There is no sharing and no thunks.
+* Duet is non-strict, but is not lazy. There is no sharing and no
+  thunks.
+* No `module` or `import` module system whatsoever.
 * No `let` syntax, no parameters in definitions e.g. `f x = ..` you
   must use a lambda. Representing `let` in the stepper presents a
   design challenge not currently met.
