@@ -38,10 +38,13 @@ main = do
          runProgram
          (Run <$>
           strArgument (metavar "FILEPATH" <> help "The .hs file to interpret") <*>
-          strArgument
-            (metavar "NAME" <> help "The main value to run" <> value "main") <*>
-            argument auto
-              (metavar "NAME" <> help "The main value to run" <> value 100)))
+          strOption
+            (long "--main" <> metavar "NAME" <> help "The main value to run" <>
+             value "main") <*>
+          option
+            auto
+            (long "steps" <> short 'n' <> metavar "steps" <> help "steps" <>
+             value 100)))
   cmd
 
 runProgram :: Run -> IO ()
@@ -60,4 +63,9 @@ runProgram Run {..} = do
                  pure things)
              [1 ..])) of
     Left err -> print err
-    Right steps -> mapM_ (putStrLn . (++ "\n") . printExpression defaultPrint) steps
+    Right steps ->
+      mapM_
+        (\(step, expr) ->
+           putStrLn
+             ("[" ++ show step ++ "]\n" ++ printExpression defaultPrint expr))
+        (zip [1 ..] steps)

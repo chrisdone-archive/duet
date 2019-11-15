@@ -20,9 +20,7 @@ library
     edit-distance,
     deepseq,
     aeson,
-    syb
-  if !impl(ghcjs)
-    build-depends:
+    syb,
        monad-logger
   ghc-options:
     -Wall -O2
