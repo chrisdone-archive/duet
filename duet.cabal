@@ -1,7 +1,7 @@
 name:
   duet
 version:
-  0
+  0.0.1
 cabal-version:
   >=1.10
 build-type:
