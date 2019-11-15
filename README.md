@@ -47,7 +47,8 @@ See also the next section for a complete example using all the
 available syntax.
 
 * No `let` syntax, no parameters in definitions e.g. `f x = ..` you
-  must use a lambda.
+  must use a lambda. Representing `let` in the stepper presents a
+  design challenge not currently met.
 * Kinds `*` are written `Type`: e.g. `class Functor (f :: Type -> Type)`.
 * Kind inference is not implemented, so if you want a kind other than
   `Type` (aka `*` in Haskell), you have to put a kind signature on the
@@ -72,7 +73,7 @@ available syntax.
   * Rational
   * Bool
 * You don't need a `Show` instance to inspect values; the interpreter
-  shows them as they are, including lambdas
+  shows them as they are, including lambdas.
 
 ## Supported syntax
 
