@@ -21,6 +21,39 @@ Available commands:
   run                      Run the given program source
 ```
 
+## Run
+
+The help for this command:
+
+```
+$ duet run --help
+Usage: duet run FILEPATH [--main NAME] [--concise] [-n|--steps steps]
+  Run the given program source
+
+Available options:
+  -h,--help                Show this help text
+  FILEPATH                 The .hs file to interpret
+  --main NAME              The main value to run
+  --concise                Concise view
+  -n,--steps steps         steps
+```
+
+Running code in Duet literally performs one substitution step at
+time. For example, evaluating `(\x -> x + 5) (2 * 3)`, we get:
+
+``` haskell
+[1]
+(\x -> x + 5) (2 * 3)
+[2]
+(2 * 3) + 5
+[3]
+6 + 5
+[4]
+11
+```
+
+Note that this demonstrates basic argument application and non-strictness.
+
 Example `integers.hs`:
 
 ```haskell
@@ -46,6 +79,7 @@ $ duet run examples/integers.hs
 See also the next section for a complete example using all the
 available syntax.
 
+* Duet is non-strict, but is not lazy. There is no sharing and no thunks.
 * No `let` syntax, no parameters in definitions e.g. `f x = ..` you
   must use a lambda. Representing `let` in the stepper presents a
   design challenge not currently met.
