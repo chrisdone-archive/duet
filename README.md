@@ -2,40 +2,7 @@
 
 A tiny language, a subset of Haskell (with type classes) aimed at aiding teachers teach Haskell
 
-## Usage
-
-This comes as a library and as a program capable of running Duet programs.
-
-```
-$ duet --help
-Duet interpreter
-
-Usage: duet [--version] [--help] COMMAND
-  This is the interpreter for the Duet mini-Haskell educational language
-
-Available options:
-  --version                Show version
-  --help                   Show this help text
-
-Available commands:
-  run                      Run the given program source
-```
-
 ## Run
-
-The help for this command:
-
-```
-Usage: duet run FILEPATH [--main NAME] [--concise] [-n|--steps steps]
-  Run the given program source
-
-Available options:
-  -h,--help                Show this help text
-  FILEPATH                 The .hs file to interpret
-  --main NAME              The main value to run
-  --concise                Concise view
-  -n,--steps steps         Maximum number of steps to run (default: 100)
-```
 
 Running code in Duet literally performs one substitution step at
 time. For example, evaluating `(\x -> x + 5) (2 * 3)`, we get:
