@@ -16,11 +16,13 @@ import Duet.Infer
 import Duet.Parser
 import Duet.Printer
 import Duet.Simple
+import Duet.Stepper
 import Options.Applicative.Simple
 
 data Run = Run
   { runInputFile :: FilePath
   , runMainIs :: String
+  , runConcise :: Bool
   , runSteps :: Int
   } deriving (Show)
 
@@ -41,6 +43,7 @@ main = do
           strOption
             (long "main" <> metavar "NAME" <> help "The main value to run" <>
              value "main") <*>
+          flag False True (long "concise" <> help "Concise view") <*>
           option
             auto
             (long "steps" <> short 'n' <> metavar "steps" <> help "steps" <>
@@ -68,4 +71,22 @@ runProgram Run {..} = do
         (\(step, expr) ->
            putStrLn
              ("[" ++ show step ++ "]\n" ++ printExpression defaultPrint expr))
-        (zip [1 ..] steps)
+        (zip
+           [1 :: Integer ..]
+           (filter
+              (\expr ->
+                 if runConcise
+                   then cleanExpression expr
+                   else True)
+              steps))
+
+-- | Filter out expressions with intermediate case, if and immediately-applied lambdas.
+cleanExpression :: Expression Type i l -> Bool
+cleanExpression =
+  \case
+    CaseExpression {} -> False
+    IfExpression {} -> False
+    e0
+      | (LambdaExpression {}, args) <- fargs e0 -> null args
+    ApplicationExpression _ f x -> cleanExpression f && cleanExpression x
+    _ -> True
