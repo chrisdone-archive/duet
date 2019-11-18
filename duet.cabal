@@ -1,7 +1,7 @@
 name:
   duet
 version:
-  0.0.1
+  0.0.2
 cabal-version:
   >=1.10
 build-type:
@@ -9,9 +9,9 @@ build-type:
 maintainer:
   chrisdone@gmail.com
 synopsis:
-  A tiny language, a subset of Haskell (with type classes) aimed at aiding teachers teach Haskell
+  A tiny language, a subset of Haskell (with type classes) aimed at aiding teachers to teach Haskell
 description:
-  A tiny language, a subset of Haskell (with type classes) aimed at aiding teachers teach Haskell
+  A tiny language, a subset of Haskell (with type classes) aimed at aiding teachers to teach Haskell
 license: BSD3
 extra-source-files: README.md, LICENSE.md
 
