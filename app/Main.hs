@@ -8,15 +8,19 @@
 
 -- |
 
+import Control.Monad.Catch
 import Control.Monad.Logger
 import Control.Monad.Supply
 import Control.Monad.Writer
 import Data.Semigroup ((<>))
+import Duet.Context
 import Duet.Infer
 import Duet.Parser
 import Duet.Printer
+import Duet.Renamer
 import Duet.Simple
 import Duet.Stepper
+import Duet.Types
 import Options.Applicative.Simple
 
 data Run = Run
@@ -54,37 +58,58 @@ main = do
   cmd
 
 runProgram :: Run -> IO ()
-runProgram Run {..} = do
+runProgram run@Run {..} = do
   decls <- parseFile runInputFile
-  case runNoLoggingT
-         ((evalSupplyT
-             (do (binds, ctx) <- createContext decls
-                 things <-
-                   execWriterT
-                     (runStepper
-                        runSteps
-                        ctx
-                        (fmap (fmap typeSignatureA) binds)
-                        runMainIs)
-                 pure things)
-             [1 ..])) of
-    Left err -> print err
-    Right steps ->
-      mapM_
-        (\(step, expr) ->
-           putStrLn
-             ((if runNumbered
-                 then "[" ++ show step ++ "]\n"
-                 else "") ++
-              printExpression defaultPrint expr))
-        (zip
-           [1 :: Integer ..]
-           (filter
-              (\expr ->
-                 if runConcise
-                   then cleanExpression expr
-                   else True)
-              steps))
+  runNoLoggingT
+    (evalSupplyT
+       (do (binds, ctx) <- createContext decls
+           things <-
+             execWriterT
+               (runStepperIO
+                  run
+                  runSteps
+                  ctx
+                  (fmap (fmap typeSignatureA) binds)
+                  runMainIs)
+           pure things)
+       [1 ..])
+
+-- | Run the substitution model on the code.
+runStepperIO
+  :: forall m. (MonadSupply Int m, MonadThrow m, MonadIO m)
+  => Run -> Int
+  -> Context Type Name Location
+  -> [BindGroup Type Name Location]
+  -> String
+  -> m ()
+runStepperIO Run {..} maxSteps ctx bindGroups' i = do
+  e0 <- lookupNameByString i bindGroups'
+  loop 1 "" e0
+  where
+    loop :: Int -> String -> Expression Type Name Location -> m ()
+    loop count lastString e = do
+      e' <- expandSeq1 ctx bindGroups' e
+      let string = printExpression (defaultPrint) e
+      when
+        (string /= lastString)
+        (if cleanExpression e || not runConcise
+           then liftIO
+                  (putStrLn
+                     ((if runNumbered
+                         then "[" ++ show count ++ "]\n"
+                         else "") ++
+                      printExpression defaultPrint e))
+           else pure ())
+      if (fmap (const ()) e' /= fmap (const ()) e) && count < maxSteps
+        then do
+          newE <-
+            renameExpression
+              (contextSpecials ctx)
+              (contextScope ctx)
+              (contextDataTypes ctx)
+              e'
+          loop (count + 1) string newE
+        else pure ()
 
 -- | Filter out expressions with intermediate case, if and immediately-applied lambdas.
 cleanExpression :: Expression Type i l -> Bool
