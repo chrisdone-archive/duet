@@ -40,18 +40,27 @@ expandSeq1 (Context { contextTypeClasses = typeClassEnv
     go =
       \case
         e0
+          -- If we're looking at a constructor, then force the args.
           | (ce@(ConstructorExpression l _), args) <- fargs e0 -> do
             args' <- mapM go args
             pure (foldl (ApplicationExpression l) ce args')
+          -- If we're looking at a constant (hole), then force the args.
           | (ce@(ConstantExpression l _), args) <- fargs e0 -> do
             args' <- mapM go args
             pure (foldl (ApplicationExpression l) ce args')
+          -- We're looking at a general expression, check if a force
+          -- has already happpened. If so, we just return the
+          -- identity.
           | otherwise -> do
             alreadyExpanded <- get
             if alreadyExpanded
               then pure e0
               else do
+                -- If we haven't expanded anything yet, let's expand
+                -- this mother to whnf.
                 e' <- lift (expandWhnf typeClassEnv specialSigs signatures e0 b)
+                -- If the expansion did actually produce a new AST
+                -- then count that as an expansion.
                 put (e' /= e0)
                 pure e'
 
@@ -67,7 +76,8 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
   where
     go x =
       case x of
-        ParensExpression _ e -> go e -- Parens aren't an expansion step, just a grouping.
+        -- Parens aren't an expansion step, just a grouping.
+        ParensExpression _ e -> go e
         VariableExpression _ i -> do
           case find ((== i) . typeSignatureA) signatures of
             Nothing -> do
