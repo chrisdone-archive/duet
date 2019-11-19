@@ -22,6 +22,7 @@ import Duet.Simple
 import Duet.Stepper
 import Duet.Types
 import Options.Applicative.Simple
+import System.IO
 
 data Run = Run
   { runInputFile :: FilePath
@@ -34,6 +35,8 @@ data Run = Run
 
 main :: IO ()
 main = do
+  hSetBuffering stdout LineBuffering
+  hSetBuffering stdin LineBuffering
   ((), cmd) <-
     simpleOptions
       "1.0"
