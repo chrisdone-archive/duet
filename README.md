@@ -60,3 +60,63 @@ available syntax.
 
 View `examples/syntax-buffet.hs` for an example featuring all the
 syntax supported in Duet.
+
+## I/O
+
+Basic terminal input/output is supported.
+
+For example,
+
+    $ duet run examples/terminal.hs --hide-steps
+    Please enter your name:
+    Chris
+    Hello, Chris
+
+And with steps:
+
+    $ duet run examples/terminal.hs
+    PutStrLn "Please enter your name: " (GetLine (\line -> PutStrLn (append "Hello, " line) (Pure 0)))
+    Please enter your name:
+    GetLine (\line -> PutStrLn (append "Hello, " line) (Pure 0))
+    Chris
+    (\line -> PutStrLn (append "Hello, " line) (Pure 0)) "Chris"
+    PutStrLn (append "Hello, " "Chris") (Pure 0)
+    Hello, Chris
+    Pure 0
+
+How does this work? Whenever the following code is seen in the
+stepper:
+
+```haskell
+PutStrLn "Please enter your name: " <next>
+```
+
+The string is printed to stdout with `putStrLn`, and the `next`
+expression is stepped next.
+
+Whenever the following code is seen:
+
+``` haskell
+GetLine (\line -> <next>)
+```
+
+The stepper runs `getLine` and feeds the resulting string into the
+stepper as:
+
+```haskell
+(\line -> <next>) "The line"
+```
+
+This enables one to write an example program like this:
+
+``` haskell
+data Terminal a
+ = GetLine (String -> Terminal a)
+ | PutStrLn String (Terminal a)
+ | Pure a
+
+main =
+  PutStrLn
+    "Please enter your name: "
+    (GetLine (\line -> PutStrLn (append "Hello, " line) (Pure 0)))
+```
