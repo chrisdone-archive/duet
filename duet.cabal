@@ -31,7 +31,7 @@ library
     syb,
        monad-logger
   ghc-options:
-    -Wall -O2
+    -Wall
   default-language:
     Haskell2010
   exposed-modules:
