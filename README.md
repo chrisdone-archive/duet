@@ -17,6 +17,14 @@ $ duet run demo.hs
 
 Note that this demonstrates basic argument application and non-strictness.
 
+## Docker run
+
+Run with the docker distribution, to easily run on any platform:
+
+    $ docker run -it -v`pwd`:`pwd` -w`pwd` chrisdone/duet run foo.hs
+
+The image is about 11MB, so it's quick to download.
+
 ## Differences from Haskell
 
 See also the next section for a complete example using all the
