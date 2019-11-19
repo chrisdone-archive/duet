@@ -1,4 +1,5 @@
-# Duet
+#  ![logo](images/duet.svg|height=20) Duet
+
 
 A tiny language, a subset of Haskell (with type classes) aimed at aiding teachers teach Haskell
 
