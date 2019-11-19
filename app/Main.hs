@@ -29,6 +29,7 @@ data Run = Run
   , runConcise :: Bool
   , runNumbered :: Bool
   , runSteps :: Int
+  , runHideSteps :: Bool
   } deriving (Show)
 
 main :: IO ()
@@ -54,7 +55,11 @@ main = do
             auto
             (long "steps" <> short 'n' <> metavar "steps" <>
              help "Maximum number of steps to run (default: 100)" <>
-             value 100)))
+             value 100) <*>
+          flag
+            False
+            True
+            (long "hide-steps" <> help "Do not print the steps to stdout")))
   cmd
 
 runProgram :: Run -> IO ()
@@ -91,7 +96,7 @@ runStepperIO Run {..} maxSteps ctx bindGroups' i = do
       e' <- expandSeq1 ctx bindGroups' e
       let string = printExpression (defaultPrint) e
       when
-        (string /= lastString)
+        (string /= lastString && not runHideSteps)
         (if cleanExpression e || not runConcise
            then liftIO
                   (putStrLn
