@@ -100,16 +100,28 @@ runStepperIO Run {..} maxSteps ctx bindGroups' i = do
                          else "") ++
                       printExpression defaultPrint e))
            else pure ())
-      if (fmap (const ()) e' /= fmap (const ()) e) && count < maxSteps
+      e'' <- pickUpIO e'
+      if (fmap (const ()) e'' /= fmap (const ()) e) && count < maxSteps
         then do
           newE <-
             renameExpression
               (contextSpecials ctx)
               (contextScope ctx)
               (contextDataTypes ctx)
-              e'
+              e''
           loop (count + 1) string newE
         else pure ()
+
+pickUpIO :: MonadIO m => Expression t Name l -> m (Expression t Name l)
+pickUpIO =
+  \case
+    ApplicationExpression _ (ApplicationExpression _ (ConstructorExpression _ (ConstructorName _ "PutStrLn")) (LiteralExpression _ (StringLiteral toBePrinted))) next -> do
+      liftIO (putStrLn toBePrinted)
+      pure next
+    ApplicationExpression l (ConstructorExpression _ (ConstructorName _ "GetLine")) func -> do
+      inputString <- liftIO getLine
+      pure (ApplicationExpression l func (LiteralExpression l (StringLiteral inputString)))
+    e -> pure e
 
 -- | Filter out expressions with intermediate case, if and immediately-applied lambdas.
 cleanExpression :: Expression Type i l -> Bool

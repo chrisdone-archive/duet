@@ -14,6 +14,6 @@ foldl_ = \f z l ->
       case f z x of
         !z_ -> foldl_ f z_ xs
 list = (Cons 1 (Cons 2 (Cons 3 (Cons 4 Nil))))
-main_foldr = foldr (\x y -> x + y) 0 list
-main_foldl = foldl (\x y -> x + y) 0 list
+main_foldr = foldr _f _nil list
+main_foldl = foldl _f _nil list
 main_foldl_ = foldl_ (\x y -> x + y) 0 list
