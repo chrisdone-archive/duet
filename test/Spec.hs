@@ -76,4 +76,43 @@ spec =
                           }))
                     (LiteralExpression () (IntegerLiteral 1))
                 , LiteralExpression () (IntegerLiteral 1)
-                ])))
+                ]))
+        it
+          "Seq"
+          (shouldBe
+             (second
+                last
+                (first
+                   (const ())
+                   (runNoLoggingT
+                      ((evalSupplyT
+                          (do decls <-
+                                parseText
+                                  "test"
+                                  "seq =\n\
+                                 \  \\x y ->\n\
+                                 \    case x of\n\
+                                 \      !_ -> y\n\
+                                 \loop = loop\n\
+                                 \main = seq loop 1"
+                              (binds, ctx) <- createContext decls
+                              things <-
+                                execWriterT
+                                  (runStepper
+                                     100
+                                     ctx
+                                     (fmap (fmap typeSignatureA) binds)
+                                     "main")
+                              pure things)
+                          [1 ..])))))
+             (Right
+                ((CaseExpression
+                    ()
+                    (VariableExpression () (ValueName 42 "loop"))
+                    [ CaseAlt
+                        { caseAltLabel = ()
+                        , caseAltPattern = BangPattern (WildcardPattern () "_")
+                        , caseAltExpression =
+                            LiteralExpression () (IntegerLiteral 1)
+                        }
+                    ])))))

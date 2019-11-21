@@ -272,7 +272,7 @@ match = go [0]
 isWhnf :: Expression Type i l -> Bool
 isWhnf =
   \case
-    VariableExpression {} -> True
+    VariableExpression {} -> False
     ConstructorExpression {} -> True
     ConstantExpression {} -> True
     LiteralExpression {} -> True
