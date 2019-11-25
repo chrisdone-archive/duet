@@ -8,21 +8,23 @@
 
 -- |
 
-import Control.Monad.Catch
-import Control.Monad.Logger
-import Control.Monad.Supply
-import Control.Monad.Writer
-import Data.Semigroup ((<>))
-import Duet.Context
-import Duet.Infer
-import Duet.Parser
-import Duet.Printer
-import Duet.Renamer
-import Duet.Simple
-import Duet.Stepper
-import Duet.Types
-import Options.Applicative.Simple
-import System.IO
+import           Control.Monad.Catch
+import           Control.Monad.Logger
+import           Control.Monad.Supply
+import           Control.Monad.Writer
+import qualified Data.Map.Strict as M
+import           Data.Semigroup ((<>))
+import           Duet.Context
+import           Duet.Infer
+import           Duet.Parser
+import           Duet.Printer
+import           Duet.Renamer
+import           Duet.Setup
+import           Duet.Simple
+import           Duet.Stepper
+import           Duet.Types
+import           Options.Applicative.Simple
+import           System.IO
 
 data Run = Run
   { runInputFile :: FilePath
@@ -43,27 +45,63 @@ main = do
       "Duet interpreter"
       "This is the interpreter for the Duet mini-Haskell educational language"
       (pure ())
-      (addCommand
-         "run"
-         "Run the given program source"
-         runProgram
-         (Run <$>
-          strArgument (metavar "FILEPATH" <> help "The .hs file to interpret") <*>
-          strOption
-            (long "main" <> metavar "NAME" <> help "The main value to run" <>
-             value "main") <*>
-          flag False True (long "concise" <> help "Concise view") <*>
-          flag False True (long "numbered" <> help "Number outputs") <*>
-          optional
-            (option
-               auto
-               (long "steps" <> short 'n' <> metavar "steps" <>
-                help "Maximum number of steps to run (default: unlimited)")) <*>
-          flag
-            False
-            True
-            (long "hide-steps" <> help "Do not print the steps to stdout")))
+      (do addCommand "scope" "Print info about types and classes in scope" runDocPrint (pure ())
+          addCommand
+            "run"
+            "Run the given program source"
+            runProgram
+            (Run <$>
+             strArgument
+               (metavar "FILEPATH" <> help "The .hs file to interpret") <*>
+             strOption
+               (long "main" <> metavar "NAME" <> help "The main value to run" <>
+                value "main") <*>
+             flag False True (long "concise" <> help "Concise view") <*>
+             flag False True (long "numbered" <> help "Number outputs") <*>
+             optional
+               (option
+                  auto
+                  (long "steps" <> short 'n' <> metavar "steps" <>
+                   help "Maximum number of steps to run (default: unlimited)")) <*>
+             flag
+               False
+               True
+               (long "hide-steps" <> help "Do not print the steps to stdout")))
   cmd
+
+runDocPrint :: () -> IO ()
+runDocPrint _ = do
+  builtins <- evalSupplyT (setupEnv mempty []) [1 ..]
+  putStrLn "Built-in types:\n"
+  putStrLn
+    (printDataType
+       defaultPrint
+       (builtinsSpecialTypes builtins)
+       (specialTypesBool (builtinsSpecialTypes builtins)))
+  when
+    False
+    (putStrLn
+       (printTypeConstructorOpaque
+          defaultPrint
+          (specialTypesChar (builtinsSpecialTypes builtins))))
+  putStrLn
+    (printTypeConstructorOpaque
+       defaultPrint
+       (specialTypesString (builtinsSpecialTypes builtins)))
+  putStrLn
+    (printTypeConstructorOpaque
+       defaultPrint
+       (specialTypesInteger (builtinsSpecialTypes builtins)))
+  putStrLn
+    (printTypeConstructorOpaque
+       defaultPrint
+       (specialTypesRational (builtinsSpecialTypes builtins)))
+  putStrLn "\nBuilt-in classes:\n"
+  mapM_
+    (putStrLn . (++ "\n") . printClass defaultPrint (builtinsSpecialTypes builtins))
+    (M.elems (builtinsTypeClasses builtins))
+  where
+    printTypeConstructorOpaque p = ("data " ++) . printTypeConstructor p
 
 runProgram :: Run -> IO ()
 runProgram run@Run {..} = do
