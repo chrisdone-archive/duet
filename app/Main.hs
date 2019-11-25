@@ -29,7 +29,7 @@ data Run = Run
   , runMainIs :: String
   , runConcise :: Bool
   , runNumbered :: Bool
-  , runSteps :: Int
+  , runSteps :: Maybe Integer
   , runHideSteps :: Bool
   } deriving (Show)
 
@@ -54,11 +54,11 @@ main = do
              value "main") <*>
           flag False True (long "concise" <> help "Concise view") <*>
           flag False True (long "numbered" <> help "Number outputs") <*>
-          option
-            auto
-            (long "steps" <> short 'n' <> metavar "steps" <>
-             help "Maximum number of steps to run (default: 100)" <>
-             value 100) <*>
+          optional
+            (option
+               auto
+               (long "steps" <> short 'n' <> metavar "steps" <>
+                help "Maximum number of steps to run (default: unlimited)")) <*>
           flag
             False
             True
@@ -83,9 +83,10 @@ runProgram run@Run {..} = do
        [1 ..])
 
 -- | Run the substitution model on the code.
-runStepperIO
-  :: forall m. (MonadSupply Int m, MonadThrow m, MonadIO m)
-  => Run -> Int
+runStepperIO ::
+     forall m. (MonadSupply Int m, MonadThrow m, MonadIO m)
+  => Run
+  -> Maybe Integer
   -> Context Type Name Location
   -> [BindGroup Type Name Location]
   -> String
@@ -94,7 +95,7 @@ runStepperIO Run {..} maxSteps ctx bindGroups' i = do
   e0 <- lookupNameByString i bindGroups'
   loop 1 "" e0
   where
-    loop :: Int -> String -> Expression Type Name Location -> m ()
+    loop :: Integer -> String -> Expression Type Name Location -> m ()
     loop count lastString e = do
       e' <- expandSeq1 ctx bindGroups' e
       let string = printExpression (defaultPrint) e
@@ -109,7 +110,10 @@ runStepperIO Run {..} maxSteps ctx bindGroups' i = do
                       printExpression defaultPrint e))
            else pure ())
       e'' <- pickUpIO e'
-      if (fmap (const ()) e'' /= fmap (const ()) e) && count < maxSteps
+      if (fmap (const ()) e'' /= fmap (const ()) e) &&
+         case maxSteps of
+           Just top -> count < top
+           Nothing -> True
         then do
           newE <-
             renameExpression
