@@ -69,6 +69,56 @@ available syntax.
 View `examples/syntax-buffet.hs` for an example featuring all the
 syntax supported in Duet.
 
+## Print built-in types and classes
+
+To print all types (primitive or otherwise), classes and the instances
+of each class, run:
+
+    $ duet scope
+
+Example output:
+
+```haskell
+Built-in types:
+
+data Bool
+  = True
+  | False
+data String
+data Integer
+data Rational
+
+Built-in classes:
+
+class Num a where
+  plus :: forall a. (a -> a -> a)
+  times :: forall a. (a -> a -> a)
+instance Num Rational
+instance Num Integer
+
+class Neg a where
+  negate :: forall a. (a -> a -> a)
+  subtract :: forall a. (a -> a -> a)
+  abs :: forall a. (a -> a)
+instance Neg Rational
+instance Neg Integer
+
+class Fractional a where
+  divide :: forall a. (a -> a -> a)
+  recip :: forall a. (a -> a)
+instance Fractional Rational
+
+class Monoid a where
+  append :: forall a. (a -> a -> a)
+  empty :: forall a. a
+instance Monoid String
+
+class Slice a where
+  drop :: forall a. (Integer -> a -> a)
+  take :: forall a. (Integer -> a -> a)
+instance Slice String
+```
+
 ## String operations
 
 Strings are provided as packed opaque literals. You can unpack them
