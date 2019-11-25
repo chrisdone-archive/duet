@@ -69,6 +69,42 @@ available syntax.
 View `examples/syntax-buffet.hs` for an example featuring all the
 syntax supported in Duet.
 
+## String operations
+
+Strings are provided as packed opaque literals. You can unpack them
+via the `Slice` class:
+
+```haskell
+class Slice a where
+  drop :: Integer -> a -> a
+  take :: Integer -> a -> a
+```
+
+You can append strings using the `Monoid` class:
+
+```haskell
+class Monoid a where
+  append :: a -> a -> a
+  empty :: a
+```
+
+The `String` type is an instance of these classes.
+
+``` haskell
+main = append (take 2 (drop 7 "Hello, World!")) "!"
+```
+
+Evaluates strictly because it's a primop:
+
+``` haskell
+append (take 2 (drop 7 "Hello, World!")) "!"
+append (take 2 "World!") "!"
+append "Wo" "!"
+"Wo!"
+```
+
+You can use this type and operations to teach parsers.
+
 ## I/O
 
 Basic terminal input/output is supported.
