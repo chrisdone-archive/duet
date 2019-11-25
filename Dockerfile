@@ -11,7 +11,7 @@ RUN cd duet && stack update
 RUN apk add --no-cache zlib-dev
 RUN cd duet && stack build --system-ghc --dependencies-only
 
-RUN cd duet && git pull && git checkout 67c561e3be3d67455a6dd1f8ba07fcd309365d3d
+RUN cd duet && git pull && git checkout 260a92f46c69e997e693f44fc543aa789f3eacd5
 RUN cd duet && stack install --system-ghc --fast
 
 FROM alpine:3.9
