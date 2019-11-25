@@ -71,25 +71,28 @@ syntax supported in Duet.
 
 ## Print built-in types and classes
 
-To print all types (primitive or otherwise), classes and the instances
-of each class, run:
+To print all types (primitive or otherwise), run:
 
-    $ duet scope
+    $ duet types
 
 Example output:
 
 ```haskell
-Built-in types:
-
 data Bool
   = True
   | False
 data String
 data Integer
 data Rational
+```
 
-Built-in classes:
+For classes and the instances of each class:
 
+    $ duet classes
+
+Example output:
+
+```haskell
 class Num a where
   plus :: forall a. (a -> a -> a)
   times :: forall a. (a -> a -> a)

@@ -45,7 +45,8 @@ main = do
       "Duet interpreter"
       "This is the interpreter for the Duet mini-Haskell educational language"
       (pure ())
-      (do addCommand "scope" "Print info about types and classes in scope" runDocPrint (pure ())
+      (do addCommand "types" "Print types in scope" runTypesPrint (pure ())
+          addCommand "classes" "Print types in scope" runClassesPrint (pure ())
           addCommand
             "run"
             "Run the given program source"
@@ -69,10 +70,9 @@ main = do
                (long "hide-steps" <> help "Do not print the steps to stdout")))
   cmd
 
-runDocPrint :: () -> IO ()
-runDocPrint _ = do
+runTypesPrint :: () -> IO ()
+runTypesPrint _ = do
   builtins <- evalSupplyT (setupEnv mempty []) [1 ..]
-  putStrLn "Built-in types:\n"
   putStrLn
     (printDataType
        defaultPrint
@@ -96,12 +96,15 @@ runDocPrint _ = do
     (printTypeConstructorOpaque
        defaultPrint
        (specialTypesRational (builtinsSpecialTypes builtins)))
-  putStrLn "\nBuilt-in classes:\n"
+  where
+    printTypeConstructorOpaque p = ("data " ++) . printTypeConstructor p
+
+runClassesPrint :: () -> IO ()
+runClassesPrint _ = do
+  builtins <- evalSupplyT (setupEnv mempty []) [1 ..]
   mapM_
     (putStrLn . (++ "\n") . printClass defaultPrint (builtinsSpecialTypes builtins))
     (M.elems (builtinsTypeClasses builtins))
-  where
-    printTypeConstructorOpaque p = ("data " ++) . printTypeConstructor p
 
 runProgram :: Run -> IO ()
 runProgram run@Run {..} = do
