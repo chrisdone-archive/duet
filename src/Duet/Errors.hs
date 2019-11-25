@@ -101,7 +101,7 @@ displayRenamerException specialTypes =
           IdentifierNotInVarScope scope name label ->
             "Not in variable scope " ++
             curlyQuotes (printit defaultPrint name) ++
-            " (AST tree label: "++show label ++")"++
+            -- " (AST tree label: "++show label ++")"++
             "\n" ++
             "Nearest names in scope:\n\n" ++
             intercalate
