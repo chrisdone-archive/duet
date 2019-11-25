@@ -4,14 +4,35 @@
 
 module Duet.Errors where
 
+import           Control.Exception
 import           Data.Char
 import           Data.Function
 import           Data.List
 import qualified Data.Map.Strict as M
 import           Data.Ord
+import           Data.Typeable
 import           Duet.Printer
 import           Duet.Types
 import           Text.EditDistance
+
+displayContextException :: ContextException -> String
+displayContextException (ContextException specialTypes (SomeException se)) =
+  maybe
+    (maybe
+       (maybe
+          (maybe
+             (maybe
+                (displayException se)
+                (displayRenamerException specialTypes)
+                (cast se))
+             (displayInferException specialTypes)
+             (cast se))
+          (displayStepperException specialTypes)
+          (cast se))
+       (displayResolveException specialTypes)
+       (cast se))
+    displayParseException
+    (cast se)
 
 displayParseException :: ParseException -> String
 displayParseException e =

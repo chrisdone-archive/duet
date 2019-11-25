@@ -15,6 +15,7 @@ import           Control.Monad.Writer
 import qualified Data.Map.Strict as M
 import           Data.Semigroup ((<>))
 import           Duet.Context
+import           Duet.Errors
 import           Duet.Infer
 import           Duet.Parser
 import           Duet.Printer
@@ -108,20 +109,24 @@ runClassesPrint _ = do
 
 runProgram :: Run -> IO ()
 runProgram run@Run {..} = do
-  decls <- parseFile runInputFile
-  runNoLoggingT
-    (evalSupplyT
-       (do (binds, ctx) <- createContext decls
-           things <-
-             execWriterT
-               (runStepperIO
-                  run
-                  runSteps
-                  ctx
-                  (fmap (fmap typeSignatureA) binds)
-                  runMainIs)
-           pure things)
-       [1 ..])
+  catch
+    (catch
+       (runNoLoggingT
+          (evalSupplyT
+             (do decls <- liftIO (parseFile runInputFile)
+                 (binds, ctx) <- createContext decls
+                 things <-
+                   execWriterT
+                     (runStepperIO
+                        run
+                        runSteps
+                        ctx
+                        (fmap (fmap typeSignatureA) binds)
+                        runMainIs)
+                 pure things)
+             [1 ..]))
+       (putStrLn . displayContextException))
+    (putStrLn . displayParseException)
 
 -- | Run the substitution model on the code.
 runStepperIO ::

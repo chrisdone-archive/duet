@@ -217,9 +217,8 @@ data RenamerException
   deriving (Show, Generic, Data, Typeable, Typeable)
 instance Exception RenamerException
 
-
-data ContextException = ContextException (SpecialTypes Name) RenamerException
-  deriving (Show, Generic, Data, Typeable, Typeable)
+data ContextException = ContextException (SpecialTypes Name) SomeException
+  deriving (Show, Generic, Typeable)
 instance Exception ContextException
 
 -- | An exception that may be thrown when reading in source code,
