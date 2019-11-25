@@ -100,6 +100,19 @@ expandWhnf typeClassEnv specialSigs signatures e b = go e
                   y' <- go y
                   pure
                     (ApplicationExpression l (ApplicationExpression l1 op x) y')
+            LiteralExpression _ (IntegerLiteral n) ->
+              case y of
+                LiteralExpression _ (StringLiteral sy) ->
+                  case primop of
+                    PrimopStringTake ->
+                      pure (LiteralExpression l (StringLiteral (genericTake n sy)))
+                    PrimopStringDrop ->
+                      pure (LiteralExpression l (StringLiteral (genericDrop n sy)))
+                    _ -> error "Runtime type error that should not occurr"
+                _ -> do
+                  y' <- go y
+                  pure
+                    (ApplicationExpression l (ApplicationExpression l1 op x) y')
             _ -> do
               x' <- go x
               pure (ApplicationExpression l (ApplicationExpression l1 op x') y)

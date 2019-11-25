@@ -167,6 +167,8 @@ data Primop
   | PrimopRationalSubtract
   | PrimopRationalTimes
   | PrimopStringAppend
+  | PrimopStringDrop
+  | PrimopStringTake
   deriving (Show, Generic, Data, Typeable, Eq, Ord, Enum, Bounded)
 
 -- | State of inferring.

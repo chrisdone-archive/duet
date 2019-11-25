@@ -70,9 +70,9 @@ spec =
                        (Alternative
                           { alternativeLabel = ()
                           , alternativePatterns =
-                              [VariablePattern () (ValueName 42 "x")]
+                              [VariablePattern () (ValueName 49 "x")]
                           , alternativeExpression =
-                              VariableExpression () (ValueName 42 "x")
+                              VariableExpression () (ValueName 49 "x")
                           }))
                     (LiteralExpression () (IntegerLiteral 1))
                 , LiteralExpression () (IntegerLiteral 1)
@@ -106,13 +106,13 @@ spec =
                               pure things)
                           [1 ..])))))
              (Right
-                ((CaseExpression
-                    ()
-                    (VariableExpression () (ValueName 42 "loop"))
-                    [ CaseAlt
-                        { caseAltLabel = ()
-                        , caseAltPattern = BangPattern (WildcardPattern () "_")
-                        , caseAltExpression =
-                            LiteralExpression () (IntegerLiteral 1)
-                        }
-                    ])))))
+                (CaseExpression
+                   ()
+                   (VariableExpression () (ValueName 49 "loop"))
+                   [ CaseAlt
+                       { caseAltLabel = ()
+                       , caseAltPattern = BangPattern (WildcardPattern () "_")
+                       , caseAltExpression =
+                           LiteralExpression () (IntegerLiteral 1)
+                       }
+                   ]))))

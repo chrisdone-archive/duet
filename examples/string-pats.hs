@@ -1,3 +1,4 @@
-main = case "foo" of
-         "bar" -> 0
-         "foo" -> 1
+main =
+  case "foo" of
+    "bar" -> 0
+    "foo" -> 1

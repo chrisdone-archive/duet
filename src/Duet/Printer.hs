@@ -72,6 +72,8 @@ printPrimop =
     PrimopRationalPlus -> "plus"
     PrimopRationalDivide -> "divide"
     PrimopStringAppend -> "append"
+    PrimopStringDrop -> "drop"
+    PrimopStringTake -> "take"
 
 instance Printable Identifier where
   printit _ =

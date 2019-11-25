@@ -50,17 +50,18 @@ setupEnv env typeMakers = do
            (FunctionKind StarKind (FunctionKind StarKind StarKind)))
   let specialTypes =
         (SpecialTypes
-         { specialTypesBool = boolDataType
-         , specialTypesChar = TypeConstructor theChar StarKind
-         , specialTypesString = TypeConstructor theString StarKind
-         , specialTypesFunction = function
-         , specialTypesInteger = TypeConstructor theInteger StarKind
-         , specialTypesRational = TypeConstructor theRational StarKind
-         })
+           { specialTypesBool = boolDataType
+           , specialTypesChar = TypeConstructor theChar StarKind
+           , specialTypesString = TypeConstructor theString StarKind
+           , specialTypesFunction = function
+           , specialTypesInteger = TypeConstructor theInteger StarKind
+           , specialTypesRational = TypeConstructor theRational StarKind
+           })
   (numClass, plus, times) <- makeNumClass function
   (negClass, subtract') <- makeNegClass function
   (fracClass, divide) <- makeFracClass function
   (monoidClass) <- makeMonoidClass function
+  (sliceClass) <- makeSliceClass (specialTypesInteger specialTypes) function
   boolSigs <- dataTypeSignatures specialTypes boolDataType
   typesSigs <-
     fmap
@@ -70,19 +71,38 @@ setupEnv env typeMakers = do
   classSigs <-
     fmap
       concat
-      (mapM classSignatures [numClass, negClass, fracClass, monoidClass])
+      (mapM classSignatures [numClass, negClass, fracClass, monoidClass, sliceClass])
   primopSigs <- makePrimOps specialTypes
   let signatures = boolSigs <> classSigs <> primopSigs <> typesSigs
       specialSigs =
         SpecialSigs
-        { specialSigsTrue = true
-        , specialSigsFalse = false
-        , specialSigsPlus = plus
-        , specialSigsSubtract = subtract'
-        , specialSigsTimes = times
-        , specialSigsDivide = divide
-        }
+          { specialSigsTrue = true
+          , specialSigsFalse = false
+          , specialSigsPlus = plus
+          , specialSigsSubtract = subtract'
+          , specialSigsTimes = times
+          , specialSigsDivide = divide
+          }
       specials = Specials specialSigs specialTypes
+  stringSlice <-
+    makeInst
+      specials
+      (IsIn
+         (className sliceClass)
+         [ConstructorType (specialTypesString specialTypes)])
+      [ ( "take"
+        , ( ()
+          , Alternative
+              ()
+              []
+              (VariableExpression () (PrimopName PrimopStringTake))))
+      , ( "drop"
+        , ( ()
+          , Alternative
+              ()
+              []
+              (VariableExpression () (PrimopName PrimopStringDrop))))
+      ]
   stringMonoid <-
     makeInst
       specials
@@ -181,19 +201,21 @@ setupEnv env typeMakers = do
           addClass negClass >=>
           addClass fracClass >=>
           addClass monoidClass >=>
+          addClass sliceClass >=>
           addInstance numInt >=>
           addInstance negInt >=>
           addInstance stringMonoid >=>
+          addInstance stringSlice >=>
           addInstance fracRational >=>
           addInstance negRational >=> addInstance numRational
-    in update env
+     in update env
   pure
     Builtins
-    { builtinsSpecialSigs = specialSigs
-    , builtinsSpecialTypes = specialTypes
-    , builtinsSignatures = signatures
-    , builtinsTypeClasses = env'
-    }
+      { builtinsSpecialSigs = specialSigs
+      , builtinsSpecialTypes = specialTypes
+      , builtinsSignatures = signatures
+      , builtinsTypeClasses = env'
+      }
 
 --------------------------------------------------------------------------------
 -- Builtin classes and primops
@@ -236,7 +258,15 @@ makePrimOps SpecialTypes {..} = do
               PrimopStringAppend ->
                 TypeSignature
                   (PrimopName PrimopStringAppend)
-                  (toScheme (string --> string --> string))))
+                  (toScheme (string --> string --> string))
+              PrimopStringTake ->
+                TypeSignature
+                  (PrimopName PrimopStringTake)
+                  (toScheme (integer --> string --> string))
+              PrimopStringDrop ->
+                TypeSignature
+                  (PrimopName PrimopStringDrop)
+                  (toScheme (integer --> string --> string))))
           [minBound .. maxBound]
   pure sigs
   where
@@ -321,6 +351,25 @@ makeMonoidClass function = do
       [a]
       [ (append, Forall [a] (Qualified [] (a' --> a' --> a')))
       , (empty, Forall [a] (Qualified [] (a')))
+      ]
+  pure cls
+  where
+    infixr 1 -->
+    (-->) :: Type Name -> Type Name -> Type Name
+    a --> b = ApplicationType (ApplicationType (ConstructorType function) a) b
+
+makeSliceClass :: MonadSupply Int m => TypeConstructor Name -> TypeConstructor Name -> m (Class Type Name l)
+makeSliceClass integer' function = do
+  a <- fmap (\n -> TypeVariable n StarKind) (supplyTypeName "a")
+  let a' = VariableType a
+  drop' <- supplyMethodName "drop"
+  take' <- supplyMethodName "take"
+  cls <-
+    makeClass
+      "Slice"
+      [a]
+      [ (drop', Forall [a] (Qualified [] (ConstructorType integer' --> (a' --> a'))))
+      , (take', Forall [a] (Qualified [] (ConstructorType integer' --> (a' --> a'))))
       ]
   pure cls
   where
