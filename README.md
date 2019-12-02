@@ -21,7 +21,9 @@ Note that this demonstrates basic argument application and non-strictness.
 
 Run with the docker distribution, to easily run on any platform:
 
-    $ docker run -it -v`pwd`:`pwd` -w`pwd` chrisdone/duet run foo.hs
+    $ docker run -it -v $(pwd):/w -w /w chrisdone/duet run foo.hs
+
+(This should work on Linux, OS X or Windows PowerShell.)
 
 The image is about 11MB, so it's quick to download.
 
