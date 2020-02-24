@@ -47,9 +47,14 @@ newtype Supply s a = Supply (SupplyT s Identity a)
   deriving (Functor, Applicative, Monad, MonadSupply s, MonadFix)
 
 instance Monad m => MonadSupply s (SupplyT s m) where
-  supply = SupplyT $ do (x:xs) <- get
-                        put xs
-                        return x
+  supply =
+    SupplyT $ do
+      result <- get
+      case result of
+        (x:xs) -> do
+          put xs
+          return x
+        _ -> error "Exhausted supply in Control.Monad.Supply.hs"
   peek = SupplyT $ gets head
   exhausted = SupplyT $ gets null
 

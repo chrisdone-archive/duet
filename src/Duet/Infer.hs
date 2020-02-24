@@ -901,7 +901,7 @@ inferExpressionType ce as (ApplicationExpression l e f) = do
   let scheme = (Forall [] (Qualified (ps++qs) t))
   return (ps ++ qs, t, ApplicationExpression (TypeSignature l scheme) e' f')
 inferExpressionType ce as (InfixExpression l x (i,op) y) = do
-  (ps, ts, ApplicationExpression l' (ApplicationExpression _ (op') x') y') <-
+  (ps, ts, ~(ApplicationExpression l' (ApplicationExpression _ (op') x') y')) <-
     inferExpressionType
       ce
       as
