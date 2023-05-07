@@ -482,7 +482,7 @@ parsedTypeToPredicates =
 toPredicate :: Stream s m t => ParsedType i -> ParsecT s u m (Predicate ParsedType i)
 toPredicate t =
   case targs t of
-    (ParsedTypeConstructor i, vars@ (_:_)) -> do
+    (ParsedTypeConstructor i, vars@(_:_)) -> do
       pure (IsIn i vars)
     _ -> unexpected "non-class constraint"
 
